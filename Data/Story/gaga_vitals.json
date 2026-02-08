@@ -1,0 +1,390 @@
+{
+  "steps": [
+    {
+      "id": "intro_nurse",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "向芽芽與媽媽問好，說明將協助量體溫、呼吸、心跳與血壓。"
+    },
+    {
+      "id": "mom_reply",
+      "speaker": "Mother",
+      "dialogue": "好！",
+      "cursorTargetId": "mother"
+    },
+    {
+      "id": "child_resist_needle",
+      "speaker": "Child",
+      "dialogue": "我不要打針！我不要！",
+      "cursorTargetId": "child",
+      "subtitle": {
+        "text": "芽芽抓著媽媽啜泣",
+        "duration": 3
+      }
+    },
+    {
+      "id": "quiz_respiration_first",
+      "speaker": "System",
+      "dialogue": "考題1：請問護生要先測量哪一樣生命徵象，比較不會加重芽芽的害怕？",
+      "quiz": {
+        "question": "護生要先測量哪一項較不會增加害怕？",
+        "explanation": "觀察呼吸不需觸碰芽芽身體，可讓她放鬆。",
+        "options": [
+          "測量血壓",
+          "聽診心尖脈",
+          "測量耳溫",
+          "觀察呼吸次數"
+        ],
+        "correctIndex": 3,
+        "requireCorrectToProceed": true
+      },
+      "cursorTargetId": "system"
+    },
+    {
+      "id": "nurse_explain_resp",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "subtitle": {
+        "text": "字幕：先觀察呼吸，減少觸碰",
+        "duration": 4
+      },
+      "playerActionRequired": true,
+      "playerPrompt": "向媽媽表示先觀察芽芽的呼吸起伏，請她陪芽芽躺下並播放兒歌。"
+    },
+    {
+      "id": "mom_play_music",
+      "speaker": "Mother",
+      "dialogue": "來，芽芽躺躺，我們聽兒歌，姊姊在旁邊看就好。",
+      "cursorTargetId": "mother"
+    },
+    {
+      "id": "nurse_measure_resp",
+      "speaker": "Narrator",
+      "dialogue": "護生對芽芽微笑，開始觀察呼吸一分鐘。",
+      "cursorTargetId": "nurse",
+      "waitForClick": false,
+      "autoAdvanceDelay": 3
+    },
+    {
+      "id": "nurse_request_heart",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "emotionGate": {
+        "blockWhenAnxious": true,
+        "anxiousStageThreshold": 1,
+        "fallbackStepIndex": 9,
+        "calmStageRequirement": 0,
+        "blockedSubtitle": "芽芽太緊張，先安撫後再聽心跳。"
+      },
+      "playerActionRequired": true,
+      "playerPrompt": "安撫芽芽並請她讓你聽心跳，鼓勵她先摸摸聽診器。"
+    },
+    {
+      "id": "child_refuse_heart",
+      "speaker": "Child",
+      "dialogue": "我不要！不要打針！",
+      "cursorTargetId": "child"
+    },
+    {
+      "id": "quiz_reduce_fear",
+      "speaker": "System",
+      "dialogue": "考題2：請問護生要使用甚麼方法以減少芽芽的害怕？",
+      "quiz": {
+        "question": "要如何減少芽芽害怕？",
+        "explanation": "利用芽芽喜歡的貼紙轉移注意力。",
+        "options": [
+          "用喜歡的東西鼓勵合作",
+          "用繪本說故事",
+          "請媽媽幫忙測量"
+        ],
+        "correctIndex": 0,
+        "requireCorrectToProceed": true
+      },
+      "cursorTargetId": "system"
+    },
+    {
+      "id": "nurse_ask_preference",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "向媽媽詢問芽芽喜歡的東西，好用來分散注意力並合作測量。"
+    },
+    {
+      "id": "mom_sticker",
+      "speaker": "Mother",
+      "dialogue": "她喜歡貼紙！",
+      "cursorTargetId": "mother"
+    },
+    {
+      "id": "nurse_show_sticker",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "subtitle": {
+        "text": "字幕：以小貼紙鼓勵正向行為",
+        "duration": 4
+      },
+      "playerActionRequired": true,
+      "playerPrompt": "拿出貼紙向芽芽展示，說明量完會給她貼紙，讓她放心。"
+    },
+    {
+      "id": "child_still_scared",
+      "speaker": "Child",
+      "dialogue": "我不要！不要！",
+      "cursorTargetId": "child"
+    },
+    {
+      "id": "nurse_roleplay_mom",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "邀請芽芽先幫媽媽聽心跳，示範聽診器不會痛。"
+    },
+    {
+      "id": "mom_roleplay",
+      "speaker": "Mother",
+      "dialogue": "芽芽當醫生聽媽媽的心跳，來，聽診器給你。",
+      "cursorTargetId": "mother"
+    },
+    {
+      "id": "child_listen_mom",
+      "speaker": "Narrator",
+      "dialogue": "芽芽好奇地拿聽診器聽媽媽心跳，耳朵覺得有點痛。",
+      "cursorTargetId": "child"
+    },
+    {
+      "id": "mom_listen_child",
+      "speaker": "Mother",
+      "dialogue": "那換媽媽聽芽芽的心跳聲音，撲通撲通！",
+      "cursorTargetId": "mother"
+    },
+    {
+      "id": "quiz_apex_location",
+      "speaker": "System",
+      "dialogue": "考題3：芽芽2歲半，請問聽診心尖脈的位置為何處？",
+      "quiz": {
+        "question": "2歲半心尖脈位置？",
+        "explanation": "幼兒心尖脈在左鎖骨中線與第4肋交接處。",
+        "options": [
+          "左鎖骨中線與第3肋交接處",
+          "左鎖骨中線與第4肋交接處",
+          "左鎖骨中線與第5肋交接處"
+        ],
+        "correctIndex": 1,
+        "requireCorrectToProceed": true
+      },
+      "cursorTargetId": "system"
+    },
+    {
+      "id": "nurse_reward_sticker",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "稱讚芽芽勇敢並給貼紙，告知接著要量耳溫。"
+    },
+    {
+      "id": "child_refuse_temp",
+      "speaker": "Child",
+      "dialogue": "我不要！你出去！",
+      "cursorTargetId": "child"
+    },
+    {
+      "id": "nurse_reassure_temp",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "向媽媽說明會再陪芽芽玩讓她放鬆後再量耳溫。"
+    },
+    {
+      "id": "quiz_roleplay",
+      "speaker": "System",
+      "dialogue": "考題4：請問護生要使用甚麼方法以減少芽芽的害怕？",
+      "quiz": {
+        "question": "耳溫前先做什麼遊戲可減少害怕？",
+        "explanation": "讓芽芽和喜愛的佩佩豬角色扮演，示範量體溫。",
+        "options": [
+          "芽芽與護生角色扮演",
+          "芽芽與玩偶角色扮演",
+          "護生和媽媽角色扮演"
+        ],
+        "correctIndex": 1,
+        "requireCorrectToProceed": true
+      },
+      "cursorTargetId": "system"
+    },
+    {
+      "id": "nurse_roleplay_peppa",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "帶領芽芽幫佩佩豬量體溫，讓她熟悉步驟。"
+    },
+    {
+      "id": "child_play_temp",
+      "speaker": "Narrator",
+      "dialogue": "芽芽抱著佩佩豬，幫玩偶用耳溫槍做測量動作。",
+      "cursorTargetId": "child"
+    },
+    {
+      "id": "nurse_prompt_play",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "引導芽芽對佩佩豬說安撫的話，教她如何幫玩偶量體溫。"
+    },
+    {
+      "id": "child_console_peppa",
+      "speaker": "Child",
+      "dialogue": "不會痛啦！冰冰的感覺，一下就好了！",
+      "cursorTargetId": "child"
+    },
+    {
+      "id": "quiz_ear_pull",
+      "speaker": "System",
+      "dialogue": "考題5：芽芽兩歲半，量耳溫該如何讓耳溫槍進入耳道？",
+      "quiz": {
+        "question": "兩歲半量耳溫耳朵怎麼拉？",
+        "explanation": "3歲以下耳朵要向下向後拉。",
+        "options": [
+          "向下向後",
+          "向上向後",
+          "向下向前",
+          "向上向前"
+        ],
+        "correctIndex": 0,
+        "requireCorrectToProceed": true
+      },
+      "cursorTargetId": "system"
+    },
+    {
+      "id": "nurse_measure_temp",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "subtitle": {
+        "text": "字幕：3歲以下耳朵向下向後拉",
+        "duration": 4
+      },
+      "playerActionRequired": true,
+      "playerPrompt": "正式量芽芽耳溫，說明要輕輕往下後拉耳朵。"
+    },
+    {
+      "id": "nurse_temp_result",
+      "speaker": "Nurse",
+      "dialogue": "哇！芽芽36度，沒有發燒！耶！",
+      "cursorTargetId": "nurse"
+    },
+    {
+      "id": "nurse_intro_bp",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "用遊戲語氣介紹血壓計，邀請芽芽一起綁壓脈帶。"
+    },
+    {
+      "id": "quiz_cuff_width",
+      "speaker": "System",
+      "dialogue": "考題6：請問如何選擇適合芽芽使用的壓脈帶寬度？",
+      "quiz": {
+        "question": "壓脈帶要覆蓋肢體的哪一個比例？",
+        "explanation": "兒童壓脈帶寬度需覆蓋肢體長度的 2/3。",
+        "options": [
+          "覆蓋肢體長度的2/3",
+          "覆蓋肢體寬度的2/3",
+          "覆蓋肢體長度的1/3"
+        ],
+        "correctIndex": 0,
+        "requireCorrectToProceed": true
+      },
+      "cursorTargetId": "system"
+    },
+    {
+      "id": "mom_worried_bp",
+      "speaker": "Mother",
+      "dialogue": "芽芽之前量血壓充氣會覺得痛，她可以不要量嗎？",
+      "cursorTargetId": "mother"
+    },
+    {
+      "id": "quiz_bp_purpose",
+      "speaker": "System",
+      "dialogue": "考題7：你要向芽芽媽媽說明兒童量血壓的目的，下列何者不正確？",
+      "quiz": {
+        "question": "量血壓的目的何者錯誤？",
+        "explanation": "血壓無法檢驗是否貧血。",
+        "options": [
+          "評估心臟血管功能",
+          "監測是否脫水",
+          "檢驗貧血問題"
+        ],
+        "correctIndex": 2,
+        "requireCorrectToProceed": true
+      },
+      "cursorTargetId": "system"
+    },
+    {
+      "id": "nurse_bp_explain",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "向媽媽解釋量血壓是為了評估脫水與保護芽芽。"
+    },
+    {
+      "id": "nurse_bp_roleplay",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "subtitle": {
+        "text": "字幕：說明壓脈帶充氣時的感覺",
+        "duration": 4
+      },
+      "playerActionRequired": true,
+      "playerPrompt": "描述壓脈帶充氣像被捏緊，鼓勵芽芽幫佩佩豬量血壓。"
+    },
+    {
+      "id": "quiz_bp_site",
+      "speaker": "System",
+      "dialogue": "考題8：兒童量血壓的位置，下列何者不正確？",
+      "quiz": {
+        "question": "量血壓位置何者錯誤？",
+        "explanation": "股動脈不是常規量測血壓的位置。",
+        "options": [
+          "膝膕動脈",
+          "肱動脈",
+          "股動脈",
+          "足背動脈"
+        ],
+        "correctIndex": 2,
+        "requireCorrectToProceed": true
+      },
+      "cursorTargetId": "system"
+    },
+    {
+      "id": "nurse_bp_measure",
+      "speaker": "Narrator",
+      "dialogue": "芽芽和佩佩豬一起綁帶子，護生啟動血壓計，完成量測。",
+      "cursorTargetId": "nurse",
+      "waitForClick": false,
+      "autoAdvanceDelay": 3
+    },
+    {
+      "id": "ending_congrats",
+      "speaker": "Nurse",
+      "dialogue": "",
+      "cursorTargetId": "nurse",
+      "playerActionRequired": true,
+      "playerPrompt": "完成檢查後稱讚芽芽勇敢，邀她帶貼紙與佩佩豬回家。"
+    }
+  ]
+}
