@@ -5,7 +5,7 @@ public class ScenarioDebugConsole : MonoBehaviour
     public ScenarioController controller;
     public EmotionStateManager emotionState;
     public bool showWindow = true;
-    public Rect windowRect = new Rect(20, 20, 360, 260);
+    public Rect windowRect = new Rect(20, 20, 520, 360);
 
     string _jumpStepId = "";
     Vector2 _scroll;
