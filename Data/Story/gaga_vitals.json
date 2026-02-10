@@ -27,7 +27,7 @@
     {
       "id": "quiz_respiration_first",
       "speaker": "System",
-      "dialogue": "考題1：請問護生要先測量哪一樣生命徵象，比較不會加重芽芽的害怕？",
+      "dialogue": "考題1:請問護生要先測量哪一樣生命徵象,比較不會加重芽芽的害怕?",
       "quiz": {
         "question": "護生要先測量哪一項較不會增加害怕？",
         "explanation": "觀察呼吸不需觸碰芽芽身體，可讓她放鬆。",
@@ -92,7 +92,7 @@
     {
       "id": "quiz_reduce_fear",
       "speaker": "System",
-      "dialogue": "考題2：請問護生要使用甚麼方法以減少芽芽的害怕？",
+      "dialogue": "考題2:請問護生要使用甚麼方法以減少芽芽的害怕?",
       "quiz": {
         "question": "要如何減少芽芽害怕？",
         "explanation": "利用芽芽喜歡的貼紙轉移注意力。",
@@ -167,9 +167,9 @@
     {
       "id": "quiz_apex_location",
       "speaker": "System",
-      "dialogue": "考題3：芽芽2歲半，請問聽診心尖脈的位置為何處？",
+      "dialogue": "考題3:芽芽2歲半,請問聽診心尖脈的位置為何處?",
       "quiz": {
-        "question": "2歲半心尖脈位置？",
+        "question": "2歲半心尖脈位置?",
         "explanation": "幼兒心尖脈在左鎖骨中線與第4肋交接處。",
         "options": [
           "左鎖骨中線與第3肋交接處",
@@ -206,9 +206,9 @@
     {
       "id": "quiz_roleplay",
       "speaker": "System",
-      "dialogue": "考題4：請問護生要使用甚麼方法以減少芽芽的害怕？",
+      "dialogue": "考題4:請問護生要使用甚麼方法以減少芽芽的害怕?",
       "quiz": {
-        "question": "耳溫前先做什麼遊戲可減少害怕？",
+        "question": "耳溫前先做什麼遊戲可減少害怕?",
         "explanation": "讓芽芽和喜愛的佩佩豬角色扮演，示範量體溫。",
         "options": [
           "芽芽與護生角色扮演",
@@ -251,7 +251,7 @@
     {
       "id": "quiz_ear_pull",
       "speaker": "System",
-      "dialogue": "考題5：芽芽兩歲半，量耳溫該如何讓耳溫槍進入耳道？",
+      "dialogue": "考題5:芽芽兩歲半，量耳溫該如何讓耳溫槍進入耳道?",
       "quiz": {
         "question": "兩歲半量耳溫耳朵怎麼拉？",
         "explanation": "3歲以下耳朵要向下向後拉。",
@@ -272,7 +272,7 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "subtitle": {
-        "text": "字幕：3歲以下耳朵向下向後拉",
+        "text": "字幕:3歲以下耳朵向下向後拉",
         "duration": 4
       },
       "playerActionRequired": true,
@@ -281,7 +281,7 @@
     {
       "id": "nurse_temp_result",
       "speaker": "Nurse",
-      "dialogue": "哇！芽芽36度，沒有發燒！耶！",
+      "dialogue": "哇!芽芽36度,沒有發燒!耶!",
       "cursorTargetId": "nurse"
     },
     {
@@ -295,7 +295,7 @@
     {
       "id": "quiz_cuff_width",
       "speaker": "System",
-      "dialogue": "考題6：請問如何選擇適合芽芽使用的壓脈帶寬度？",
+      "dialogue": "考題6:請問如何選擇適合芽芽使用的壓脈帶寬度",
       "quiz": {
         "question": "壓脈帶要覆蓋肢體的哪一個比例？",
         "explanation": "兒童壓脈帶寬度需覆蓋肢體長度的 2/3。",
@@ -318,7 +318,7 @@
     {
       "id": "quiz_bp_purpose",
       "speaker": "System",
-      "dialogue": "考題7：你要向芽芽媽媽說明兒童量血壓的目的，下列何者不正確？",
+      "dialogue": "考題7:你要向芽芽媽媽說明兒童量血壓的目的,下列何者不正確?",
       "quiz": {
         "question": "量血壓的目的何者錯誤？",
         "explanation": "血壓無法檢驗是否貧血。",
@@ -355,7 +355,7 @@
     {
       "id": "quiz_bp_site",
       "speaker": "System",
-      "dialogue": "考題8：兒童量血壓的位置，下列何者不正確？",
+      "dialogue": "考題8:兒童量血壓的位置,下列何者不正確?",
       "quiz": {
         "question": "量血壓位置何者錯誤？",
         "explanation": "股動脈不是常規量測血壓的位置。",

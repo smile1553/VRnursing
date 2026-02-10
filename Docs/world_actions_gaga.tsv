@@ -1,0 +1,32 @@
+stepId	worldActionKey	actor	AnimatorState	AudioClip	EmotionDelta	Note
+intro_nurse	greet_nurse	Player		vo_player_greet	calm+	player voice only
+mom_reply	mom_ack	Mother	mom_nod_smile	vo_mom_ok	calm+	
+child_resist_needle	kid_resist	Child	kid_cry_resist	vo_kid_cry	anxious++	
+nurse_explain_resp	nurse_explain_resp	Player		vo_player_soft	calm+	player voice only
+mom_play_music	mom_play_music	Mother	mom_play_phone	music_lullaby_loop	calm++	trigger BGM
+nurse_measure_resp	observe_resp	Player		bgm_soft_pad	none	auto 3s, player action prompt
+nurse_request_heart	ask_heart	Player		vo_player_soft	anxious-	emotionGate block/allow, player prompt
+child_refuse_heart	kid_refuse	Child	kid_pushaway	vo_kid_no	anxious+	
+nurse_ask_preference	ask_pref	Player		vo_player_soft	calm+	player prompt
+mom_sticker	mom_offer_sticker	Mother	mom_show_sticker	vo_mom_cheer	calm+	
+nurse_show_sticker	nurse_show_sticker	Player		sfx_sticker	calm+	player hand shows sticker in UI/world
+child_still_scared	kid_refuse2	Child	kid_cry_loop	vo_kid_cry	anxious+	
+nurse_roleplay_mom	invite_roleplay	Player		vo_player_soft	calm+	player prompt
+mom_roleplay	mom_roleplay	Mother	mom_listen_self	sfx_steth_click	calm+	
+child_listen_mom	kid_listen_mom	Child	kid_listen_mom	sfx_steth_ear	anxious-	add ear-pain face optional
+mom_listen_child	mom_listen_child	Mother	mom_listen_child	sfx_steth_heart	calm+	
+nurse_reward_sticker	reward_sticker	Player		sfx_sticker	calm++	player hand gives sticker
+child_refuse_temp	kid_refuse_temp	Child	kid_pushaway	vo_kid_no	anxious+	
+nurse_reassure_temp	reassure_temp	Player		vo_player_soft	calm+	player prompt
+nurse_roleplay_peppa	roleplay_temp	Player		sfx_toy_beep	calm+	player guides toy
+child_play_temp	kid_play_temp	Child	kid_play_earthermo	sfx_toy_beep	calm+	
+nurse_prompt_play	prompt_temp	Player		vo_player_soft	calm+	player prompt
+child_console_peppa	kid_console_peppa	Child	kid_talk_toy	vo_kid_soft	calm+	
+nurse_measure_temp	measure_temp	Player		sfx_temp_beep	none	player performs measure (no anim)
+nurse_temp_result	temp_result	Player		vo_player_cheer	calm+	player voice
+nurse_intro_bp	intro_bp	Player		sfx_cuff_swoosh	calm+	player show cuff (UI/hand prop)
+mom_worried_bp	mom_worry	Mother	mom_worry	vo_mom_worry	anxious+	
+nurse_bp_explain	explain_bp	Player		vo_player_soft	calm+	player voice
+nurse_bp_roleplay	roleplay_bp	Player		sfx_cuff_pump	calm+	player guides cuff
+nurse_bp_measure	measure_bp	Player		sfx_cuff_pump	none	auto, player performs measure
+ending_congrats	ending_congrats	Player		vo_player_cheer	calm++	player voice/gesture only
