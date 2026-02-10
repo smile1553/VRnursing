@@ -47,6 +47,7 @@ public class ScenarioController : MonoBehaviour
 
     public ScenarioStep CurrentStep => _currentStep;
     public int CurrentStepIndex => _currentIndex;
+    public bool IsQuizActive => _activeQuiz != null;
 
     void Awake()
     {

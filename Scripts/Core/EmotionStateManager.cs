@@ -6,6 +6,7 @@ public class EmotionSnapshot
 {
     public float tension;
     public string emotion;
+    public string text;
     public EmotionLlmInfo llm;
     public int stage;
     public string rawJson;
@@ -17,6 +18,7 @@ public class EmotionSnapshot
         {
             tension = tension,
             emotion = emotion,
+            text = text,
             llm = llm != null ? llm.Clone() : null,
             stage = stage,
             rawJson = rawJson,
@@ -132,6 +134,7 @@ public class EmotionStateManager : MonoBehaviour
             {
                 snapshot.tension = data.tension;
                 snapshot.emotion = data.emotion;
+                snapshot.text = data.text;
                 if (data.llm != null)
                 {
                     snapshot.llm = new EmotionLlmInfo
@@ -176,6 +179,7 @@ public class EmotionStateManager : MonoBehaviour
     {
         public float tension;
         public string emotion;
+        public string text;
         public LlmPayload llm;
     }
 
