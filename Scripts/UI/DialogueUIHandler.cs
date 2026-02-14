@@ -6,6 +6,7 @@ using UnityEngine.UI;
 public class DialogueUIHandler : MonoBehaviour
 {
     [SerializeField] private Button button;
+    [SerializeField] private bool logSignals = false;
 
     private void Awake()
     {
@@ -33,6 +34,11 @@ public class DialogueUIHandler : MonoBehaviour
 
     private void HandleClick()
     {
+        if (logSignals)
+        {
+            Debug.Log("[DialogueUIHandler] Emit UI.Next", this);
+        }
+
         UISignalBus.Emit("UI.Next", null);
     }
 }

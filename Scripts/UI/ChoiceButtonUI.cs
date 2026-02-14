@@ -8,6 +8,7 @@ public class ChoiceButtonUI : MonoBehaviour
 {
     [SerializeField] private Button button;
     [SerializeField] private int choiceIndex;
+    [SerializeField] private bool logSignals = false;
 
     private void Awake()
     {
@@ -39,6 +40,11 @@ public class ChoiceButtonUI : MonoBehaviour
         {
             { "choiceIndex", choiceIndex }
         };
+
+        if (logSignals)
+        {
+            Debug.Log($"[ChoiceButtonUI] Emit UI.Choice choiceIndex={choiceIndex}", this);
+        }
 
         UISignalBus.Emit("UI.Choice", payload);
     }
