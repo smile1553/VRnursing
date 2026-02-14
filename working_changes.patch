@@ -1,0 +1,282 @@
+diff --git a/Scripts/Input/InteractRaycaster.cs.meta b/Scripts/Input/InteractRaycaster.cs.meta
+index 29dbad8..ca0b06d 100644
+--- a/Scripts/Input/InteractRaycaster.cs.meta
++++ b/Scripts/Input/InteractRaycaster.cs.meta
+@@ -1,2 +1,8 @@
+ fileFormatVersion: 2
+-guid: 8cdf9f8d4755ad9438d3aa35bb9e4fb6
+\ No newline at end of file
++guid: 12cf68d87ab3c4e15a4f3fb13315acf3
++folderAsset: yes
++DefaultImporter:
++  externalObjects: {}
++  userData: 
++  assetBundleName: 
++  assetBundleVariant: 
+diff --git a/Scripts/Input/InteractRaycaster.meta b/Scripts/Input/InteractRaycaster.meta
+deleted file mode 100644
+index 452c200..0000000
+--- a/Scripts/Input/InteractRaycaster.meta
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: 0775835a0ace8034d8bd5b9be09a66d9
+\ No newline at end of file
+diff --git a/Scripts/Input/InteractRaycaster/InteractRaycaster.cs b/Scripts/Input/InteractRaycaster/InteractRaycaster.cs
+deleted file mode 100644
+index 5137eb7..0000000
+--- a/Scripts/Input/InteractRaycaster/InteractRaycaster.cs
++++ /dev/null
+@@ -1,98 +0,0 @@
+-using UnityEngine;
+-
+-[DisallowMultipleComponent]
+-public class InteractRaycaster : MonoBehaviour
+-{
+-    [SerializeField] private Transform rayOrigin;
+-    [SerializeField] private float maxDistance = 5f;
+-    [SerializeField] private LayerMask hitMask = ~0;
+-    [SerializeField] private VRInputRouter router;
+-    [SerializeField] private string hand = "Right";
+-    [SerializeField] private string source = "VR";
+-    [SerializeField] private bool emitPointContinuously = true;
+-
+-    public bool HasHit { get; private set; }
+-    public RaycastHit LastHit { get; private set; }
+-
+-    private void Awake()
+-    {
+-        if (rayOrigin == null)
+-        {
+-            rayOrigin = transform;
+-        }
+-
+-        if (router == null)
+-        {
+-            router = FindObjectOfType<VRInputRouter>();
+-        }
+-    }
+-
+-    private void Update()
+-    {
+-        if (emitPointContinuously)
+-        {
+-            EmitPoint();
+-        }
+-    }
+-
+-    public void SetRayOrigin(Transform origin)
+-    {
+-        rayOrigin = origin;
+-    }
+-
+-    public void EmitPoint()
+-    {
+-        DoRaycast(emitPoint: true, emitClick: false);
+-    }
+-
+-    public void EmitClick()
+-    {
+-        DoRaycast(emitPoint: true, emitClick: true);
+-    }
+-
+-    private void DoRaycast(bool emitPoint, bool emitClick)
+-    {
+-        if (router == null || rayOrigin == null)
+-        {
+-            return;
+-        }
+-
+-        Ray ray = new Ray(rayOrigin.position, rayOrigin.forward);
+-        HasHit = Physics.Raycast(ray, out RaycastHit hit, maxDistance, hitMask, QueryTriggerInteraction.Ignore);
+-        LastHit = hit;
+-
+-        if (!HasHit)
+-        {
+-            return;
+-        }
+-
+-        GameObject target = hit.collider != null ? hit.collider.gameObject : null;
+-        string targetId = ResolveTargetId(target);
+-
+-        if (emitPoint)
+-        {
+-            router.EmitPoint(targetId, target, hit.point, hand, source);
+-        }
+-
+-        if (emitClick)
+-        {
+-            router.EmitClick(targetId, target, hit.point, hand, source);
+-        }
+-    }
+-
+-    private static string ResolveTargetId(GameObject target)
+-    {
+-        if (target == null)
+-        {
+-            return string.Empty;
+-        }
+-
+-        VRInteractTrigger trigger = target.GetComponentInParent<VRInteractTrigger>();
+-        if (trigger != null && !string.IsNullOrEmpty(trigger.targetId))
+-        {
+-            return trigger.targetId;
+-        }
+-
+-        return target.name;
+-    }
+-}
+diff --git a/Scripts/Input/InteractRaycaster/InteractRaycaster.cs.meta b/Scripts/Input/InteractRaycaster/InteractRaycaster.cs.meta
+deleted file mode 100644
+index ca0b06d..0000000
+--- a/Scripts/Input/InteractRaycaster/InteractRaycaster.cs.meta
++++ /dev/null
+@@ -1,8 +0,0 @@
+-fileFormatVersion: 2
+-guid: 12cf68d87ab3c4e15a4f3fb13315acf3
+-folderAsset: yes
+-DefaultImporter:
+-  externalObjects: {}
+-  userData: 
+-  assetBundleName: 
+-  assetBundleVariant: 
+diff --git a/Scripts/Input/PlayerInputRoot.meta b/Scripts/Input/PlayerInputRoot.meta
+deleted file mode 100644
+index 07c9680..0000000
+--- a/Scripts/Input/PlayerInputRoot.meta
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: 6480697d4ca65314aa56424e7cdb8de2
+\ No newline at end of file
+diff --git a/Scripts/Input/PlayerInputRoot/PlayerInputRoot.cs b/Scripts/Input/PlayerInputRoot/PlayerInputRoot.cs
+deleted file mode 100644
+index 6178085..0000000
+--- a/Scripts/Input/PlayerInputRoot/PlayerInputRoot.cs
++++ /dev/null
+@@ -1,38 +0,0 @@
+-using UnityEngine;
+-
+-[DisallowMultipleComponent]
+-public class PlayerInputRoot : MonoBehaviour
+-{
+-    [SerializeField] private VRPlayerRig rig;
+-    [SerializeField] private VRInputRouter router;
+-    [SerializeField] private InteractRaycaster rightRaycaster;
+-    [SerializeField] private RightHandInput rightHandInput;
+-
+-    private void Awake()
+-    {
+-        if (rig == null)
+-        {
+-            rig = GetComponentInChildren<VRPlayerRig>();
+-        }
+-
+-        if (router == null)
+-        {
+-            router = FindObjectOfType<VRInputRouter>();
+-        }
+-
+-        if (rightRaycaster == null)
+-        {
+-            rightRaycaster = GetComponentInChildren<InteractRaycaster>();
+-        }
+-
+-        if (rightHandInput == null)
+-        {
+-            rightHandInput = GetComponentInChildren<RightHandInput>();
+-        }
+-
+-        if (rig != null && rig.RayOrigin != null && rightRaycaster != null)
+-        {
+-            rightRaycaster.SetRayOrigin(rig.RayOrigin);
+-        }
+-    }
+-}
+diff --git a/Scripts/Input/PlayerInputRoot/PlayerInputRoot.cs.meta b/Scripts/Input/PlayerInputRoot/PlayerInputRoot.cs.meta
+deleted file mode 100644
+index 675602c..0000000
+--- a/Scripts/Input/PlayerInputRoot/PlayerInputRoot.cs.meta
++++ /dev/null
+@@ -1,8 +0,0 @@
+-fileFormatVersion: 2
+-guid: c06e8f35b53614842a4d2f6155dff037
+-folderAsset: yes
+-DefaultImporter:
+-  externalObjects: {}
+-  userData: 
+-  assetBundleName: 
+-  assetBundleVariant: 
+diff --git a/Scripts/Input/RightHandInput.meta b/Scripts/Input/RightHandInput.meta
+deleted file mode 100644
+index 0812bd4..0000000
+--- a/Scripts/Input/RightHandInput.meta
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: 5b271830029e4c44bb38efba4a5c9144
+\ No newline at end of file
+diff --git a/Scripts/Input/RightHandInput/RightHandInput.cs b/Scripts/Input/RightHandInput/RightHandInput.cs
+deleted file mode 100644
+index e7791eb..0000000
+--- a/Scripts/Input/RightHandInput/RightHandInput.cs
++++ /dev/null
+@@ -1,44 +0,0 @@
+-using UnityEngine;
+-
+-[DisallowMultipleComponent]
+-public class RightHandInput : MonoBehaviour
+-{
+-    [SerializeField] private InteractRaycaster raycaster;
+-    [SerializeField] private string clickButton = "Fire1";
+-    [SerializeField] private KeyCode clickKey = KeyCode.Mouse0;
+-    [SerializeField] private bool useButton = true;
+-    [SerializeField] private bool useKey = true;
+-
+-    private void Awake()
+-    {
+-        if (raycaster == null)
+-        {
+-            raycaster = GetComponentInChildren<InteractRaycaster>();
+-        }
+-    }
+-
+-    private void Update()
+-    {
+-        if (raycaster == null)
+-        {
+-            return;
+-        }
+-
+-        bool clicked = false;
+-
+-        if (useButton && !string.IsNullOrEmpty(clickButton) && Input.GetButtonDown(clickButton))
+-        {
+-            clicked = true;
+-        }
+-
+-        if (!clicked && useKey && Input.GetKeyDown(clickKey))
+-        {
+-            clicked = true;
+-        }
+-
+-        if (clicked)
+-        {
+-            raycaster.EmitClick();
+-        }
+-    }
+-}
+diff --git a/Scripts/Input/RightHandInput/RightHandInput.cs.meta b/Scripts/Input/RightHandInput/RightHandInput.cs.meta
+deleted file mode 100644
+index 645b7e5..0000000
+--- a/Scripts/Input/RightHandInput/RightHandInput.cs.meta
++++ /dev/null
+@@ -1,8 +0,0 @@
+-fileFormatVersion: 2
+-guid: 444dc46457c7e4c30bd97755a90c799e
+-folderAsset: yes
+-DefaultImporter:
+-  externalObjects: {}
+-  userData: 
+-  assetBundleName: 
+-  assetBundleVariant: 

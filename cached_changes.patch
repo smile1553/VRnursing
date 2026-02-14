@@ -1,0 +1,496 @@
+diff --git "a/Assets/MyAssests/Scripts/__Project/Scripts/VR/VRInputRouter.cs/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Assets/MyAssests/Scripts/__Project/Scripts/VR/VRInputRouter.cs/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Assets/MyAssests/Scripts/__Project/Scripts/VR/VRInteractTrigger.cs/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Assets/MyAssests/Scripts/__Project/Scripts/VR/VRInteractTrigger.cs/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Assets/MyAssests/Scripts/__Project/Scripts/VR/VRPlayerRig.cs/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Assets/MyAssests/Scripts/__Project/Scripts/VR/VRPlayerRig.cs/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Assets/MyAssests/Scripts/__Project/Scripts/VR/VRZoneTrigger.cs/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Assets/MyAssests/Scripts/__Project/Scripts/VR/VRZoneTrigger.cs/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/Docs/world_actions_gaga.tsv.meta b/Docs/world_actions_gaga.tsv.meta
+index 46d9a11..5fc53da 100644
+--- a/Docs/world_actions_gaga.tsv.meta
++++ b/Docs/world_actions_gaga.tsv.meta
+@@ -1,11 +1,6 @@
+ fileFormatVersion: 2
+-<<<<<<<< HEAD:Scripts/Core/README.txt.meta
+-guid: 13624b419c707a449b75cf64b4708499
+-TextScriptImporter:
+-========
+ guid: c4fb6e73c8d1bcf4ebc3baebfaebaa6f
+ DefaultImporter:
+->>>>>>>> test_sophia:Docs/world_actions_gaga.tsv.meta
+   externalObjects: {}
+   userData: 
+   assetBundleName: 
+diff --git a/Scripts/Core/GameBootstrapper.meta b/Scripts/Core/GameBootstrapper.meta
+new file mode 100644
+index 0000000..11d7a6c
+--- /dev/null
++++ b/Scripts/Core/GameBootstrapper.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 5eebba75fdfd19d42861cf9b9066c25e
+\ No newline at end of file
+diff --git "a/Scripts/Core/GameBootstrapper/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/Core/GameBootstrapper/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+new file mode 100644
+index 0000000..2343803
+--- /dev/null
++++ "b/Scripts/Core/GameBootstrapper/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 6f1e694ad5c6d0447ace5447b1b5655b
+\ No newline at end of file
+diff --git a/Scripts/Core/SignalBus.meta b/Scripts/Core/SignalBus.meta
+new file mode 100644
+index 0000000..8804167
+--- /dev/null
++++ b/Scripts/Core/SignalBus.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: da7c5789a90a0af48aff9babfd151d03
+\ No newline at end of file
+diff --git "a/Scripts/Core/SignalBus/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/Core/SignalBus/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+new file mode 100644
+index 0000000..1304fff
+--- /dev/null
++++ "b/Scripts/Core/SignalBus/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 8386d2cc35b3cca459b4826ce24322a9
+\ No newline at end of file
+diff --git a/Scripts/Input/InteractRaycaster.cs.meta b/Scripts/Input/InteractRaycaster.cs.meta
+new file mode 100644
+index 0000000..29dbad8
+--- /dev/null
++++ b/Scripts/Input/InteractRaycaster.cs.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 8cdf9f8d4755ad9438d3aa35bb9e4fb6
+\ No newline at end of file
+diff --git a/Scripts/Input/InteractRaycaster.meta b/Scripts/Input/InteractRaycaster.meta
+new file mode 100644
+index 0000000..452c200
+--- /dev/null
++++ b/Scripts/Input/InteractRaycaster.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 0775835a0ace8034d8bd5b9be09a66d9
+\ No newline at end of file
+diff --git a/Scripts/Input/PlayerInputRoot.meta b/Scripts/Input/PlayerInputRoot.meta
+new file mode 100644
+index 0000000..07c9680
+--- /dev/null
++++ b/Scripts/Input/PlayerInputRoot.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 6480697d4ca65314aa56424e7cdb8de2
+\ No newline at end of file
+diff --git a/Scripts/Input/RightHandInput.meta b/Scripts/Input/RightHandInput.meta
+new file mode 100644
+index 0000000..0812bd4
+--- /dev/null
++++ b/Scripts/Input/RightHandInput.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 5b271830029e4c44bb38efba4a5c9144
+\ No newline at end of file
+diff --git a/Scripts/UI/ChoiceButton.meta b/Scripts/UI/ChoiceButton.meta
+new file mode 100644
+index 0000000..e79135f
+--- /dev/null
++++ b/Scripts/UI/ChoiceButton.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: b3c29a4ef42a1e24c8e0f053cde74a95
+\ No newline at end of file
+diff --git "a/Scripts/UI/ChoiceButton/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/UI/ChoiceButton/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+new file mode 100644
+index 0000000..5ec2513
+--- /dev/null
++++ "b/Scripts/UI/ChoiceButton/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 36fffe971f382e948962e6950e7a6237
+\ No newline at end of file
+diff --git a/Scripts/UI/DialogueUI.meta b/Scripts/UI/DialogueUI.meta
+new file mode 100644
+index 0000000..426834e
+--- /dev/null
++++ b/Scripts/UI/DialogueUI.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 8c2d04ed14dc6b546aa6eccdcd2857c4
+\ No newline at end of file
+diff --git "a/Scripts/UI/DialogueUI/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/UI/DialogueUI/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+new file mode 100644
+index 0000000..c4b9d80
+--- /dev/null
++++ "b/Scripts/UI/DialogueUI/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: c29e8b9a4d514c443a60f4f4b400b8bb
+\ No newline at end of file
+diff --git a/Scripts/UI/HintUI.meta b/Scripts/UI/HintUI.meta
+new file mode 100644
+index 0000000..5dca2b4
+--- /dev/null
++++ b/Scripts/UI/HintUI.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: cc582f35bb2600f43b26fa1e1580a4ad
+\ No newline at end of file
+diff --git "a/Scripts/UI/HintUI/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/UI/HintUI/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+new file mode 100644
+index 0000000..beb5388
+--- /dev/null
++++ "b/Scripts/UI/HintUI/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 23fd279d973995642b222b4ec9b669c1
+\ No newline at end of file
+diff --git a/Scripts/VR/VRInputRouter.meta b/Scripts/VR/VRInputRouter.meta
+new file mode 100644
+index 0000000..806637d
+--- /dev/null
++++ b/Scripts/VR/VRInputRouter.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: e954f0e0a4d858046bfccdba93af9721
+\ No newline at end of file
+diff --git a/Scripts/VR/VRInteractTrigger.meta b/Scripts/VR/VRInteractTrigger.meta
+new file mode 100644
+index 0000000..01a80d6
+--- /dev/null
++++ b/Scripts/VR/VRInteractTrigger.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: cf0f940d4b904bc4795ddd604a240020
+\ No newline at end of file
+diff --git a/Scripts/VR/VRPlayerRig.meta b/Scripts/VR/VRPlayerRig.meta
+new file mode 100644
+index 0000000..c793bd9
+--- /dev/null
++++ b/Scripts/VR/VRPlayerRig.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: 2a93362475e998a429c9963a2e2753b7
+\ No newline at end of file
+diff --git a/Scripts/VR/VRZoneTrigger.meta b/Scripts/VR/VRZoneTrigger.meta
+new file mode 100644
+index 0000000..18c76f2
+--- /dev/null
++++ b/Scripts/VR/VRZoneTrigger.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: eaa885187bb1471478b9259f8ed699fc
+\ No newline at end of file
+diff --git a/Scripts/World/Actors/ActorActionPlayer/ActorActionPlayer.cs b/Scripts/World/Actors/ActorActionPlayer/ActorActionPlayer.cs
+new file mode 100644
+index 0000000..3885bfe
+--- /dev/null
++++ b/Scripts/World/Actors/ActorActionPlayer/ActorActionPlayer.cs
+@@ -0,0 +1,25 @@
++using UnityEngine;
++
++/// <summary>
++/// Placeholder actor action player. Extend later to drive animation timeline or sequence.
++/// </summary>
++public class ActorActionPlayer : MonoBehaviour
++{
++    public Animator animator;
++
++    void Awake()
++    {
++        if (!animator)
++            animator = GetComponentInChildren<Animator>();
++    }
++
++    /// <summary>
++    /// Safely set a trigger on the assigned animator.
++    /// </summary>
++    public void PlayTrigger(string triggerName)
++    {
++        if (!animator || string.IsNullOrEmpty(triggerName)) return;
++        animator.ResetTrigger(triggerName);
++        animator.SetTrigger(triggerName);
++    }
++}
+diff --git a/Scripts/World/Actors/ActorActionPlayer.meta b/Scripts/World/Actors/ActorActionPlayer/ActorActionPlayer.meta
+similarity index 100%
+rename from Scripts/World/Actors/ActorActionPlayer.meta
+rename to Scripts/World/Actors/ActorActionPlayer/ActorActionPlayer.meta
+diff --git "a/Scripts/World/Actors/ActorActionPlayer/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/Actors/ActorActionPlayer/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/Actors/ActorActionPlayer/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/Actors/ActorActionPlayer/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index 2b47f7d..0000000
+--- "a/Scripts/World/Actors/ActorActionPlayer/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: 624868d41f4966e48a6faa102ec49f47
+\ No newline at end of file
+diff --git a/Scripts/World/Actors/ActorRegistry.cs b/Scripts/World/Actors/ActorRegistry/ActorRegistry.cs
+similarity index 100%
+rename from Scripts/World/Actors/ActorRegistry.cs
+rename to Scripts/World/Actors/ActorRegistry/ActorRegistry.cs
+diff --git a/Scripts/World/Actors/ActorRegistry.cs.meta b/Scripts/World/Actors/ActorRegistry/ActorRegistry.cs.meta
+similarity index 100%
+rename from Scripts/World/Actors/ActorRegistry.cs.meta
+rename to Scripts/World/Actors/ActorRegistry/ActorRegistry.cs.meta
+diff --git a/Scripts/World/Actors/ActorRegistry.meta b/Scripts/World/Actors/ActorRegistry/ActorRegistry.meta
+similarity index 100%
+rename from Scripts/World/Actors/ActorRegistry.meta
+rename to Scripts/World/Actors/ActorRegistry/ActorRegistry.meta
+diff --git "a/Scripts/World/Actors/ActorRegistry/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/Actors/ActorRegistry/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/Actors/ActorRegistry/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/Actors/ActorRegistry/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index 3484f3e..0000000
+--- "a/Scripts/World/Actors/ActorRegistry/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: 2e39037f307d017429a2ac1f04c56c4d
+\ No newline at end of file
+diff --git a/Scripts/World/Actors/ActorRoot.cs b/Scripts/World/Actors/ActorRoot/ActorRoot.cs
+similarity index 100%
+rename from Scripts/World/Actors/ActorRoot.cs
+rename to Scripts/World/Actors/ActorRoot/ActorRoot.cs
+diff --git a/Scripts/World/Actors/ActorRoot.cs.meta b/Scripts/World/Actors/ActorRoot/ActorRoot.cs.meta
+similarity index 100%
+rename from Scripts/World/Actors/ActorRoot.cs.meta
+rename to Scripts/World/Actors/ActorRoot/ActorRoot.cs.meta
+diff --git a/Scripts/World/Actors/ActorRoot.meta b/Scripts/World/Actors/ActorRoot/ActorRoot.meta
+similarity index 100%
+rename from Scripts/World/Actors/ActorRoot.meta
+rename to Scripts/World/Actors/ActorRoot/ActorRoot.meta
+diff --git "a/Scripts/World/Actors/ActorRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/Actors/ActorRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/Actors/ActorRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/Actors/ActorRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index 72dc10f..0000000
+--- "a/Scripts/World/Actors/ActorRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: b6735b61f15622846b79178538a01167
+\ No newline at end of file
+diff --git a/Scripts/World/Actors/Kid.meta b/Scripts/World/Actors/Kid/Kid.meta
+similarity index 100%
+rename from Scripts/World/Actors/Kid.meta
+rename to Scripts/World/Actors/Kid/Kid.meta
+diff --git a/Scripts/World/Actors/Kid/KidEmotionResponder.cs b/Scripts/World/Actors/Kid/KidEmotionResponder/KidEmotionResponder.cs
+similarity index 100%
+rename from Scripts/World/Actors/Kid/KidEmotionResponder.cs
+rename to Scripts/World/Actors/Kid/KidEmotionResponder/KidEmotionResponder.cs
+diff --git a/Scripts/World/Actors/Kid/KidEmotionResponder.cs.meta b/Scripts/World/Actors/Kid/KidEmotionResponder/KidEmotionResponder.cs.meta
+similarity index 100%
+rename from Scripts/World/Actors/Kid/KidEmotionResponder.cs.meta
+rename to Scripts/World/Actors/Kid/KidEmotionResponder/KidEmotionResponder.cs.meta
+diff --git a/Scripts/World/Actors/Kid/KidEmotionResponder.meta b/Scripts/World/Actors/Kid/KidEmotionResponder/KidEmotionResponder.meta
+similarity index 100%
+rename from Scripts/World/Actors/Kid/KidEmotionResponder.meta
+rename to Scripts/World/Actors/Kid/KidEmotionResponder/KidEmotionResponder.meta
+diff --git "a/Scripts/World/Actors/Kid/KidEmotionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/Actors/Kid/KidEmotionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/Actors/Kid/KidEmotionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/Actors/Kid/KidEmotionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index f2dd5a3..0000000
+--- "a/Scripts/World/Actors/Kid/KidEmotionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: d791eb70a1b9edb4f8faec45214858b6
+\ No newline at end of file
+diff --git a/Scripts/World/Actors/Kid/KidRoot.cs b/Scripts/World/Actors/Kid/KidRoot/KidRoot.cs
+similarity index 100%
+rename from Scripts/World/Actors/Kid/KidRoot.cs
+rename to Scripts/World/Actors/Kid/KidRoot/KidRoot.cs
+diff --git a/Scripts/World/Actors/Kid/KidRoot.cs.meta b/Scripts/World/Actors/Kid/KidRoot/KidRoot.cs.meta
+similarity index 100%
+rename from Scripts/World/Actors/Kid/KidRoot.cs.meta
+rename to Scripts/World/Actors/Kid/KidRoot/KidRoot.cs.meta
+diff --git a/Scripts/World/Actors/Kid/KidRoot.meta b/Scripts/World/Actors/Kid/KidRoot/KidRoot.meta
+similarity index 100%
+rename from Scripts/World/Actors/Kid/KidRoot.meta
+rename to Scripts/World/Actors/Kid/KidRoot/KidRoot.meta
+diff --git "a/Scripts/World/Actors/Kid/KidRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/Actors/Kid/KidRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/Actors/Kid/KidRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/Actors/Kid/KidRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index 3bbe084..0000000
+--- "a/Scripts/World/Actors/Kid/KidRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: 90ea2d25906fd074ba2f0f15d0419e20
+\ No newline at end of file
+diff --git a/Scripts/World/Actors/Mom.meta b/Scripts/World/Actors/Mom/Mom.meta
+similarity index 100%
+rename from Scripts/World/Actors/Mom.meta
+rename to Scripts/World/Actors/Mom/Mom.meta
+diff --git a/Scripts/World/Actors/Mom/MomActionResponder.cs b/Scripts/World/Actors/Mom/MomActionResponder/MomActionResponder.cs
+similarity index 100%
+rename from Scripts/World/Actors/Mom/MomActionResponder.cs
+rename to Scripts/World/Actors/Mom/MomActionResponder/MomActionResponder.cs
+diff --git a/Scripts/World/Actors/Mom/MomActionResponder.cs.meta b/Scripts/World/Actors/Mom/MomActionResponder/MomActionResponder.cs.meta
+similarity index 100%
+rename from Scripts/World/Actors/Mom/MomActionResponder.cs.meta
+rename to Scripts/World/Actors/Mom/MomActionResponder/MomActionResponder.cs.meta
+diff --git a/Scripts/World/Actors/Mom/MomActionResponder.meta b/Scripts/World/Actors/Mom/MomActionResponder/MomActionResponder.meta
+similarity index 100%
+rename from Scripts/World/Actors/Mom/MomActionResponder.meta
+rename to Scripts/World/Actors/Mom/MomActionResponder/MomActionResponder.meta
+diff --git "a/Scripts/World/Actors/Mom/MomActionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/Actors/Mom/MomActionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/Actors/Mom/MomActionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/Actors/Mom/MomActionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index aca97c5..0000000
+--- "a/Scripts/World/Actors/Mom/MomActionResponder/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: 16e2f63ef1ded7d4e970a9ed4ce2687c
+\ No newline at end of file
+diff --git a/Scripts/World/Actors/Mom/MomRoot.cs b/Scripts/World/Actors/Mom/MomRoot/MomRoot.cs
+similarity index 100%
+rename from Scripts/World/Actors/Mom/MomRoot.cs
+rename to Scripts/World/Actors/Mom/MomRoot/MomRoot.cs
+diff --git a/Scripts/World/Actors/Mom/MomRoot.cs.meta b/Scripts/World/Actors/Mom/MomRoot/MomRoot.cs.meta
+similarity index 100%
+rename from Scripts/World/Actors/Mom/MomRoot.cs.meta
+rename to Scripts/World/Actors/Mom/MomRoot/MomRoot.cs.meta
+diff --git a/Scripts/World/Actors/Mom/MomRoot.meta b/Scripts/World/Actors/Mom/MomRoot/MomRoot.meta
+similarity index 100%
+rename from Scripts/World/Actors/Mom/MomRoot.meta
+rename to Scripts/World/Actors/Mom/MomRoot/MomRoot.meta
+diff --git "a/Scripts/World/Actors/Mom/MomRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/Actors/Mom/MomRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/Actors/Mom/MomRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/Actors/Mom/MomRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index 1a85e4f..0000000
+--- "a/Scripts/World/Actors/Mom/MomRoot/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: e255cbbfde261aa40b0513b606062190
+\ No newline at end of file
+diff --git a/Scripts/World/AudioController/AudioController.cs b/Scripts/World/AudioController/AudioController.cs
+new file mode 100644
+index 0000000..0ca518b
+--- /dev/null
++++ b/Scripts/World/AudioController/AudioController.cs
+@@ -0,0 +1,22 @@
++using UnityEngine;
++
++/// <summary>
++/// Simple audio controller placeholder for world actions.
++/// Add clip references and play logic as needed.
++/// </summary>
++public class AudioController : MonoBehaviour
++{
++    public AudioSource source;
++
++    void Awake()
++    {
++        if (!source)
++            source = GetComponent<AudioSource>();
++    }
++
++    public void PlayClip(AudioClip clip)
++    {
++        if (clip == null || source == null) return;
++        source.PlayOneShot(clip);
++    }
++}
+diff --git a/Scripts/World/AudioController/AudioController.meta b/Scripts/World/AudioController/AudioController.meta
+new file mode 100644
+index 0000000..bcb275c
+--- /dev/null
++++ b/Scripts/World/AudioController/AudioController.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: ac48751d9b76cfe4480db3095ed9a5ff
+\ No newline at end of file
+diff --git "a/Scripts/World/AudioController/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/AudioController/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/AudioController/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/AudioController/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index 7c48fb1..0000000
+--- "a/Scripts/World/AudioController/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: 5c1f32a1d92fc894b84e5bf82761e526
+\ No newline at end of file
+diff --git a/Scripts/World/WorldActions.cs b/Scripts/World/WorldActions/WorldActions.cs
+similarity index 100%
+rename from Scripts/World/WorldActions.cs
+rename to Scripts/World/WorldActions/WorldActions.cs
+diff --git a/Scripts/World/WorldActions.cs.meta b/Scripts/World/WorldActions/WorldActions.cs.meta
+similarity index 100%
+rename from Scripts/World/WorldActions.cs.meta
+rename to Scripts/World/WorldActions/WorldActions.cs.meta
+diff --git a/Scripts/World/WorldActions/WorldActions.meta b/Scripts/World/WorldActions/WorldActions.meta
+new file mode 100644
+index 0000000..ac3e6e0
+--- /dev/null
++++ b/Scripts/World/WorldActions/WorldActions.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: aab6e7bbd4461bc41a2553712c2b85c9
+\ No newline at end of file
+diff --git "a/Scripts/World/WorldActions/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/WorldActions/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/WorldActions/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/WorldActions/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index 58cc3db..0000000
+--- "a/Scripts/World/WorldActions/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: d2f92b5594ab8ad418fc7fbc72ca3f51
+\ No newline at end of file
+diff --git a/Scripts/World/WorldDirector.cs b/Scripts/World/WorldDirector/WorldDirector.cs
+similarity index 100%
+rename from Scripts/World/WorldDirector.cs
+rename to Scripts/World/WorldDirector/WorldDirector.cs
+diff --git a/Scripts/World/WorldDirector.cs.meta b/Scripts/World/WorldDirector/WorldDirector.cs.meta
+similarity index 100%
+rename from Scripts/World/WorldDirector.cs.meta
+rename to Scripts/World/WorldDirector/WorldDirector.cs.meta
+diff --git a/Scripts/World/WorldDirector/WorldDirector.meta b/Scripts/World/WorldDirector/WorldDirector.meta
+new file mode 100644
+index 0000000..41eb775
+--- /dev/null
++++ b/Scripts/World/WorldDirector/WorldDirector.meta
+@@ -0,0 +1,2 @@
++fileFormatVersion: 2
++guid: f691461cedb386141884c4123fe3f89c
+\ No newline at end of file
+diff --git "a/Scripts/World/WorldDirector/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt" "b/Scripts/World/WorldDirector/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt"
+deleted file mode 100644
+index e69de29..0000000
+diff --git "a/Scripts/World/WorldDirector/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta" "b/Scripts/World/WorldDirector/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"
+deleted file mode 100644
+index 874553f..0000000
+--- "a/Scripts/World/WorldDirector/\346\226\260\345\242\236 \346\226\207\345\255\227\346\226\207\344\273\266.txt.meta"	
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fileFormatVersion: 2
+-guid: c61c4ebd58ad9004484e8f620a5437bb
+\ No newline at end of file
