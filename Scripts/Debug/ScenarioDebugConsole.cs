@@ -4,6 +4,7 @@ public class ScenarioDebugConsole : MonoBehaviour
 {
     public ScenarioController controller;
     public EmotionStateManager emotionState;
+    public EmotionStateSimulator emotionSimulator;
     public bool showWindow = true;
     public Rect windowRect = new Rect(20, 20, 520, 360);
 
@@ -16,6 +17,8 @@ public class ScenarioDebugConsole : MonoBehaviour
             controller = FindObjectOfType<ScenarioController>();
         if (!emotionState)
             emotionState = FindObjectOfType<EmotionStateManager>();
+        if (!emotionSimulator)
+            emotionSimulator = FindObjectOfType<EmotionStateSimulator>();
     }
 
     void OnGUI()
@@ -37,6 +40,13 @@ public class ScenarioDebugConsole : MonoBehaviour
         if (GUILayout.Button("Start")) controller?.StartScenario();
         if (GUILayout.Button("Prev")) controller?.Previous();
         if (GUILayout.Button("Next")) controller?.Next();
+        GUILayout.EndHorizontal();
+
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Stage 0")) SetStage(0);
+        if (GUILayout.Button("Stage 1")) SetStage(1);
+        if (GUILayout.Button("Stage 2")) SetStage(2);
+        if (GUILayout.Button("ApplyManual")) emotionSimulator?.ApplyManual();
         GUILayout.EndHorizontal();
 
         GUILayout.BeginHorizontal();
@@ -63,5 +73,11 @@ public class ScenarioDebugConsole : MonoBehaviour
 
         if (GUILayout.Button("Close")) showWindow = false;
         GUI.DragWindow(new Rect(0, 0, 10000, 20));
+    }
+
+    void SetStage(int stage)
+    {
+        if (emotionSimulator == null) return;
+        emotionSimulator.stage = stage;
     }
 }
