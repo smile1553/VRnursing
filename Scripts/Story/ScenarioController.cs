@@ -93,6 +93,12 @@ public class ScenarioController : MonoBehaviour
         ProceedToIndex(0);
     }
 
+    public void SelectChoice(int index)
+    {
+        if (_activeQuiz == null) return;
+        OnQuizOptionSelected(index);
+    }
+
     public void Next()
     {
         if (_currentStep == null)
