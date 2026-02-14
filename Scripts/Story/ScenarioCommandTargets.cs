@@ -8,6 +8,26 @@ public class AnimationCommandTarget : MonoBehaviour
 
     public void Play(string command)
     {
+        if (string.IsNullOrWhiteSpace(command)) return;
+
+        // 支援 bool 開關：例如 "MomTalking=true"
+        int eq = command.IndexOf('=');
+        if (eq > 0)
+        {
+            string param = command.Substring(0, eq).Trim();
+            string val = command.Substring(eq + 1).Trim();
+            if (bool.TryParse(val, out bool b))
+            {
+                var bindingForBool = FindBinding(param) ?? FindBinding(command);
+                var anim = bindingForBool != null ? bindingForBool.animator : null;
+                if (anim)
+                {
+                    anim.SetBool(param, b);
+                    return;
+                }
+            }
+        }
+
         var binding = FindBinding(command);
         if (binding == null)
         {
@@ -56,6 +76,8 @@ public class AudioCommandTarget : MonoBehaviour
 
     public void Play(string command)
     {
+        if (string.IsNullOrWhiteSpace(command)) return;
+
         var binding = FindBinding(command);
         if (binding == null)
         {
@@ -103,6 +125,8 @@ public class TimelineCommandTarget : MonoBehaviour
 
     public void Play(string command)
     {
+        if (string.IsNullOrWhiteSpace(command)) return;
+
         var binding = FindBinding(command);
         if (binding?.director)
             binding.director.Play();
@@ -171,18 +195,14 @@ public class CameraCommandTarget : MonoBehaviour
         }
         if (!rig)
             return;
-        var target = point.transform;
-        if (!target)
-            return;
-
         if (smoothMove)
         {
-            _currentTarget = target;
+            _currentTarget = point.transform;
         }
         else
         {
-            rig.position = target.position;
-            rig.rotation = target.rotation;
+            rig.position = point.transform.position;
+            rig.rotation = point.transform.rotation;
         }
     }
 
