@@ -12,7 +12,13 @@
       "id": "mom_reply",
       "speaker": "Mother",
       "dialogue": "好！",
-      "cursorTargetId": "mother"
+      "cursorTargetId": "mother",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "MomTalking=true"
+        }
+      ]
     },
     {
       "id": "child_resist_needle",
@@ -22,7 +28,17 @@
       "subtitle": {
         "text": "芽芽抓著媽媽啜泣",
         "duration": 3
-      }
+      },
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidDodge"
+        },
+        {
+          "type": "PlayAnimation",
+          "payload": "MomTalking=false"
+        }
+      ]
     },
     {
       "id": "quiz_respiration_first",
@@ -58,7 +74,13 @@
       "id": "mom_play_music",
       "speaker": "Mother",
       "dialogue": "來，芽芽躺躺，我們聽兒歌，姊姊在旁邊看就好。",
-      "cursorTargetId": "mother"
+      "cursorTargetId": "mother",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "MomPetting"
+        }
+      ]
     },
     {
       "id": "nurse_measure_resp",
@@ -87,7 +109,13 @@
       "id": "child_refuse_heart",
       "speaker": "Child",
       "dialogue": "我不要！不要打針！",
-      "cursorTargetId": "child"
+      "cursorTargetId": "child",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidDodge"
+        }
+      ]
     },
     {
       "id": "quiz_reduce_fear",
@@ -118,7 +146,13 @@
       "id": "mom_sticker",
       "speaker": "Mother",
       "dialogue": "她喜歡貼紙！",
-      "cursorTargetId": "mother"
+      "cursorTargetId": "mother",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "MomTalking=true"
+        }
+      ]
     },
     {
       "id": "nurse_show_sticker",
@@ -130,13 +164,25 @@
         "duration": 4
       },
       "playerActionRequired": true,
-      "playerPrompt": "拿出貼紙向芽芽展示，說明量完會給她貼紙，讓她放心。"
+      "playerPrompt": "拿出貼紙向芽芽展示，說明量完會給她貼紙，讓她放心。",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "MomTalking=false"
+        }
+      ]
     },
     {
       "id": "child_still_scared",
       "speaker": "Child",
       "dialogue": "我不要！不要！",
-      "cursorTargetId": "child"
+      "cursorTargetId": "child",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidTurningHead=true"
+        }
+      ]
     },
     {
       "id": "nurse_roleplay_mom",
@@ -144,25 +190,49 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "邀請芽芽先幫媽媽聽心跳，示範聽診器不會痛。"
+      "playerPrompt": "邀請芽芽先幫媽媽聽心跳，示範聽診器不會痛。",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidTurningHead=false"
+        }
+      ]
     },
     {
       "id": "mom_roleplay",
       "speaker": "Mother",
       "dialogue": "芽芽當醫生聽媽媽的心跳，來，聽診器給你。",
-      "cursorTargetId": "mother"
+      "cursorTargetId": "mother",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "MomPointing"
+        }
+      ]
     },
     {
       "id": "child_listen_mom",
       "speaker": "Narrator",
       "dialogue": "芽芽好奇地拿聽診器聽媽媽心跳，耳朵覺得有點痛。",
-      "cursorTargetId": "child"
+      "cursorTargetId": "child",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidRubbing"
+        }
+      ]
     },
     {
       "id": "mom_listen_child",
       "speaker": "Mother",
       "dialogue": "那換媽媽聽芽芽的心跳聲音，撲通撲通！",
-      "cursorTargetId": "mother"
+      "cursorTargetId": "mother",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "MomPointing"
+        }
+      ]
     },
     {
       "id": "quiz_apex_location",
@@ -193,7 +263,13 @@
       "id": "child_refuse_temp",
       "speaker": "Child",
       "dialogue": "我不要！你出去！",
-      "cursorTargetId": "child"
+      "cursorTargetId": "child",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidTurningHead=true"
+        }
+      ]
     },
     {
       "id": "nurse_reassure_temp",
@@ -201,7 +277,13 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "向媽媽說明會再陪芽芽玩讓她放鬆後再量耳溫。"
+      "playerPrompt": "向媽媽說明會再陪芽芽玩讓她放鬆後再量耳溫。",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidTurningHead=false"
+        }
+      ]
     },
     {
       "id": "quiz_roleplay",
@@ -232,7 +314,13 @@
       "id": "child_play_temp",
       "speaker": "Narrator",
       "dialogue": "芽芽抱著佩佩豬，幫玩偶用耳溫槍做測量動作。",
-      "cursorTargetId": "child"
+      "cursorTargetId": "child",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidRubbing"
+        }
+      ]
     },
     {
       "id": "nurse_prompt_play",
@@ -246,7 +334,13 @@
       "id": "child_console_peppa",
       "speaker": "Child",
       "dialogue": "不會痛啦！冰冰的感覺，一下就好了！",
-      "cursorTargetId": "child"
+      "cursorTargetId": "child",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidTalking=true"
+        }
+      ]
     },
     {
       "id": "quiz_ear_pull",
@@ -264,7 +358,13 @@
         "correctIndex": 0,
         "requireCorrectToProceed": true
       },
-      "cursorTargetId": "system"
+      "cursorTargetId": "system",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "KidTalking=false"
+        }
+      ]
     },
     {
       "id": "nurse_measure_temp",
@@ -313,7 +413,13 @@
       "id": "mom_worried_bp",
       "speaker": "Mother",
       "dialogue": "芽芽之前量血壓充氣會覺得痛，她可以不要量嗎？",
-      "cursorTargetId": "mother"
+      "cursorTargetId": "mother",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "MomTalking=true"
+        }
+      ]
     },
     {
       "id": "quiz_bp_purpose",
@@ -330,7 +436,13 @@
         "correctIndex": 2,
         "requireCorrectToProceed": true
       },
-      "cursorTargetId": "system"
+      "cursorTargetId": "system",
+      "commands": [
+        {
+          "type": "PlayAnimation",
+          "payload": "MomTalking=false"
+        }
+      ]
     },
     {
       "id": "nurse_bp_explain",
