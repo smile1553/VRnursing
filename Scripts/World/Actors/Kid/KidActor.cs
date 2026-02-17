@@ -14,6 +14,8 @@ public class KidActor : MonoBehaviour
     [SerializeField] private string turningHeadParam = "KidTurningHead";
     [SerializeField] private string sleepingParam = "KidLayingSleep";
     [SerializeField] private string kickingOutParam = "KidKickingOut";
+    [SerializeField] private string catchBearParam = "KidCatchBear";
+    [SerializeField] private string bloodTestingParam = "KidBloodTesting";
 
     [Header("Trigger parameters (one-shots)")]
     [SerializeField] private string holdTempParam = "KidHoldStillForTemp";
@@ -25,7 +27,7 @@ public class KidActor : MonoBehaviour
     [SerializeField] private string rubbingParam = "KidRubbing";
 
     // cached hashes
-    int _talkHash, _cryHash, _disbeliefHash, _turnHeadHash, _sleepHash, _kickHash;
+    int _talkHash, _cryHash, _disbeliefHash, _turnHeadHash, _sleepHash, _kickHash, _catchBearHash, _bloodTestHash;
     int _holdTempHash, _holdBpHash, _cryOnceHash, _lookUpHash, _turnToMomHash, _dodgeHash, _rubbingHash;
 
     void Awake()
@@ -47,6 +49,8 @@ public class KidActor : MonoBehaviour
         _turnHeadHash = Animator.StringToHash(turningHeadParam);
         _sleepHash = Animator.StringToHash(sleepingParam);
         _kickHash = Animator.StringToHash(kickingOutParam);
+        _catchBearHash = Animator.StringToHash(catchBearParam);
+        _bloodTestHash = Animator.StringToHash(bloodTestingParam);
 
         _holdTempHash = Animator.StringToHash(holdTempParam);
         _holdBpHash = Animator.StringToHash(holdBpParam);
@@ -64,6 +68,8 @@ public class KidActor : MonoBehaviour
     public void SetTurningHead(bool value) => animator.SetBool(_turnHeadHash, value);
     public void SetSleeping(bool value) => animator.SetBool(_sleepHash, value);
     public void SetKickingOut(bool value) => animator.SetBool(_kickHash, value);
+    public void SetCatchBear(bool value) => animator.SetBool(_catchBearHash, value);
+    public void SetBloodTesting(bool value) => animator.SetBool(_bloodTestHash, value);
 
     public void ClearAllLoops()
     {
@@ -73,6 +79,8 @@ public class KidActor : MonoBehaviour
         animator.SetBool(_turnHeadHash, false);
         animator.SetBool(_sleepHash, false);
         animator.SetBool(_kickHash, false);
+        animator.SetBool(_catchBearHash, false);
+        animator.SetBool(_bloodTestHash, false);
     }
 
     // ---------- One-shot triggers ----------
