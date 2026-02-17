@@ -148,4 +148,23 @@ public class WorldDirector : MonoBehaviour
     {
         TriggerMomAction(WorldActions.ParseMomAction(actionKey));
     }
+
+    // -------------------------------------------------- Signal bridge compatibility
+    public void ReceiveSignal(string key, SignalPayload payload)
+    {
+        if (string.IsNullOrEmpty(key)) return;
+
+        if (key == "emotion_score" && payload != null)
+        {
+            // Map tension (-5~5) to 0~100 if provided; fallback to stage if tension is 0.
+            float score = payload.tension != 0f
+                ? Mathf.InverseLerp(-5f, 5f, payload.tension) * 100f
+                : payload.stage * 25f;
+            ApplyEmotionScore(score);
+            return;
+        }
+
+        // Fallback: treat key as eventId for HandleEvent (e.g., Act1_* or interaction.*)
+        HandleEvent(key);
+    }
 }
