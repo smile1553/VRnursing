@@ -24,7 +24,6 @@ public class SignalBus : MonoBehaviour
     public void PublishScenarioStepChanged(ScenarioStep step) => OnScenarioStepChanged?.Invoke(step);
     public void PublishEmotionStageChanged(int stage) => OnEmotionStageChanged?.Invoke(stage);
     public void PublishEmotionSnapshot(EmotionSnapshot snapshot) => OnEmotionSnapshot?.Invoke(snapshot);
-
     public void PublishUIEvent(string key, SignalPayload payload) => OnUIEvent?.Invoke(key, payload);
     public void PublishInputEvent(string key, SignalPayload payload) => OnInputEvent?.Invoke(key, payload);
 }
