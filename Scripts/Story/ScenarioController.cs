@@ -13,6 +13,24 @@ public class ScenarioController : MonoBehaviour
     [Header("UI 綁定")]
     public ScenarioUiBinding ui;
 
+<<<<<<< test_ren
+=======
+    [Header("Quiz Placement (2F)")]
+    [SerializeField] private Transform quizUiAnchor;
+    [SerializeField] private Transform xrRigRoot;
+    [SerializeField] private Transform quizXrSpawn;
+
+    [Header("情緒全域 Gate")]
+    public bool suppressGateAfterQuiz = true;
+    public float gateSuppressSeconds = 0.8f;
+
+    public bool globalEmotionGate = false;
+    public int globalAnxiousStageThreshold = 1;
+    public int globalFallbackStepIndex = -1;
+    public int globalCalmStageRequirement = 0;
+    [TextArea] public string globalBlockedSubtitle = "芽芽太緊張，先安撫後再繼續。";
+
+>>>>>>> local
     [Header("事件")]
     public StringEvent cursorTargetChanged;
     public StringEvent stepStarted;
@@ -25,6 +43,8 @@ public class ScenarioController : MonoBehaviour
     ScenarioStep _currentStep;
     Coroutine _subtitleRoutine;
     ScenarioQuiz _activeQuiz;
+    QuizUi _activeQuizUi;
+    int _quizShownCount;
     bool _waitingForCalm;
 
     public ScenarioStep CurrentStep => _currentStep;
@@ -57,6 +77,8 @@ public class ScenarioController : MonoBehaviour
     public void StartScenario()
     {
         _currentIndex = -1;
+        _quizShownCount = 0;
+        _activeQuizUi = null;
         ProceedToIndex(0);
     }
 
@@ -226,18 +248,24 @@ public class ScenarioController : MonoBehaviour
     void ShowQuiz(ScenarioQuiz quiz)
     {
         _activeQuiz = quiz;
-        if (ui == null || ui.quiz == null) return;
+        if (ui == null) return;
 
-        if (ui.quiz.root)
-            ui.quiz.root.SetActive(true);
-        if (ui.quiz.questionText)
-            ui.quiz.questionText.text = quiz.question;
-        if (ui.quiz.explanationText)
-            ui.quiz.explanationText.text = string.Empty;
+        var quizUi = ResolveQuizUi();
+        _activeQuizUi = quizUi;
+        if (quizUi == null) return;
 
-        for (int i = 0; i < ui.quiz.options.Length; i++)
+        if (quizUi.root)
+            quizUi.root.SetActive(true);
+        AlignQuizUi(quizUi.root);
+        MoveRigToQuizSpawn();
+        if (quizUi.questionText)
+            quizUi.questionText.text = quiz.question;
+        if (quizUi.explanationText)
+            quizUi.explanationText.text = string.Empty;
+
+        for (int i = 0; i < quizUi.options.Length; i++)
         {
-            var option = ui.quiz.options[i];
+            var option = quizUi.options[i];
             bool valid = quiz.options != null && i < quiz.options.Length && !string.IsNullOrEmpty(quiz.options[i]);
             if (option != null)
             {
@@ -256,14 +284,46 @@ public class ScenarioController : MonoBehaviour
     void HideQuiz()
     {
         _activeQuiz = null;
-        if (ui == null || ui.quiz == null) return;
-        if (ui.quiz.root)
-            ui.quiz.root.SetActive(false);
-        foreach (var opt in ui.quiz.options)
+        if (ui == null) return;
+        var quizUi = _activeQuizUi != null ? _activeQuizUi : ui.quiz;
+        if (quizUi == null) return;
+        if (quizUi.root)
+            quizUi.root.SetActive(false);
+        foreach (var opt in quizUi.options)
         {
             if (opt?.button != null)
                 opt.button.onClick.RemoveAllListeners();
         }
+        _activeQuizUi = null;
+    }
+
+    QuizUi ResolveQuizUi()
+    {
+        if (ui.quizPanels != null && ui.quizPanels.Length > 0)
+        {
+            var index = Mathf.Clamp(_quizShownCount, 0, ui.quizPanels.Length - 1);
+            _quizShownCount++;
+            return ui.quizPanels[index];
+        }
+        return ui.quiz;
+    }
+
+    void AlignQuizUi(GameObject root)
+    {
+        if (root == null) return;
+        if (quizUiAnchor == null) return;
+        var rootTransform = root.transform;
+        rootTransform.position = quizUiAnchor.position;
+        rootTransform.rotation = quizUiAnchor.rotation;
+        rootTransform.localScale = quizUiAnchor.localScale;
+    }
+
+    void MoveRigToQuizSpawn()
+    {
+        if (xrRigRoot == null || quizXrSpawn == null) return;
+        xrRigRoot.position = quizXrSpawn.position;
+        var yaw = quizXrSpawn.rotation.eulerAngles.y;
+        xrRigRoot.rotation = Quaternion.Euler(0f, yaw, 0f);
     }
 
     void OnQuizOptionSelected(int index)
@@ -275,8 +335,9 @@ public class ScenarioController : MonoBehaviour
         quizAnswered?.Invoke(_activeQuiz, index, correct);
         if (!correct)
         {
-            if (!string.IsNullOrEmpty(_activeQuiz.explanation) && ui?.quiz?.explanationText)
-                ui.quiz.explanationText.text = _activeQuiz.explanation;
+            var quizUi = _activeQuizUi != null ? _activeQuizUi : ui?.quiz;
+            if (!string.IsNullOrEmpty(_activeQuiz.explanation) && quizUi?.explanationText)
+                quizUi.explanationText.text = _activeQuiz.explanation;
             if (_activeQuiz.requireCorrectToProceed)
                 return;
         }
@@ -314,6 +375,7 @@ public class ScenarioController : MonoBehaviour
         public GameObject subtitleRoot;
         public Text subtitleText;
         public QuizUi quiz;
+        public QuizUi[] quizPanels;
     }
 
     [System.Serializable]
