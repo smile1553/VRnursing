@@ -77,5 +77,14 @@ public class VRInputRouter : MonoBehaviour
     private void Emit(string signalName, InteractPayload payload)
     {
         SignalBus.Emit(signalName, payload);
+
+        // Bridge VR input signals to Core SignalBus for Story/World listeners.
+        if (global::SignalBus.Instance != null && payload != null)
+        {
+            global::SignalBus.Instance.PublishInputEvent(signalName, new SignalPayload
+            {
+                targetId = payload.targetId
+            });
+        }
     }
 }
