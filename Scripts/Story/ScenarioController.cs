@@ -46,6 +46,7 @@ public class ScenarioController : MonoBehaviour
 
     public ScenarioStep CurrentStep => _currentStep;
     public int CurrentStepIndex => _currentIndex;
+    public bool IsQuizActive => _activeQuiz != null && _activeQuizUi != null;
 
     void Awake()
     {
@@ -361,6 +362,12 @@ public class ScenarioController : MonoBehaviour
             if (ui?.subtitleText)
                 ui.subtitleText.text = string.Empty;
         }
+    }
+
+    public void SelectChoice(int index)
+    {
+        if (_activeQuiz == null) return;
+        OnQuizOptionSelected(index);
     }
 
     [System.Serializable]
