@@ -6,7 +6,19 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "向芽芽與媽媽問好，說明將協助量體溫、呼吸、心跳與血壓。"
+      "playerPrompt": "向芽芽與媽媽問好，說明將協助量體溫、呼吸、心跳與血壓。",
+      "expectedKeywords": [
+        "你好芽芽",
+        "你好媽媽",
+        "生命徵象",
+        "量體溫"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "greet",
+        "introduce_exam_plan"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "mom_reply",
@@ -68,7 +80,19 @@
         "duration": 4
       },
       "playerActionRequired": true,
-      "playerPrompt": "向媽媽表示先觀察芽芽的呼吸起伏，請她陪芽芽躺下並播放兒歌。"
+      "playerPrompt": "向媽媽表示先觀察芽芽的呼吸起伏，請她陪芽芽躺下並播放兒歌。",
+      "expectedKeywords": [
+        "先觀察呼吸",
+        "先看呼吸",
+        "不要先碰她",
+        "先放鬆"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "explain_resp_first",
+        "calm_guidance"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "mom_play_music",
@@ -103,7 +127,19 @@
         "blockedSubtitle": "芽芽太緊張，先安撫後再聽心跳。"
       },
       "playerActionRequired": true,
-      "playerPrompt": "安撫芽芽並請她讓你聽心跳，鼓勵她先摸摸聽診器。"
+      "playerPrompt": "安撫芽芽並請她讓你聽心跳，鼓勵她先摸摸聽診器。",
+      "expectedKeywords": [
+        "先安撫",
+        "摸摸聽診器",
+        "聽心跳",
+        "不會痛"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "soothe_child",
+        "request_heart_exam"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "child_refuse_heart",
@@ -140,7 +176,19 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "向媽媽詢問芽芽喜歡的東西，好用來分散注意力並合作測量。"
+      "playerPrompt": "向媽媽詢問芽芽喜歡的東西，好用來分散注意力並合作測量。",
+      "expectedKeywords": [
+        "喜歡什麼",
+        "喜歡的東西",
+        "分散注意力",
+        "比較願意合作"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "ask_preference",
+        "engagement_strategy"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "mom_sticker",
@@ -170,7 +218,19 @@
           "type": "PlayAnimation",
           "payload": "MomTalking=false"
         }
-      ]
+      ],
+      "expectedKeywords": [
+        "這是貼紙",
+        "量完給貼紙",
+        "你很棒",
+        "先放心"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "offer_reward",
+        "build_trust"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "child_still_scared",
@@ -196,7 +256,19 @@
           "type": "PlayAnimation",
           "payload": "KidTurningHead=false"
         }
-      ]
+      ],
+      "expectedKeywords": [
+        "先幫媽媽聽",
+        "你當小醫生",
+        "聽診器不會痛",
+        "先示範"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "role_play_demo",
+        "reduce_fear"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "mom_roleplay",
@@ -257,7 +329,19 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "稱讚芽芽勇敢並給貼紙，告知接著要量耳溫。"
+      "playerPrompt": "稱讚芽芽勇敢並給貼紙，告知接著要量耳溫。",
+      "expectedKeywords": [
+        "你很勇敢",
+        "給你貼紙",
+        "接下來量耳溫",
+        "做得很好"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "praise_child",
+        "transition_to_temp"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "child_refuse_temp",
@@ -283,7 +367,19 @@
           "type": "PlayAnimation",
           "payload": "KidTurningHead=false"
         }
-      ]
+      ],
+      "expectedKeywords": [
+        "再玩一下",
+        "先放鬆",
+        "等一下再量耳溫",
+        "陪她慢慢來"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "reassure_child",
+        "delay_temp_exam"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "quiz_roleplay",
@@ -308,7 +404,19 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "帶領芽芽幫佩佩豬量體溫，讓她熟悉步驟。"
+      "playerPrompt": "帶領芽芽幫佩佩豬量體溫，讓她熟悉步驟。",
+      "expectedKeywords": [
+        "幫佩佩豬量體溫",
+        "先幫玩偶量",
+        "先練習",
+        "熟悉步驟"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "role_play_temp",
+        "practice_before_exam"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "child_play_temp",
@@ -328,7 +436,19 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "引導芽芽對佩佩豬說安撫的話，教她如何幫玩偶量體溫。"
+      "playerPrompt": "引導芽芽對佩佩豬說安撫的話，教她如何幫玩偶量體溫。",
+      "expectedKeywords": [
+        "跟佩佩豬說",
+        "不會痛",
+        "冰冰的",
+        "一下就好"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "coach_comfort_words",
+        "temp_reassurance"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "child_console_peppa",
@@ -338,7 +458,7 @@
       "commands": [
         {
           "type": "PlayAnimation",
-          "payload": "KidTalking=true"
+          "payload": "KidTestingBearTemp"
         }
       ]
     },
@@ -358,13 +478,7 @@
         "correctIndex": 0,
         "requireCorrectToProceed": true
       },
-      "cursorTargetId": "system",
-      "commands": [
-        {
-          "type": "PlayAnimation",
-          "payload": "KidTalking=false"
-        }
-      ]
+      "cursorTargetId": "system"
     },
     {
       "id": "nurse_measure_temp",
@@ -376,7 +490,19 @@
         "duration": 4
       },
       "playerActionRequired": true,
-      "playerPrompt": "正式量芽芽耳溫，說明要輕輕往下後拉耳朵。"
+      "playerPrompt": "正式量芽芽耳溫，說明要輕輕往下後拉耳朵。",
+      "expectedKeywords": [
+        "要量耳溫",
+        "耳朵往下往後拉",
+        "輕輕拉耳朵",
+        "很快就好"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "perform_temp_exam",
+        "explain_ear_pull"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "nurse_temp_result",
@@ -390,7 +516,19 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "用遊戲語氣介紹血壓計，邀請芽芽一起綁壓脈帶。"
+      "playerPrompt": "用遊戲語氣介紹血壓計，邀請芽芽一起綁壓脈帶。",
+      "expectedKeywords": [
+        "這是血壓計",
+        "一起綁壓脈帶",
+        "像玩遊戲",
+        "量血壓"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "introduce_bp_exam",
+        "invite_bp_cooperation"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "quiz_cuff_width",
@@ -450,7 +588,19 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "向媽媽解釋量血壓是為了評估脫水與保護芽芽。"
+      "playerPrompt": "向媽媽解釋量血壓是為了評估脫水與保護芽芽。",
+      "expectedKeywords": [
+        "量血壓是為了",
+        "評估脫水",
+        "保護芽芽",
+        "不是要打針"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "explain_bp_purpose",
+        "address_parent_concern"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "nurse_bp_roleplay",
@@ -462,7 +612,19 @@
         "duration": 4
       },
       "playerActionRequired": true,
-      "playerPrompt": "描述壓脈帶充氣像被捏緊，鼓勵芽芽幫佩佩豬量血壓。"
+      "playerPrompt": "描述壓脈帶充氣像被捏緊，鼓勵芽芽幫佩佩豬量血壓。",
+      "expectedKeywords": [
+        "充氣會緊緊的",
+        "像被捏一下",
+        "幫佩佩豬量血壓",
+        "我們先示範"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "explain_bp_sensation",
+        "role_play_bp"
+      ],
+      "minLlmConfidence": 0.7
     },
     {
       "id": "quiz_bp_site",
@@ -496,7 +658,19 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "完成檢查後稱讚芽芽勇敢，邀她帶貼紙與佩佩豬回家。"
+      "playerPrompt": "完成檢查後稱讚芽芽勇敢，邀她帶貼紙與佩佩豬回家。",
+      "expectedKeywords": [
+        "今天很勇敢",
+        "檢查完成了",
+        "帶貼紙回家",
+        "和佩佩豬回家"
+      ],
+      "allowLlmAssist": true,
+      "expectedIntents": [
+        "closing_praise",
+        "scenario_wrap_up"
+      ],
+      "minLlmConfidence": 0.7
     }
   ]
 }

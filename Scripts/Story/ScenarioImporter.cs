@@ -20,6 +20,12 @@ public static class ScenarioImporter
         public string cursorTargetId;
         public float autoAdvanceDelay;
         public bool waitForClick = true;
+        public bool playerActionRequired;
+        public string playerPrompt;
+        public string[] expectedKeywords;
+        public bool allowLlmAssist = true;
+        public string[] expectedIntents;
+        public float minLlmConfidence = 0.7f;
         public ImportSubtitle subtitle;
         public ImportQuiz quiz;
         public ImportEmotionGate emotionGate;
@@ -87,6 +93,12 @@ public static class ScenarioImporter
             cursorTargetId = src.cursorTargetId,
             autoAdvanceDelay = src.autoAdvanceDelay,
             waitForClick = src.waitForClick,
+            playerActionRequired = src.playerActionRequired,
+            playerPrompt = src.playerPrompt,
+            expectedKeywords = src.expectedKeywords,
+            allowLlmAssist = src.allowLlmAssist,
+            expectedIntents = src.expectedIntents,
+            minLlmConfidence = Mathf.Clamp01(src.minLlmConfidence),
             explicitNextIndex = src.explicitNextIndex
         };
         if (src.subtitle != null && !string.IsNullOrEmpty(src.subtitle.text))
