@@ -13,8 +13,6 @@ public class ScenarioController : MonoBehaviour
     [Header("UI 綁定")]
     public ScenarioUiBinding ui;
 
-<<<<<<< test_ren
-=======
     [Header("Quiz Placement (2F)")]
     [SerializeField] private Transform quizUiAnchor;
     [SerializeField] private Transform xrRigRoot;
@@ -30,7 +28,6 @@ public class ScenarioController : MonoBehaviour
     public int globalCalmStageRequirement = 0;
     [TextArea] public string globalBlockedSubtitle = "芽芽太緊張，先安撫後再繼續。";
 
->>>>>>> local
     [Header("事件")]
     public StringEvent cursorTargetChanged;
     public StringEvent stepStarted;
