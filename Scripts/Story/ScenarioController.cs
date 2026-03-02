@@ -238,6 +238,7 @@ public class ScenarioController : MonoBehaviour
         if (ui.subtitleRoot)
             ui.subtitleRoot.SetActive(true);
         if (ui.subtitleText)
+        {
             ui.subtitleText.text = text;
             if (!ui.subtitleRoot)
                 ui.subtitleText.gameObject.SetActive(true);
