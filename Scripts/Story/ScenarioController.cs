@@ -137,7 +137,7 @@ public class ScenarioController : MonoBehaviour
         if (index >= 0)
             ProceedToIndex(index);
         else
-            Debug.LogWarning($"[Scenario] ?????id={stepId} ??????);
+            Debug.LogWarning($"[Scenario] 找不到 id={stepId} 的步驟");
     }
 
     public void JumpToIndex(int index)
