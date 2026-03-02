@@ -5,15 +5,15 @@ using System.Threading.Tasks;
 public class RunAI_Network : MonoBehaviour
 {
     [Header("Auto Discovery")]
-    public string serverBaseUrl = "";   // 留空→啟動時自動探測；或填固定值覆蓋
+    public string serverBaseUrl = "";   // ?�空?��??��??��??�測；�?填固定值�???
     public float intervalSec = 1f;
     public bool autoUploadOnConnect = true;
     public bool useWebSocketFeed = true;
     public bool logIncomingJson = false;
 
     [Header("Components")]
-    public RunAI runAi;                 // 角色上的 RunAI（拖進來）
-    public AudioUploader audioUploader; // 場景上的 AudioUploader（拖進來）
+    public RunAI runAi;                 // 角色上�? RunAI（�??��?�?
+    public AudioUploader audioUploader; // ?�景上�? AudioUploader（�??��?�?
 
     IEmotionFeed feed;
     string _lastLoggedJson;
@@ -23,15 +23,15 @@ public class RunAI_Network : MonoBehaviour
     async void Start()
     {
         _lastLoggedJson = null;
-        // 1) 找伺服器 URL（用你之前做的 UDP 探測；這裡給最簡單流程）
+        // 1) ?�伺?�器 URL（用你�??��???UDP ?�測；這裡給�?簡單流�?�?
         if (string.IsNullOrEmpty(serverBaseUrl))
         {
-            // 先讀快取
+            // ?��?快�?
             serverBaseUrl = PlayerPrefs.GetString("emo_server_url", "");
             if (string.IsNullOrEmpty(serverBaseUrl))
             {
                 Debug.Log("[DISCOVERY] scanning...");
-                var url = await ServerDiscovery.FindServerUrlAsync(); // 你前面做的 B-1
+                var url = await ServerDiscovery.FindServerUrlAsync(); // 你�??��???B-1
                 if (!string.IsNullOrEmpty(url))
                 {
                     serverBaseUrl = url; // e.g. http://192.168.0.50:8000
@@ -41,7 +41,7 @@ public class RunAI_Network : MonoBehaviour
                 }
                 else
                 {
-                    // 找不到就用本機，方便在 Editor 測
+                    // ?��??�就?�本機�??�便??Editor �?
                     serverBaseUrl = "http://127.0.0.1:8000";
                     Debug.LogWarning("[DISCOVERY] not found, fallback " + serverBaseUrl);
                 }
@@ -49,7 +49,7 @@ public class RunAI_Network : MonoBehaviour
             else Debug.Log("[DISCOVERY] use cached " + serverBaseUrl);
         }
 
-        // 2) 把 /audio URL 指給 AudioUploader（← 重點）
+        // 2) ??/audio URL ?�給 AudioUploader（�? ?��?�?
         if (audioUploader != null)
         {
             audioUploader.serverUrl = serverBaseUrl.TrimEnd('/') + "/audio";
@@ -57,7 +57,7 @@ public class RunAI_Network : MonoBehaviour
                 audioUploader.StartLoop();
         }
 
-        // 3) 啟動情緒資料來源（HTTP 輪詢或 WebSocket 推播）
+        // 3) ?��??��?資�?來�?（HTTP 輪詢??WebSocket ?�播�?
         feed?.Stop();
         feed = useWebSocketFeed ? (IEmotionFeed)new WsEmotionFeed() : new HttpEmotionFeed();
 
@@ -91,11 +91,11 @@ public class RunAI_Network : MonoBehaviour
         EmotionJsonReceived?.Invoke(json);
     }
 
-    // 可選：提供一個重新掃描方法，做成 UI 按鈕
-    public async void RescanServer()
+    // ?�選：�?供�??��??��??�方法�??��? UI ?��?
+    public void RescanServer()
     {
         PlayerPrefs.DeleteKey("emo_server_url");
         serverBaseUrl = "";
-        Start(); // 簡單粗暴的重啟流程
+        Start(); // 簡單粗暴?��??��?�?
     }
 }

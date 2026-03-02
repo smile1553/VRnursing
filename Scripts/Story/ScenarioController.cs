@@ -11,11 +11,6 @@ public class ScenarioController : MonoBehaviour
     public ScenarioAsset scenario;
     public EmotionStateManager emotionManager;
 
-    [Header("字幕設定")]
-    public float defaultSubtitleDuration = 1.5f;
-    public bool repeatSubtitleWhileBlocked = true;
-    public float repeatSubtitleInterval = 3f;
-
     [Header("UI 綁定")]
     public ScenarioUiBinding ui;
 
@@ -23,6 +18,7 @@ public class ScenarioController : MonoBehaviour
     [SerializeField] private Transform quizUiAnchor;
     [SerializeField] private Transform xrRigRoot;
     [SerializeField] private Transform quizXrSpawn;
+
     [Header("情緒全域 Gate")]
     public bool suppressGateAfterQuiz = true;
     public float gateSuppressSeconds = 0.8f;
@@ -48,13 +44,10 @@ public class ScenarioController : MonoBehaviour
     QuizUi _activeQuizUi;
     int _quizShownCount;
     bool _waitingForCalm;
-    float _gateSuppressedUntil;
-    string _lastSubtitleText;
-    float _lastSubtitleShownAt;
 
     public ScenarioStep CurrentStep => _currentStep;
     public int CurrentStepIndex => _currentIndex;
-    public bool IsQuizActive => _activeQuiz != null;
+    public bool IsQuizActive => _activeQuiz != null && _activeQuizUi != null;
 
     void Awake()
     {
@@ -76,22 +69,8 @@ public class ScenarioController : MonoBehaviour
 
     void Start()
     {
-        ClearUiText();
         if (scenario != null)
             StartScenario();
-    }
-
-    
-    void Update()
-    {
-        if (!repeatSubtitleWhileBlocked) return;
-        if (!_waitingForCalm) return;
-        if (string.IsNullOrEmpty(_lastSubtitleText)) return;
-        if (repeatSubtitleInterval <= 0f) return;
-        if (Time.time - _lastSubtitleShownAt >= repeatSubtitleInterval)
-        {
-            ShowSubtitle(_lastSubtitleText, defaultSubtitleDuration);
-        }
     }
 
     public void StartScenario()
@@ -100,12 +79,6 @@ public class ScenarioController : MonoBehaviour
         _quizShownCount = 0;
         _activeQuizUi = null;
         ProceedToIndex(0);
-    }
-
-    public void SelectChoice(int index)
-    {
-        if (_activeQuiz == null) return;
-        OnQuizOptionSelected(index);
     }
 
     public void Next()
@@ -147,26 +120,12 @@ public class ScenarioController : MonoBehaviour
 
     bool CanProgressPastCurrent()
     {
-        if (globalEmotionGate && Time.time >= _gateSuppressedUntil)
-        {
-            int gateStage = emotionManager?.Current?.stage ?? 0;
-            if (gateStage >= globalAnxiousStageThreshold)
-            {
-                _waitingForCalm = true;
-                if (!string.IsNullOrEmpty(globalBlockedSubtitle))
-                    ShowSubtitle(globalBlockedSubtitle, 3f);
-                if (globalFallbackStepIndex >= 0)
-                    ProceedToIndex(globalFallbackStepIndex);
-                return false;
-            }
-        }
-
         var gate = _currentStep.emotionGate;
         if (gate == null) return true;
         if (!gate.blockWhenAnxious) return true;
 
-        int stepStage = emotionManager?.Current?.stage ?? 0;
-        if (stepStage >= gate.anxiousStageThreshold)
+        int stage = emotionManager?.Current?.stage ?? 0;
+        if (stage >= gate.anxiousStageThreshold)
         {
             _waitingForCalm = true;
             if (!string.IsNullOrEmpty(gate.blockedSubtitle))
@@ -277,7 +236,6 @@ public class ScenarioController : MonoBehaviour
         if (ui.subtitleRoot)
             ui.subtitleRoot.SetActive(true);
         if (ui.subtitleText)
-        {
             ui.subtitleText.text = text;
             if (!ui.subtitleRoot)
                 ui.subtitleText.gameObject.SetActive(true);
@@ -294,9 +252,8 @@ public class ScenarioController : MonoBehaviour
         if (_subtitleRoutine != null)
             StopCoroutine(_subtitleRoutine);
 
-        float hideAfter = duration > 0f ? duration : defaultSubtitleDuration;
-        if (hideAfter > 0f)
-            _subtitleRoutine = StartCoroutine(HideSubtitleLater(hideAfter));
+        if (duration > 0f)
+            _subtitleRoutine = StartCoroutine(HideSubtitleLater(duration));
     }
 
     IEnumerator HideSubtitleLater(float delay)
@@ -417,8 +374,6 @@ public class ScenarioController : MonoBehaviour
 
         bool correct = index == _activeQuiz.correctIndex;
         quizAnswered?.Invoke(_activeQuiz, index, correct);
-        if (suppressGateAfterQuiz)
-            _gateSuppressedUntil = Time.time + Mathf.Max(0f, gateSuppressSeconds);
         if (!correct)
         {
             var quizUi = _activeQuizUi != null ? _activeQuizUi : ui?.quiz;
@@ -444,8 +399,7 @@ public class ScenarioController : MonoBehaviour
             return;
         }
 
-        int calmRequirement = globalEmotionGate ? globalCalmStageRequirement : gate.calmStageRequirement;
-        if (snapshot.stage <= calmRequirement)
+        if (snapshot.stage <= gate.calmStageRequirement)
         {
             _waitingForCalm = false;
             if (ui?.subtitleText)
@@ -467,6 +421,10 @@ public class ScenarioController : MonoBehaviour
         if (ui.subtitleText) ui.subtitleText.text = string.Empty;
         if (ui.subtitleTMP) ui.subtitleTMP.text = string.Empty;
         if (ui.subtitleRoot) ui.subtitleRoot.SetActive(false);
+    public void SelectChoice(int index)
+    {
+        if (_activeQuiz == null) return;
+        OnQuizOptionSelected(index);
     }
 
     [System.Serializable]
