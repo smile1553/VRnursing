@@ -9,6 +9,9 @@ public class WorldDirector : MonoBehaviour
     [SerializeField] private MomActor mom;
     [SerializeField] private KidActor kid;
     [Range(0f, 100f)] public float lastEmotionScore;
+    [Header("Anchors (optional)")]
+    [SerializeField] private Transform momAnchor;
+    [SerializeField] private Transform kidAnchor;
 
     void Reset()
     {
@@ -84,6 +87,18 @@ public class WorldDirector : MonoBehaviour
                 mom.DoClap();
                 break;
         }
+    }
+
+    public void SnapKidToAnchor()
+    {
+        if (kid != null && kidAnchor != null)
+            kid.transform.SetPositionAndRotation(kidAnchor.position, kidAnchor.rotation);
+    }
+
+    public void SnapMomToAnchor()
+    {
+        if (mom != null && momAnchor != null)
+            mom.transform.SetPositionAndRotation(momAnchor.position, momAnchor.rotation);
     }
 
     public IEnumerator MomSay(float seconds)

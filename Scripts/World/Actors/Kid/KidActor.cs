@@ -12,10 +12,13 @@ public class KidActor : MonoBehaviour
     [SerializeField] private string cryParam = "KidCrying";
     [SerializeField] private string disbeliefParam = "KidDisbelief";
     [SerializeField] private string turningHeadParam = "KidTurningHead";
-    [SerializeField] private string sleepingParam = "KidLayingSleep";
+    [SerializeField] private string sleepingParam = "KidLayingSleeping";
     [SerializeField] private string kickingOutParam = "KidKickingOut";
     [SerializeField] private string catchBearParam = "KidCatchBear";
     [SerializeField] private string bloodTestingParam = "KidBloodTesting";
+    [SerializeField] private string tempTestingParam = "KidTempTesting";
+    [SerializeField] private string testingBearTempParam = "KidTestingBearTemp";
+    [SerializeField] private string angryWhileLayingParam = "KidAngrywhileLaying";
 
     [Header("Trigger parameters (one-shots)")]
     [SerializeField] private string holdTempParam = "KidHoldStillForTemp";
@@ -27,7 +30,7 @@ public class KidActor : MonoBehaviour
     [SerializeField] private string rubbingParam = "KidRubbing";
 
     // cached hashes
-    int _talkHash, _cryHash, _disbeliefHash, _turnHeadHash, _sleepHash, _kickHash, _catchBearHash, _bloodTestHash;
+    int _talkHash, _cryHash, _disbeliefHash, _turnHeadHash, _sleepHash, _kickHash, _catchBearHash, _bloodTestHash, _tempTestHash, _testingBearTempHash, _angryWhileLayingHash;
     int _holdTempHash, _holdBpHash, _cryOnceHash, _lookUpHash, _turnToMomHash, _dodgeHash, _rubbingHash;
 
     void Awake()
@@ -51,6 +54,9 @@ public class KidActor : MonoBehaviour
         _kickHash = Animator.StringToHash(kickingOutParam);
         _catchBearHash = Animator.StringToHash(catchBearParam);
         _bloodTestHash = Animator.StringToHash(bloodTestingParam);
+        _tempTestHash = Animator.StringToHash(tempTestingParam);
+        _testingBearTempHash = Animator.StringToHash(testingBearTempParam);
+        _angryWhileLayingHash = Animator.StringToHash(angryWhileLayingParam);
 
         _holdTempHash = Animator.StringToHash(holdTempParam);
         _holdBpHash = Animator.StringToHash(holdBpParam);
@@ -70,6 +76,9 @@ public class KidActor : MonoBehaviour
     public void SetKickingOut(bool value) => animator.SetBool(_kickHash, value);
     public void SetCatchBear(bool value) => animator.SetBool(_catchBearHash, value);
     public void SetBloodTesting(bool value) => animator.SetBool(_bloodTestHash, value);
+    public void SetTempTesting(bool value) => animator.SetBool(_tempTestHash, value);
+    public void SetTestingBearTemp(bool value) => animator.SetBool(_testingBearTempHash, value);
+    public void SetAngryWhileLaying(bool value) => animator.SetBool(_angryWhileLayingHash, value);
 
     public void ClearAllLoops()
     {
@@ -81,6 +90,9 @@ public class KidActor : MonoBehaviour
         animator.SetBool(_kickHash, false);
         animator.SetBool(_catchBearHash, false);
         animator.SetBool(_bloodTestHash, false);
+        animator.SetBool(_tempTestHash, false);
+        animator.SetBool(_testingBearTempHash, false);
+        animator.SetBool(_angryWhileLayingHash, false);
     }
 
     // ---------- One-shot triggers ----------
