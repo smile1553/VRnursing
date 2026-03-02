@@ -44,6 +44,8 @@ public class ScenarioController : MonoBehaviour
     QuizUi _activeQuizUi;
     int _quizShownCount;
     bool _waitingForCalm;
+    string _lastSubtitleText;
+    float _lastSubtitleShownAt;
 
     public ScenarioStep CurrentStep => _currentStep;
     public int CurrentStepIndex => _currentIndex;
@@ -421,6 +423,8 @@ public class ScenarioController : MonoBehaviour
         if (ui.subtitleText) ui.subtitleText.text = string.Empty;
         if (ui.subtitleTMP) ui.subtitleTMP.text = string.Empty;
         if (ui.subtitleRoot) ui.subtitleRoot.SetActive(false);
+    }
+
     public void SelectChoice(int index)
     {
         if (_activeQuiz == null) return;
