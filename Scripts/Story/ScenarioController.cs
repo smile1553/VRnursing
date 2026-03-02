@@ -3,6 +3,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
+using TMPro;
 
 public class ScenarioController : MonoBehaviour
 {
@@ -164,19 +165,38 @@ public class ScenarioController : MonoBehaviour
         {
             if (ui.speakerText)
                 ui.speakerText.text = step.speaker.ToString();
+            if (ui.speakerTMP)
+                ui.speakerTMP.text = step.speaker.ToString();
+
             if (ui.dialogueText)
                 ui.dialogueText.text = step.dialogue;
-            if (ui.playerPromptText)
+            if (ui.dialogueTMP)
+                ui.dialogueTMP.text = step.dialogue;
+
+            if (step.playerActionRequired && !string.IsNullOrEmpty(step.playerPrompt))
             {
-                if (step.playerActionRequired && !string.IsNullOrEmpty(step.playerPrompt))
+                if (ui.playerPromptText)
                 {
                     ui.playerPromptText.gameObject.SetActive(true);
                     ui.playerPromptText.text = step.playerPrompt;
                 }
-                else
+                if (ui.playerPromptTMP)
+                {
+                    ui.playerPromptTMP.gameObject.SetActive(true);
+                    ui.playerPromptTMP.text = step.playerPrompt;
+                }
+            }
+            else
+            {
+                if (ui.playerPromptText)
                 {
                     ui.playerPromptText.gameObject.SetActive(false);
                     ui.playerPromptText.text = string.Empty;
+                }
+                if (ui.playerPromptTMP)
+                {
+                    ui.playerPromptTMP.gameObject.SetActive(false);
+                    ui.playerPromptTMP.text = string.Empty;
                 }
             }
         }
@@ -216,6 +236,20 @@ public class ScenarioController : MonoBehaviour
             ui.subtitleRoot.SetActive(true);
         if (ui.subtitleText)
             ui.subtitleText.text = text;
+<<<<<<< test_ren
+=======
+            if (!ui.subtitleRoot)
+                ui.subtitleText.gameObject.SetActive(true);
+        }
+        if (ui.subtitleTMP)
+        {
+            ui.subtitleTMP.text = text;
+            if (!ui.subtitleRoot)
+                ui.subtitleTMP.gameObject.SetActive(true);
+        }
+        _lastSubtitleText = text;
+        _lastSubtitleShownAt = Time.time;
+>>>>>>> local
 
         if (_subtitleRoutine != null)
             StopCoroutine(_subtitleRoutine);
@@ -240,6 +274,21 @@ public class ScenarioController : MonoBehaviour
         }
         if (ui.subtitleRoot)
             ui.subtitleRoot.SetActive(false);
+<<<<<<< test_ren
+=======
+        if (ui.subtitleText)
+        {
+            ui.subtitleText.text = string.Empty;
+            if (!ui.subtitleRoot)
+                ui.subtitleText.gameObject.SetActive(false);
+        }
+        if (ui.subtitleTMP)
+        {
+            ui.subtitleTMP.text = string.Empty;
+            if (!ui.subtitleRoot)
+                ui.subtitleTMP.gameObject.SetActive(false);
+        }
+>>>>>>> local
     }
 
     void ShowQuiz(ScenarioQuiz quiz)
@@ -358,11 +407,31 @@ public class ScenarioController : MonoBehaviour
         if (snapshot.stage <= gate.calmStageRequirement)
         {
             _waitingForCalm = false;
-            if (ui?.subtitleText)
-                ui.subtitleText.text = string.Empty;
+        if (ui?.subtitleText)
+            ui.subtitleText.text = string.Empty;
+        if (ui?.subtitleTMP)
+            ui.subtitleTMP.text = string.Empty;
         }
     }
 
+<<<<<<< test_ren
+=======
+    
+    void ClearUiText()
+    {
+        if (ui == null) return;
+        if (ui.speakerText) ui.speakerText.text = string.Empty;
+        if (ui.speakerTMP) ui.speakerTMP.text = string.Empty;
+        if (ui.dialogueText) ui.dialogueText.text = string.Empty;
+        if (ui.dialogueTMP) ui.dialogueTMP.text = string.Empty;
+        if (ui.playerPromptText) { ui.playerPromptText.text = string.Empty; ui.playerPromptText.gameObject.SetActive(false); }
+        if (ui.playerPromptTMP) { ui.playerPromptTMP.text = string.Empty; ui.playerPromptTMP.gameObject.SetActive(false); }
+        if (ui.subtitleText) ui.subtitleText.text = string.Empty;
+        if (ui.subtitleTMP) ui.subtitleTMP.text = string.Empty;
+        if (ui.subtitleRoot) ui.subtitleRoot.SetActive(false);
+    }
+
+>>>>>>> local
     [System.Serializable]
     public class ScenarioUiBinding
     {
@@ -371,6 +440,10 @@ public class ScenarioController : MonoBehaviour
         public Text playerPromptText;
         public GameObject subtitleRoot;
         public Text subtitleText;
+        public TMP_Text speakerTMP;
+        public TMP_Text dialogueTMP;
+        public TMP_Text playerPromptTMP;
+        public TMP_Text subtitleTMP;
         public QuizUi quiz;
         public QuizUi[] quizPanels;
     }
