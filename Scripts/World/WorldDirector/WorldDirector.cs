@@ -9,8 +9,10 @@ public class WorldDirector : MonoBehaviour
     [SerializeField] private MomActor mom;
     [SerializeField] private KidActor kid;
     [Range(0f, 100f)] public float lastEmotionScore;
+
     [Header("Anchors (optional)")]
-    [SerializeField] private Transform momAnchor;
+    [SerializeField] private Transform momStandAnchor;
+    [SerializeField] private Transform momSitAnchor;
     [SerializeField] private Transform kidAnchor;
 
     void Reset()
@@ -89,18 +91,6 @@ public class WorldDirector : MonoBehaviour
         }
     }
 
-    public void SnapKidToAnchor()
-    {
-        if (kid != null && kidAnchor != null)
-            kid.transform.SetPositionAndRotation(kidAnchor.position, kidAnchor.rotation);
-    }
-
-    public void SnapMomToAnchor()
-    {
-        if (mom != null && momAnchor != null)
-            mom.transform.SetPositionAndRotation(momAnchor.position, momAnchor.rotation);
-    }
-
     public IEnumerator MomSay(float seconds)
     {
         if (!mom) yield break;
@@ -130,7 +120,6 @@ public class WorldDirector : MonoBehaviour
         lastEmotionScore = Mathf.Clamp(score, 0f, 100f);
         if (kid == null) return;
 
-        // Simple mapping: high score -> crying, mid -> disbelief, low -> idle
         if (lastEmotionScore >= 70f)
             SetKidSingleLoop(kid.SetCrying);
         else if (lastEmotionScore >= 40f)
@@ -171,7 +160,6 @@ public class WorldDirector : MonoBehaviour
 
         if (key == "emotion_score" && payload != null)
         {
-            // Map tension (-5~5) to 0~100 if provided; fallback to stage if tension is 0.
             float score = payload.tension != 0f
                 ? Mathf.InverseLerp(-5f, 5f, payload.tension) * 100f
                 : payload.stage * 25f;
@@ -179,7 +167,25 @@ public class WorldDirector : MonoBehaviour
             return;
         }
 
-        // Fallback: treat key as eventId for HandleEvent (e.g., Act1_* or interaction.*)
         HandleEvent(key);
+    }
+
+    // -------------------------------------------------- Anchors
+    public void SnapKidToAnchor()
+    {
+        if (kid != null && kidAnchor != null)
+            kid.transform.SetPositionAndRotation(kidAnchor.position, kidAnchor.rotation);
+    }
+
+    public void SnapMomToStand()
+    {
+        if (mom != null && momStandAnchor != null)
+            mom.transform.SetPositionAndRotation(momStandAnchor.position, momStandAnchor.rotation);
+    }
+
+    public void SnapMomToSit()
+    {
+        if (mom != null && momSitAnchor != null)
+            mom.transform.SetPositionAndRotation(momSitAnchor.position, momSitAnchor.rotation);
     }
 }
