@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Playables;
 
@@ -45,7 +46,8 @@ public class AnimationCommandTarget : MonoBehaviour
         {
             if (enableConventionFallback && TryPlayByConvention(command))
                 return true;
-            Debug.LogWarning($"[AnimationCommand] 找不到對應命令 {command}");
+            if (ShouldWarnMissingCommand(command))
+                Debug.LogWarning($"[AnimationCommand] 找不到對應命令 {command}");
             return false;
         }
         if (!binding.animator)
@@ -61,6 +63,24 @@ public class AnimationCommandTarget : MonoBehaviour
             return true;
         }
         return false;
+    }
+
+    bool ShouldWarnMissingCommand(string command)
+    {
+        string candidate = command?.Trim() ?? "";
+        if (string.IsNullOrEmpty(candidate))
+            return false;
+
+        int sep = candidate.IndexOf(':');
+        if (sep > 0 && sep + 1 < candidate.Length)
+        {
+            string prefix = candidate.Substring(0, sep).Trim().ToLowerInvariant();
+            string key = candidate.Substring(sep + 1).Trim().ToLowerInvariant();
+            if (prefix == "speaker")
+                return key == "mother" || key == "child";
+        }
+
+        return true;
     }
 
     AnimationBinding FindBinding(string command)
@@ -130,6 +150,8 @@ public class AnimationCommandTarget : MonoBehaviour
             anim.SetTrigger(candidate);
             return true;
         }
+        if (TrySetBoolByName(anim, candidate, true))
+            return true;
 
         return false;
     }
@@ -138,7 +160,8 @@ public class AnimationCommandTarget : MonoBehaviour
     {
         if (prefix == "speaker")
             return ResolveSpeakerAnimator(key);
-        return defaultAnimator;
+        var inferred = ResolveAnimatorByCommandKey(key);
+        return inferred ? inferred : defaultAnimator;
     }
 
     Animator ResolveSpeakerAnimator(string speaker)
@@ -151,7 +174,7 @@ public class AnimationCommandTarget : MonoBehaviour
             case "child":
                 return childAnimator ? childAnimator : defaultAnimator;
             default:
-                return defaultAnimator;
+                return null;
         }
     }
 
@@ -187,6 +210,31 @@ public class AnimationCommandTarget : MonoBehaviour
         return false;
     }
 
+    static string NormalizeToken(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        return Regex.Replace(s.ToLowerInvariant(), "[^a-z0-9]", "");
+    }
+
+    static bool TrySetBoolByName(Animator animator, string requestedName, bool value)
+    {
+        if (!animator || string.IsNullOrWhiteSpace(requestedName))
+            return false;
+
+        string requestedNorm = NormalizeToken(requestedName);
+        foreach (var p in animator.parameters)
+        {
+            if (p.type != AnimatorControllerParameterType.Bool) continue;
+            if (string.Equals(p.name, requestedName, StringComparison.OrdinalIgnoreCase) ||
+                NormalizeToken(p.name) == requestedNorm)
+            {
+                animator.SetBool(p.name, value);
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool TrySetBoolOnAny(string param, bool value)
     {
         if (string.IsNullOrWhiteSpace(param))
@@ -197,11 +245,20 @@ public class AnimationCommandTarget : MonoBehaviour
         {
             var anim = animators[i];
             if (!anim) continue;
-            if (!HasBool(anim, param)) continue;
-            anim.SetBool(param, value);
-            return true;
+            if (TrySetBoolByName(anim, param, value))
+                return true;
         }
         return false;
+    }
+
+    Animator ResolveAnimatorByCommandKey(string key)
+    {
+        string n = NormalizeToken(key);
+        if (n.StartsWith("mom") || n.StartsWith("mother"))
+            return motherAnimator ? motherAnimator : defaultAnimator;
+        if (n.StartsWith("kid") || n.StartsWith("child"))
+            return childAnimator ? childAnimator : defaultAnimator;
+        return defaultAnimator;
     }
 
     string GetSpeakerSpeakingParam(string speaker)

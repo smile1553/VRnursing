@@ -4,6 +4,12 @@ using UnityEngine;
 
 public class ScenarioKeywordAdvancer : MonoBehaviour
 {
+    public enum InputGateMode
+    {
+        DebugOpen,
+        ScenarioStrict
+    }
+
     public ScenarioController controller;
     public EmotionStateManager emotionState;
 
@@ -13,6 +19,8 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
     public float minIntervalSeconds = 1f;
     public bool enableLlmAssist = true;
     [Range(0f, 1f)] public float defaultLlmConfidence = 0.7f;
+    [Header("Gate Mode")]
+    public InputGateMode gateMode = InputGateMode.ScenarioStrict;
     [Header("Speech Fallback")]
     public bool allowAnySpeechFallback = true;
     [Min(1)] public int anySpeechMinChars = 2;
@@ -121,7 +129,8 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
         }
 
         // If ASR wording is off but player is clearly speaking, allow progression after a few attempts.
-        if (allowAnySpeechFallback && IsAnySpeechFallback(step, snapshot))
+        bool allowFallback = gateMode == InputGateMode.DebugOpen && allowAnySpeechFallback;
+        if (allowFallback && IsAnySpeechFallback(step, snapshot))
         {
             string key = trace.stepId ?? string.Empty;
             int attempts = 0;
