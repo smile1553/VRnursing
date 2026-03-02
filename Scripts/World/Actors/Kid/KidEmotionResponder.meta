@@ -1,9 +1,5 @@
 fileFormatVersion: 2
-<<<<<<< HEAD
-guid: 033649beeda851041acc74da3aee63a2
-=======
-guid: 1e1f5084f4a21ca4899b787d6a11fb96
->>>>>>> origin/test
+guid: 033649beeda851041acc74da3aee63a2 origin/test
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}
