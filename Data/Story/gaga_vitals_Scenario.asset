@@ -17,11 +17,19 @@ MonoBehaviour:
     speaker: 1
     dialogue: 
     cursorTargetId: nurse
-    autoAdvanceDelay: 0
-    waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
+    autoAdvanceDelay: 1.2
+    waitForClick: 0
+    playerActionRequired: 1
+    playerPrompt: "\u5411\u82BD\u82BD\u8207\u5ABD\u5ABD\u554F\u597D\uFF0C\u8AAA\u660E\u5C07\u5354\u52A9\u91CF\u9AD4\u6EAB\u3001\u547C\u5438\u3001\u5FC3\u8DF3\u8207\u8840\u58D3\u3002"
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents:
+    - reassure
+    - explain
+    - praise
+    - command
+    - distract
+    minLlmConfidence: 0.55
     hints: []
     subtitle:
       text: 
@@ -53,6 +61,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -73,7 +84,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: MomTalking=true
     explicitNextIndex: -1
   - id: child_resist_needle
     speaker: 3
@@ -84,6 +97,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: "\u82BD\u82BD\u6293\u8457\u5ABD\u5ABD\u555C\u6CE3"
@@ -104,7 +120,11 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: KidDodge
+    - type: 1
+      payload: MomTalking=false
     explicitNextIndex: -1
   - id: quiz_respiration_first
     speaker: 4
@@ -115,6 +135,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -143,9 +166,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u5411\u5ABD\u5ABD\u8868\u793A\u5148\u89C0\u5BDF\u82BD\u82BD\u7684\u547C\u5438\u8D77\u4F0F\uFF0C\u8ACB\u5979\u966A\u82BD\u82BD\u8EBA\u4E0B\u4E26\u64AD\u653E\u5152\u6B4C\u3002"
+    expectedKeywords:
+    - "\u5148\u89C0\u5BDF\u547C\u5438"
+    - "\u5148\u770B\u547C\u5438"
+    - "\u4E0D\u8981\u5148\u78B0\u5979"
+    - "\u5148\u653E\u9B06"
+    allowLlmAssist: 1
+    expectedIntents:
+    - explain_resp_first
+    - calm_guidance
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: "\u5B57\u5E55\uFF1A\u5148\u89C0\u5BDF\u547C\u5438\uFF0C\u6E1B\u5C11\u89F8\u78B0"
@@ -177,6 +209,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -197,7 +232,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: MomPetting
     explicitNextIndex: -1
   - id: nurse_measure_resp
     speaker: 0
@@ -208,6 +245,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -236,9 +276,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u5B89\u64AB\u82BD\u82BD\u4E26\u8ACB\u5979\u8B93\u4F60\u807D\u5FC3\u8DF3\uFF0C\u9F13\u52F5\u5979\u5148\u6478\u6478\u807D\u8A3A\u5668\u3002"
+    expectedKeywords:
+    - "\u5148\u5B89\u64AB"
+    - "\u6478\u6478\u807D\u8A3A\u5668"
+    - "\u807D\u5FC3\u8DF3"
+    - "\u4E0D\u6703\u75DB"
+    allowLlmAssist: 1
+    expectedIntents:
+    - reassure
+    - ask_consent
+    minLlmConfidence: 0.82
     hints: []
     subtitle:
       text: 
@@ -270,6 +319,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -290,7 +342,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: KidDodge
     explicitNextIndex: -1
   - id: quiz_reduce_fear
     speaker: 4
@@ -301,6 +355,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -328,9 +385,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u5411\u5ABD\u5ABD\u8A62\u554F\u82BD\u82BD\u559C\u6B61\u7684\u6771\u897F\uFF0C\u597D\u7528\u4F86\u5206\u6563\u6CE8\u610F\u529B\u4E26\u5408\u4F5C\u6E2C\u91CF\u3002"
+    expectedKeywords:
+    - "\u559C\u6B61\u4EC0\u9EBC"
+    - "\u559C\u6B61\u7684\u6771\u897F"
+    - "\u5206\u6563\u6CE8\u610F\u529B"
+    - "\u6BD4\u8F03\u9858\u610F\u5408\u4F5C"
+    allowLlmAssist: 1
+    expectedIntents:
+    - ask_preference
+    - engagement_strategy
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -362,6 +428,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -382,7 +451,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: MomTalking=true
     explicitNextIndex: -1
   - id: nurse_show_sticker
     speaker: 1
@@ -390,9 +461,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u62FF\u51FA\u8CBC\u7D19\u5411\u82BD\u82BD\u5C55\u793A\uFF0C\u8AAA\u660E\u91CF\u5B8C\u6703\u7D66\u5979\u8CBC\u7D19\uFF0C\u8B93\u5979\u653E\u5FC3\u3002"
+    expectedKeywords:
+    - "\u9019\u662F\u8CBC\u7D19"
+    - "\u91CF\u5B8C\u7D66\u8CBC\u7D19"
+    - "\u4F60\u5F88\u68D2"
+    - "\u5148\u653E\u5FC3"
+    allowLlmAssist: 1
+    expectedIntents:
+    - distract
+    - reassure
+    minLlmConfidence: 0.8
     hints: []
     subtitle:
       text: "\u5B57\u5E55\uFF1A\u4EE5\u5C0F\u8CBC\u7D19\u9F13\u52F5\u6B63\u5411\u884C\u70BA"
@@ -413,7 +493,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: MomTalking=false
     explicitNextIndex: -1
   - id: child_still_scared
     speaker: 3
@@ -424,6 +506,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -444,7 +529,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: KidTurningHead=true
     explicitNextIndex: -1
   - id: nurse_roleplay_mom
     speaker: 1
@@ -452,9 +539,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u9080\u8ACB\u82BD\u82BD\u5148\u5E6B\u5ABD\u5ABD\u807D\u5FC3\u8DF3\uFF0C\u793A\u7BC4\u807D\u8A3A\u5668\u4E0D\u6703\u75DB\u3002"
+    expectedKeywords:
+    - "\u5148\u5E6B\u5ABD\u5ABD\u807D"
+    - "\u4F60\u7576\u5C0F\u91AB\u751F"
+    - "\u807D\u8A3A\u5668\u4E0D\u6703\u75DB"
+    - "\u5148\u793A\u7BC4"
+    allowLlmAssist: 1
+    expectedIntents:
+    - role_play_demo
+    - reduce_fear
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -475,7 +571,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: KidTurningHead=false
     explicitNextIndex: -1
   - id: mom_roleplay
     speaker: 2
@@ -486,6 +584,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -506,7 +607,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: MomPointing
     explicitNextIndex: -1
   - id: child_listen_mom
     speaker: 0
@@ -517,6 +620,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -537,7 +643,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: KidRubbing
     explicitNextIndex: -1
   - id: mom_listen_child
     speaker: 2
@@ -548,6 +656,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -568,23 +679,28 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: MomPointing
     explicitNextIndex: -1
   - id: quiz_apex_location
     speaker: 4
-    dialogue: "\u8003\u984C3\uFF1A\u82BD\u82BD2\u6B72\u534A\uFF0C\u8ACB\u554F\u807D\u8A3A\u5FC3\u5C16\u8108\u7684\u4F4D\u7F6E\u70BA\u4F55\u8655\uFF1F"
+    dialogue: "\u8003\u984C3\uFF1A\u82BD\u82BD4\u6B72\u534A\uFF0C\u8ACB\u554F\u807D\u8A3A\u5FC3\u5C16\u8108\u7684\u4F4D\u7F6E\u70BA\u4F55\u8655\uFF1F"
     cursorTargetId: system
     autoAdvanceDelay: 0
     waitForClick: 1
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
       duration: 3
     quiz:
-      question: "2\u6B72\u534A\u5FC3\u5C16\u8108\u4F4D\u7F6E\uFF1F"
+      question: "4\u6B72\u534A\u5FC3\u5C16\u8108\u4F4D\u7F6E\uFF1F"
       explanation: "\u5E7C\u5152\u5FC3\u5C16\u8108\u5728\u5DE6\u9396\u9AA8\u4E2D\u7DDA\u8207\u7B2C4\u808B\u4EA4\u63A5\u8655\u3002"
       options:
       - "\u5DE6\u9396\u9AA8\u4E2D\u7DDA\u8207\u7B2C3\u808B\u4EA4\u63A5\u8655"
@@ -606,9 +722,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u7A31\u8B9A\u82BD\u82BD\u52C7\u6562\u4E26\u7D66\u8CBC\u7D19\uFF0C\u544A\u77E5\u63A5\u8457\u8981\u91CF\u8033\u6EAB\u3002"
+    expectedKeywords:
+    - "\u4F60\u5F88\u52C7\u6562"
+    - "\u7D66\u4F60\u8CBC\u7D19"
+    - "\u63A5\u4E0B\u4F86\u91CF\u8033\u6EAB"
+    - "\u505A\u5F97\u5F88\u597D"
+    allowLlmAssist: 1
+    expectedIntents:
+    - praise_child
+    - transition_to_temp
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -640,6 +765,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -660,7 +788,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: KidTurningHead=true
     explicitNextIndex: -1
   - id: nurse_reassure_temp
     speaker: 1
@@ -668,9 +798,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u5411\u5ABD\u5ABD\u8AAA\u660E\u6703\u518D\u966A\u82BD\u82BD\u73A9\u8B93\u5979\u653E\u9B06\u5F8C\u518D\u91CF\u8033\u6EAB\u3002"
+    expectedKeywords:
+    - "\u518D\u73A9\u4E00\u4E0B"
+    - "\u5148\u653E\u9B06"
+    - "\u7B49\u4E00\u4E0B\u518D\u91CF\u8033\u6EAB"
+    - "\u966A\u5979\u6162\u6162\u4F86"
+    allowLlmAssist: 1
+    expectedIntents:
+    - reassure_child
+    - delay_temp_exam
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -691,7 +830,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: KidTurningHead=false
     explicitNextIndex: -1
   - id: quiz_roleplay
     speaker: 4
@@ -702,13 +843,16 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
       duration: 3
     quiz:
       question: "\u8033\u6EAB\u524D\u5148\u505A\u4EC0\u9EBC\u904A\u6232\u53EF\u6E1B\u5C11\u5BB3\u6015\uFF1F"
-      explanation: "\u8B93\u82BD\u82BD\u548C\u559C\u611B\u7684\u4F69\u4F69\u8C6C\u89D2\u8272\u626E\u6F14\uFF0C\u793A\u7BC4\u91CF\u9AD4\u6EAB\u3002"
+      explanation: "\u8B93\u82BD\u82BD\u548C\u559C\u611B\u7684\u718A\u718A\u89D2\u8272\u626E\u6F14\uFF0C\u793A\u7BC4\u91CF\u9AD4\u6EAB\u3002"
       options:
       - "\u82BD\u82BD\u8207\u8B77\u751F\u89D2\u8272\u626E\u6F14"
       - "\u82BD\u82BD\u8207\u73A9\u5076\u89D2\u8272\u626E\u6F14"
@@ -729,9 +873,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u5E36\u9818\u82BD\u82BD\u5E6B\u718A\u718A\u91CF\u9AD4\u6EAB\uFF0C\u8B93\u5979\u719F\u6089\u6B65\u9A5F\u3002"
+    expectedKeywords:
+    - "\u5E6B\u718A\u718A\u91CF\u9AD4\u6EAB"
+    - "\u5148\u5E6B\u73A9\u5076\u91CF"
+    - "\u5148\u7DF4\u7FD2"
+    - "\u719F\u6089\u6B65\u9A5F"
+    allowLlmAssist: 1
+    expectedIntents:
+    - role_play_temp
+    - practice_before_exam
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -756,13 +909,16 @@ MonoBehaviour:
     explicitNextIndex: -1
   - id: child_play_temp
     speaker: 0
-    dialogue: "\u82BD\u82BD\u62B1\u8457\u4F69\u4F69\u8C6C\uFF0C\u5E6B\u73A9\u5076\u7528\u8033\u6EAB\u69CD\u505A\u6E2C\u91CF\u52D5\u4F5C\u3002"
+    dialogue: "\u82BD\u82BD\u62B1\u8457\u718A\u718A\uFF0C\u5E6B\u73A9\u5076\u7528\u8033\u6EAB\u69CD\u505A\u6E2C\u91CF\u52D5\u4F5C\u3002"
     cursorTargetId: child
     autoAdvanceDelay: 0
     waitForClick: 1
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -783,7 +939,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: KidRubbing
     explicitNextIndex: -1
   - id: nurse_prompt_play
     speaker: 1
@@ -791,9 +949,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u5F15\u5C0E\u82BD\u82BD\u5C0D\u718A\u718A\u8AAA\u5B89\u64AB\u7684\u8A71\uFF0C\u6559\u5979\u5982\u4F55\u5E6B\u73A9\u5076\u91CF\u9AD4\u6EAB\u3002"
+    expectedKeywords:
+    - "\u8DDF\u718A\u718A\u8AAA"
+    - "\u4E0D\u6703\u75DB"
+    - "\u51B0\u51B0\u7684"
+    - "\u4E00\u4E0B\u5C31\u597D"
+    allowLlmAssist: 1
+    expectedIntents:
+    - coach_comfort_words
+    - temp_reassurance
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -825,6 +992,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -845,30 +1015,35 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: KidTestingBearTemp
     explicitNextIndex: -1
   - id: quiz_ear_pull
     speaker: 4
-    dialogue: "\u8003\u984C5\uFF1A\u82BD\u82BD\u5169\u6B72\u534A\uFF0C\u91CF\u8033\u6EAB\u8A72\u5982\u4F55\u8B93\u8033\u6EAB\u69CD\u9032\u5165\u8033\u9053\uFF1F"
+    dialogue: "\u8003\u984C5\uFF1A\u82BD\u82BD4\u6B72\u534A\uFF0C\u91CF\u8033\u6EAB\u8A72\u5982\u4F55\u8B93\u8033\u6EAB\u69CD\u9032\u5165\u8033\u9053\uFF1F"
     cursorTargetId: system
     autoAdvanceDelay: 0
     waitForClick: 1
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
       duration: 3
     quiz:
-      question: "\u5169\u6B72\u534A\u91CF\u8033\u6EAB\u8033\u6735\u600E\u9EBC\u62C9\uFF1F"
-      explanation: "3\u6B72\u4EE5\u4E0B\u8033\u6735\u8981\u5411\u4E0B\u5411\u5F8C\u62C9\u3002"
+      question: "4\u6B72\u534A\u91CF\u8033\u6EAB\u8033\u6735\u600E\u9EBC\u62C9\uFF1F"
+      explanation: "3\u6B72\u4EE5\u4E0A\u8033\u6735\u8981\u5411\u4E0A\u5411\u5F8C\u62C9\u3002"
       options:
       - "\u5411\u4E0B\u5411\u5F8C"
       - "\u5411\u4E0A\u5411\u5F8C"
       - "\u5411\u4E0B\u5411\u524D"
       - "\u5411\u4E0A\u5411\u524D"
-      correctIndex: 0
+      correctIndex: 1
       requireCorrectToProceed: 1
     emotionGate:
       blockWhenAnxious: 0
@@ -884,12 +1059,21 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u6B63\u5F0F\u91CF\u82BD\u82BD\u8033\u6EAB\uFF0C\u8AAA\u660E\u8981\u8F15\u8F15\u5F80\u4E0A\u5F8C\u62C9\u8033\u6735\u3002"
+    expectedKeywords:
+    - "\u8981\u91CF\u8033\u6EAB"
+    - "\u8033\u6735\u5F80\u4E0A\u5F80\u5F8C\u62C9"
+    - "\u8F15\u8F15\u62C9\u8033\u6735"
+    - "\u5F88\u5FEB\u5C31\u597D"
+    allowLlmAssist: 1
+    expectedIntents:
+    - explain
+    - ask_consent
+    minLlmConfidence: 0.85
     hints: []
     subtitle:
-      text: "\u5B57\u5E55\uFF1A3\u6B72\u4EE5\u4E0B\u8033\u6735\u5411\u4E0B\u5411\u5F8C\u62C9"
+      text: "\u5B57\u5E55\uFF1A3\u6B72\u4EE5\u4E0A\u8033\u6735\u5411\u4E0A\u5411\u5F8C\u62C9"
       duration: 4
     quiz:
       question: 
@@ -918,6 +1102,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -946,9 +1133,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u7528\u904A\u6232\u8A9E\u6C23\u4ECB\u7D39\u8840\u58D3\u8A08\uFF0C\u9080\u8ACB\u82BD\u82BD\u4E00\u8D77\u7D81\u58D3\u8108\u5E36\u3002"
+    expectedKeywords:
+    - "\u9019\u662F\u8840\u58D3\u8A08"
+    - "\u4E00\u8D77\u7D81\u58D3\u8108\u5E36"
+    - "\u50CF\u73A9\u904A\u6232"
+    - "\u91CF\u8840\u58D3"
+    allowLlmAssist: 1
+    expectedIntents:
+    - introduce_bp_exam
+    - invite_bp_cooperation
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -980,6 +1176,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -1011,6 +1210,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -1031,7 +1233,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: MomTalking=true
     explicitNextIndex: -1
   - id: quiz_bp_purpose
     speaker: 4
@@ -1042,6 +1246,9 @@ MonoBehaviour:
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -1061,7 +1268,9 @@ MonoBehaviour:
       fallbackStepIndex: -1
       calmStageRequirement: 0
       blockedSubtitle: 
-    commands: []
+    commands:
+    - type: 1
+      payload: MomTalking=false
     explicitNextIndex: -1
   - id: nurse_bp_explain
     speaker: 1
@@ -1069,9 +1278,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u5411\u5ABD\u5ABD\u89E3\u91CB\u91CF\u8840\u58D3\u662F\u70BA\u4E86\u8A55\u4F30\u812B\u6C34\u8207\u4FDD\u8B77\u82BD\u82BD\u3002"
+    expectedKeywords:
+    - "\u91CF\u8840\u58D3\u662F\u70BA\u4E86"
+    - "\u8A55\u4F30\u812B\u6C34"
+    - "\u4FDD\u8B77\u82BD\u82BD"
+    - "\u4E0D\u662F\u8981\u6253\u91DD"
+    allowLlmAssist: 1
+    expectedIntents:
+    - explain
+    - reassure
+    minLlmConfidence: 0.85
     hints: []
     subtitle:
       text: 
@@ -1100,9 +1318,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u63CF\u8FF0\u58D3\u8108\u5E36\u5145\u6C23\u50CF\u88AB\u634F\u7DCA\uFF0C\u5148\u793A\u7BC4\u5E6B\u5ABD\u5ABD\u91CF\u8840\u58D3\uFF0C\u518D\u9F13\u52F5\u82BD\u82BD\u5408\u4F5C\u3002"
+    expectedKeywords:
+    - "\u5145\u6C23\u6703\u7DCA\u7DCA\u7684"
+    - "\u50CF\u88AB\u634F\u4E00\u4E0B"
+    - "\u5148\u5E6B\u5ABD\u5ABD\u91CF\u8840\u58D3"
+    - "\u6211\u5011\u5148\u793A\u7BC4"
+    allowLlmAssist: 1
+    expectedIntents:
+    - reassure
+    - distract
+    minLlmConfidence: 0.82
     hints: []
     subtitle:
       text: "\u5B57\u5E55\uFF1A\u8AAA\u660E\u58D3\u8108\u5E36\u5145\u6C23\u6642\u7684\u611F\u89BA"
@@ -1127,19 +1354,22 @@ MonoBehaviour:
     explicitNextIndex: -1
   - id: quiz_bp_site
     speaker: 4
-    dialogue: "\u8003\u984C8\uFF1A\u5152\u7AE5\u91CF\u8840\u58D3\u7684\u4F4D\u7F6E\uFF0C\u4E0B\u5217\u4F55\u8005\u4E0D\u6B63\u78BA\uFF1F"
+    dialogue: "\u8003\u984C8\uFF1A\u5152\u7AE5\u91CF\u8840\u58D3\u6642\uFF0C\u58D3\u8108\u5E36\u4E0A\u7684\u7BAD\u982D\u61C9\u5C0D\u6E96\u7684\u4F4D\u7F6E\uFF0C\u4E0B\u5217\u4F55\u8005\u4E0D\u6B63\u78BA\uFF1F"
     cursorTargetId: system
     autoAdvanceDelay: 0
     waitForClick: 1
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
       duration: 3
     quiz:
-      question: "\u91CF\u8840\u58D3\u4F4D\u7F6E\u4F55\u8005\u932F\u8AA4\uFF1F"
+      question: "\u58D3\u8108\u5E36\u7BAD\u982D\u5C0D\u4F4D\u4F4D\u7F6E\u4F55\u8005\u932F\u8AA4\uFF1F"
       explanation: "\u80A1\u52D5\u8108\u4E0D\u662F\u5E38\u898F\u91CF\u6E2C\u8840\u58D3\u7684\u4F4D\u7F6E\u3002"
       options:
       - "\u819D\u8195\u52D5\u8108"
@@ -1158,13 +1388,16 @@ MonoBehaviour:
     explicitNextIndex: -1
   - id: nurse_bp_measure
     speaker: 0
-    dialogue: "\u82BD\u82BD\u548C\u4F69\u4F69\u8C6C\u4E00\u8D77\u7D81\u5E36\u5B50\uFF0C\u8B77\u751F\u555F\u52D5\u8840\u58D3\u8A08\uFF0C\u5B8C\u6210\u91CF\u6E2C\u3002"
+    dialogue: "\u82BD\u82BD\u5148\u770B\u5ABD\u5ABD\u793A\u7BC4\u91CF\u8840\u58D3\uFF0C\u63A5\u8457\u8B77\u751F\u5354\u52A9\u82BD\u82BD\u5B8C\u6210\u91CF\u6E2C\u3002"
     cursorTargetId: nurse
     autoAdvanceDelay: 3
     waitForClick: 0
     playerActionRequired: 0
     playerPrompt: 
     expectedKeywords: []
+    allowLlmAssist: 1
+    expectedIntents: []
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 
@@ -1193,9 +1426,18 @@ MonoBehaviour:
     cursorTargetId: nurse
     autoAdvanceDelay: 0
     waitForClick: 1
-    playerActionRequired: 0
-    playerPrompt: 
-    expectedKeywords: []
+    playerActionRequired: 1
+    playerPrompt: "\u5B8C\u6210\u6AA2\u67E5\u5F8C\u7A31\u8B9A\u82BD\u82BD\u52C7\u6562\uFF0C\u9080\u5979\u5E36\u8CBC\u7D19\u8207\u718A\u718A\u56DE\u5BB6\u3002"
+    expectedKeywords:
+    - "\u4ECA\u5929\u5F88\u52C7\u6562"
+    - "\u6AA2\u67E5\u5B8C\u6210\u4E86"
+    - "\u5E36\u8CBC\u7D19\u56DE\u5BB6"
+    - "\u548C\u718A\u718A\u56DE\u5BB6"
+    allowLlmAssist: 1
+    expectedIntents:
+    - closing_praise
+    - scenario_wrap_up
+    minLlmConfidence: 0.7
     hints: []
     subtitle:
       text: 

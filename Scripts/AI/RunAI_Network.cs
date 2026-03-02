@@ -23,6 +23,23 @@ public class RunAI_Network : MonoBehaviour
     async void Start()
     {
         _lastLoggedJson = null;
+
+        if (audioUploader == null)
+        {
+            audioUploader = FindObjectOfType<AudioUploader>();
+            if (audioUploader == null)
+                Debug.LogError("[RunAI_Network] AudioUploader is missing. /audio POST will never start.");
+            else
+                Debug.Log("[RunAI_Network] Auto-linked AudioUploader from scene.");
+        }
+
+        if (runAi == null)
+        {
+            runAi = FindObjectOfType<RunAI>();
+            if (runAi == null)
+                Debug.LogWarning("[RunAI_Network] RunAI not found. Feed JSON will not be applied to avatar.");
+        }
+
         // 1) 找伺服器 URL（用你之前做的 UDP 探測；這裡給最簡單流程）
         if (string.IsNullOrEmpty(serverBaseUrl))
         {
@@ -53,8 +70,21 @@ public class RunAI_Network : MonoBehaviour
         if (audioUploader != null)
         {
             audioUploader.serverUrl = serverBaseUrl.TrimEnd('/') + "/audio";
+            Debug.Log($"[RunAI_Network] audio url = {audioUploader.serverUrl}");
+            Debug.Log($"[RunAI_Network] autoUploadOnConnect = {autoUploadOnConnect}");
             if (autoUploadOnConnect)
+            {
                 audioUploader.StartLoop();
+                Debug.Log("[RunAI_Network] StartLoop() called.");
+            }
+            else
+            {
+                Debug.LogWarning("[RunAI_Network] autoUploadOnConnect is false, so /audio POST will not run automatically.");
+            }
+        }
+        else
+        {
+            Debug.LogError("[RunAI_Network] audioUploader is null. Please bind it in Inspector.");
         }
 
         // 3) 啟動情緒資料來源（HTTP 輪詢或 WebSocket 推播）
@@ -87,12 +117,12 @@ public class RunAI_Network : MonoBehaviour
             }
         }
 
-        runAi.ApplyJson(json);
+        if (runAi != null) runAi.ApplyJson(json);
         EmotionJsonReceived?.Invoke(json);
     }
 
     // 可選：提供一個重新掃描方法，做成 UI 按鈕
-    public async void RescanServer()
+    public void RescanServer()
     {
         PlayerPrefs.DeleteKey("emo_server_url");
         serverBaseUrl = "";

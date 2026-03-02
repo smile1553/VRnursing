@@ -7,18 +7,16 @@
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
       "playerPrompt": "向芽芽與媽媽問好，說明將協助量體溫、呼吸、心跳與血壓。",
-      "expectedKeywords": [
-        "你好芽芽",
-        "你好媽媽",
-        "生命徵象",
-        "量體溫"
-      ],
+      "expectedKeywords": [],
       "allowLlmAssist": true,
       "expectedIntents": [
-        "greet",
-        "introduce_exam_plan"
+        "reassure",
+        "explain",
+        "praise",
+        "command",
+        "distract"
       ],
-      "minLlmConfidence": 0.7
+      "minLlmConfidence": 0.55
     },
     {
       "id": "mom_reply",
@@ -30,7 +28,9 @@
           "type": "PlayAnimation",
           "payload": "MomTalking=true"
         }
-      ]
+      ],
+      "waitForClick": false,
+      "autoAdvanceDelay": 1.2
     },
     {
       "id": "child_resist_needle",
@@ -44,7 +44,7 @@
       "commands": [
         {
           "type": "PlayAnimation",
-          "payload": "KidDodge"
+          "payload": "kid dodge"
         },
         {
           "type": "PlayAnimation",
@@ -102,7 +102,7 @@
       "commands": [
         {
           "type": "PlayAnimation",
-          "payload": "MomPetting"
+          "payload": "mompetting"
         }
       ]
     },
@@ -136,10 +136,10 @@
       ],
       "allowLlmAssist": true,
       "expectedIntents": [
-        "soothe_child",
-        "request_heart_exam"
+        "reassure",
+        "ask_consent"
       ],
-      "minLlmConfidence": 0.7
+      "minLlmConfidence": 0.82
     },
     {
       "id": "child_refuse_heart",
@@ -149,7 +149,7 @@
       "commands": [
         {
           "type": "PlayAnimation",
-          "payload": "KidDodge"
+          "payload": "kid dodge"
         }
       ]
     },
@@ -227,10 +227,10 @@
       ],
       "allowLlmAssist": true,
       "expectedIntents": [
-        "offer_reward",
-        "build_trust"
+        "distract",
+        "reassure"
       ],
-      "minLlmConfidence": 0.7
+      "minLlmConfidence": 0.8
     },
     {
       "id": "child_still_scared",
@@ -278,7 +278,7 @@
       "commands": [
         {
           "type": "PlayAnimation",
-          "payload": "MomPointing"
+          "payload": "mompointing"
         }
       ]
     },
@@ -290,7 +290,7 @@
       "commands": [
         {
           "type": "PlayAnimation",
-          "payload": "KidRubbing"
+          "payload": "KidCatchBear"
         }
       ]
     },
@@ -302,16 +302,16 @@
       "commands": [
         {
           "type": "PlayAnimation",
-          "payload": "MomPointing"
+          "payload": "mompointing"
         }
       ]
     },
     {
       "id": "quiz_apex_location",
       "speaker": "System",
-      "dialogue": "考題3：芽芽2歲半，請問聽診心尖脈的位置為何處？",
+      "dialogue": "考題3：芽芽4歲半，請問聽診心尖脈的位置為何處？",
       "quiz": {
-        "question": "2歲半心尖脈位置？",
+        "question": "4歲半心尖脈位置？",
         "explanation": "幼兒心尖脈在左鎖骨中線與第4肋交接處。",
         "options": [
           "左鎖骨中線與第3肋交接處",
@@ -387,7 +387,7 @@
       "dialogue": "考題4：請問護生要使用甚麼方法以減少芽芽的害怕？",
       "quiz": {
         "question": "耳溫前先做什麼遊戲可減少害怕？",
-        "explanation": "讓芽芽和喜愛的佩佩豬角色扮演，示範量體溫。",
+        "explanation": "讓芽芽和喜愛的熊熊角色扮演，示範量體溫。",
         "options": [
           "芽芽與護生角色扮演",
           "芽芽與玩偶角色扮演",
@@ -404,9 +404,9 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "帶領芽芽幫佩佩豬量體溫，讓她熟悉步驟。",
+      "playerPrompt": "帶領芽芽幫熊熊量體溫，讓她熟悉步驟。",
       "expectedKeywords": [
-        "幫佩佩豬量體溫",
+        "幫熊熊量體溫",
         "先幫玩偶量",
         "先練習",
         "熟悉步驟"
@@ -421,12 +421,12 @@
     {
       "id": "child_play_temp",
       "speaker": "Narrator",
-      "dialogue": "芽芽抱著佩佩豬，幫玩偶用耳溫槍做測量動作。",
+      "dialogue": "芽芽抱著熊熊，幫玩偶用耳溫槍做測量動作。",
       "cursorTargetId": "child",
       "commands": [
         {
           "type": "PlayAnimation",
-          "payload": "KidRubbing"
+          "payload": "KidCatchBear"
         }
       ]
     },
@@ -436,9 +436,9 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "引導芽芽對佩佩豬說安撫的話，教她如何幫玩偶量體溫。",
+      "playerPrompt": "引導芽芽對熊熊說安撫的話，教她如何幫玩偶量體溫。",
       "expectedKeywords": [
-        "跟佩佩豬說",
+        "跟熊熊說",
         "不會痛",
         "冰冰的",
         "一下就好"
@@ -458,24 +458,24 @@
       "commands": [
         {
           "type": "PlayAnimation",
-          "payload": "KidTestingBearTemp"
+          "payload": "KidCatchBear"
         }
       ]
     },
     {
       "id": "quiz_ear_pull",
       "speaker": "System",
-      "dialogue": "考題5：芽芽兩歲半，量耳溫該如何讓耳溫槍進入耳道？",
+      "dialogue": "考題5：芽芽4歲半，量耳溫該如何讓耳溫槍進入耳道？",
       "quiz": {
-        "question": "兩歲半量耳溫耳朵怎麼拉？",
-        "explanation": "3歲以下耳朵要向下向後拉。",
+        "question": "4歲半量耳溫耳朵怎麼拉？",
+        "explanation": "3歲以上耳朵要向上向後拉。",
         "options": [
           "向下向後",
           "向上向後",
           "向下向前",
           "向上向前"
         ],
-        "correctIndex": 0,
+        "correctIndex": 1,
         "requireCorrectToProceed": true
       },
       "cursorTargetId": "system"
@@ -486,23 +486,23 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "subtitle": {
-        "text": "字幕：3歲以下耳朵向下向後拉",
+        "text": "字幕：3歲以上耳朵向上向後拉",
         "duration": 4
       },
       "playerActionRequired": true,
-      "playerPrompt": "正式量芽芽耳溫，說明要輕輕往下後拉耳朵。",
+      "playerPrompt": "正式量芽芽耳溫，說明要輕輕往上後拉耳朵。",
       "expectedKeywords": [
         "要量耳溫",
-        "耳朵往下往後拉",
+        "耳朵往上往後拉",
         "輕輕拉耳朵",
         "很快就好"
       ],
       "allowLlmAssist": true,
       "expectedIntents": [
-        "perform_temp_exam",
-        "explain_ear_pull"
+        "explain",
+        "ask_consent"
       ],
-      "minLlmConfidence": 0.7
+      "minLlmConfidence": 0.85
     },
     {
       "id": "nurse_temp_result",
@@ -597,10 +597,10 @@
       ],
       "allowLlmAssist": true,
       "expectedIntents": [
-        "explain_bp_purpose",
-        "address_parent_concern"
+        "explain",
+        "reassure"
       ],
-      "minLlmConfidence": 0.7
+      "minLlmConfidence": 0.85
     },
     {
       "id": "nurse_bp_roleplay",
@@ -612,26 +612,26 @@
         "duration": 4
       },
       "playerActionRequired": true,
-      "playerPrompt": "描述壓脈帶充氣像被捏緊，鼓勵芽芽幫佩佩豬量血壓。",
+      "playerPrompt": "描述壓脈帶充氣像被捏緊，先示範幫媽媽量血壓，再鼓勵芽芽合作。",
       "expectedKeywords": [
         "充氣會緊緊的",
         "像被捏一下",
-        "幫佩佩豬量血壓",
+        "先幫媽媽量血壓",
         "我們先示範"
       ],
       "allowLlmAssist": true,
       "expectedIntents": [
-        "explain_bp_sensation",
-        "role_play_bp"
+        "reassure",
+        "distract"
       ],
-      "minLlmConfidence": 0.7
+      "minLlmConfidence": 0.82
     },
     {
       "id": "quiz_bp_site",
       "speaker": "System",
-      "dialogue": "考題8：兒童量血壓的位置，下列何者不正確？",
+      "dialogue": "考題8：兒童量血壓時，壓脈帶上的箭頭應對準的位置，下列何者不正確？",
       "quiz": {
-        "question": "量血壓位置何者錯誤？",
+        "question": "壓脈帶箭頭對位位置何者錯誤？",
         "explanation": "股動脈不是常規量測血壓的位置。",
         "options": [
           "膝膕動脈",
@@ -647,7 +647,7 @@
     {
       "id": "nurse_bp_measure",
       "speaker": "Narrator",
-      "dialogue": "芽芽和佩佩豬一起綁帶子，護生啟動血壓計，完成量測。",
+      "dialogue": "芽芽先看媽媽示範量血壓，接著護生協助芽芽完成量測。",
       "cursorTargetId": "nurse",
       "waitForClick": false,
       "autoAdvanceDelay": 3
@@ -658,12 +658,12 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "完成檢查後稱讚芽芽勇敢，邀她帶貼紙與佩佩豬回家。",
+      "playerPrompt": "完成檢查後稱讚芽芽勇敢，邀她帶貼紙與熊熊回家。",
       "expectedKeywords": [
         "今天很勇敢",
         "檢查完成了",
         "帶貼紙回家",
-        "和佩佩豬回家"
+        "和熊熊回家"
       ],
       "allowLlmAssist": true,
       "expectedIntents": [

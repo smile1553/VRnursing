@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 
 public class SignalBridge : MonoBehaviour
@@ -125,21 +124,5 @@ public class SignalBridge : MonoBehaviour
     {
         if (logSignals) Debug.Log($"[SignalBridge] World {key} {payload}");
         world?.ReceiveSignal(key, payload);
-    }
-}
-
-[Serializable]
-public class SignalPayload
-{
-    public string stepId;
-    public int choiceIndex;
-    public bool correct;
-    public int stage;
-    public float tension;
-    public string targetId;
-
-    public override string ToString()
-    {
-        return $"{{stepId={stepId}, choiceIndex={choiceIndex}, correct={correct}, stage={stage}, tension={tension}, targetId={targetId}}}";
     }
 }
