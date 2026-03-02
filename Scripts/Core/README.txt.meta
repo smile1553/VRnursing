@@ -1,11 +1,5 @@
 fileFormatVersion: 2
-<<<<<<<< HEAD:Scripts/Core/README.txt.meta
-guid: 01e670d0257e6fe47b385331088e4532
-TextScriptImporter:
-========
-guid: c4fb6e73c8d1bcf4ebc3baebfaebaa6f
-DefaultImporter:
->>>>>>>> test_sophia:Docs/world_actions_gaga.tsv.meta
+guid: 01e670d0257e6fe47b385331088e4532> test_sophia:Docs/world_actions_gaga.tsv.meta
   externalObjects: {}
   userData: 
   assetBundleName: 
