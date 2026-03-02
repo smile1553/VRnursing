@@ -1,4 +1,5 @@
 using UnityEngine;
+using System;
 
 public class GameBootstrapper : MonoBehaviour
 {
@@ -30,6 +31,8 @@ public class GameBootstrapper : MonoBehaviour
 
         if (scenarioController && defaultScenario && scenarioController.scenario == null)
             scenarioController.scenario = defaultScenario;
+
+        EnsureScenarioCommandRuntime();
     }
 
     void Start()
@@ -43,5 +46,65 @@ public class GameBootstrapper : MonoBehaviour
 
         if (autoStartScenario && scenarioController != null)
             scenarioController.StartScenario();
+    }
+
+    void EnsureScenarioCommandRuntime()
+    {
+        var controller = scenarioController ? scenarioController : FindObjectOfType<ScenarioController>();
+        if (controller == null)
+        {
+            Debug.LogWarning("[GameBootstrapper] ScenarioController not found. Skip command runtime setup.");
+            return;
+        }
+
+        var executor = FindObjectOfType<ScenarioCommandExecutor>();
+        var animTarget = FindObjectOfType<AnimationCommandTarget>();
+
+        if (executor == null)
+        {
+            var go = new GameObject("ScenarioCommandRuntime");
+            executor = go.AddComponent<ScenarioCommandExecutor>();
+            Debug.Log("[GameBootstrapper] Auto-created ScenarioCommandExecutor.");
+        }
+
+        if (animTarget == null)
+        {
+            var go = executor.gameObject;
+            animTarget = go.GetComponent<AnimationCommandTarget>();
+            if (animTarget == null)
+                animTarget = go.AddComponent<AnimationCommandTarget>();
+            Debug.Log("[GameBootstrapper] Auto-created AnimationCommandTarget.");
+        }
+
+        executor.controller = controller;
+        executor.animationTarget = animTarget;
+
+        AutoBindLikelyAnimators(animTarget);
+    }
+
+    static void AutoBindLikelyAnimators(AnimationCommandTarget target)
+    {
+        if (target == null) return;
+
+        var animators = FindObjectsOfType<Animator>();
+        foreach (var anim in animators)
+        {
+            if (!anim) continue;
+            string n = (anim.name ?? "").ToLowerInvariant();
+
+            if (target.motherAnimator == null && (n.Contains("mom") || n.Contains("mother")))
+                target.motherAnimator = anim;
+
+            if (target.childAnimator == null && (n.Contains("kid") || n.Contains("child")))
+                target.childAnimator = anim;
+        }
+
+        if (target.defaultAnimator == null)
+            target.defaultAnimator = target.motherAnimator ? target.motherAnimator : target.childAnimator;
+
+        string mom = target.motherAnimator ? target.motherAnimator.name : "null";
+        string kid = target.childAnimator ? target.childAnimator.name : "null";
+        string def = target.defaultAnimator ? target.defaultAnimator.name : "null";
+        Debug.Log($"[GameBootstrapper] Animation auto-bind mother={mom}, child={kid}, default={def}");
     }
 }

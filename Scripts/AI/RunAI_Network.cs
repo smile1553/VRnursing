@@ -23,7 +23,28 @@ public class RunAI_Network : MonoBehaviour
     async void Start()
     {
         _lastLoggedJson = null;
+<<<<<<< HEAD
         // 1) ?�伺?�器 URL（用你�??��???UDP ?�測；這裡給�?簡單流�?�?
+=======
+
+        if (audioUploader == null)
+        {
+            audioUploader = FindObjectOfType<AudioUploader>();
+            if (audioUploader == null)
+                Debug.LogError("[RunAI_Network] AudioUploader is missing. /audio POST will never start.");
+            else
+                Debug.Log("[RunAI_Network] Auto-linked AudioUploader from scene.");
+        }
+
+        if (runAi == null)
+        {
+            runAi = FindObjectOfType<RunAI>();
+            if (runAi == null)
+                Debug.LogWarning("[RunAI_Network] RunAI not found. Feed JSON will not be applied to avatar.");
+        }
+
+        // 1) 找伺服器 URL（用你之前做的 UDP 探測；這裡給最簡單流程）
+>>>>>>> 09a4a4177026960556b85e8f86fa2c437ce9e28f
         if (string.IsNullOrEmpty(serverBaseUrl))
         {
             // ?��?快�?
@@ -53,8 +74,21 @@ public class RunAI_Network : MonoBehaviour
         if (audioUploader != null)
         {
             audioUploader.serverUrl = serverBaseUrl.TrimEnd('/') + "/audio";
+            Debug.Log($"[RunAI_Network] audio url = {audioUploader.serverUrl}");
+            Debug.Log($"[RunAI_Network] autoUploadOnConnect = {autoUploadOnConnect}");
             if (autoUploadOnConnect)
+            {
                 audioUploader.StartLoop();
+                Debug.Log("[RunAI_Network] StartLoop() called.");
+            }
+            else
+            {
+                Debug.LogWarning("[RunAI_Network] autoUploadOnConnect is false, so /audio POST will not run automatically.");
+            }
+        }
+        else
+        {
+            Debug.LogError("[RunAI_Network] audioUploader is null. Please bind it in Inspector.");
         }
 
         // 3) ?��??��?資�?來�?（HTTP 輪詢??WebSocket ?�播�?
@@ -87,11 +121,15 @@ public class RunAI_Network : MonoBehaviour
             }
         }
 
-        runAi.ApplyJson(json);
+        if (runAi != null) runAi.ApplyJson(json);
         EmotionJsonReceived?.Invoke(json);
     }
 
+<<<<<<< HEAD
     // ?�選：�?供�??��??��??�方法�??��? UI ?��?
+=======
+    // 可選：提供一個重新掃描方法，做成 UI 按鈕
+>>>>>>> 09a4a4177026960556b85e8f86fa2c437ce9e28f
     public void RescanServer()
     {
         PlayerPrefs.DeleteKey("emo_server_url");

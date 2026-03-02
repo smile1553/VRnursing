@@ -20,6 +20,12 @@ public static class ScenarioImporter
         public string cursorTargetId;
         public float autoAdvanceDelay;
         public bool waitForClick = true;
+        public bool playerActionRequired;
+        public string playerPrompt;
+        public string[] expectedKeywords;
+        public bool allowLlmAssist = true;
+        public string[] expectedIntents;
+        public float minLlmConfidence = 0.7f;
         public ImportSubtitle subtitle;
         public ImportQuiz quiz;
         public ImportEmotionGate emotionGate;
@@ -70,11 +76,21 @@ public static class ScenarioImporter
             throw new Exception("Invalid scenario json");
 
         var asset = ScriptableObject.CreateInstance<ScenarioAsset>();
+        PopulateAsset(asset, data);
+
+        return asset;
+    }
+
+    static void PopulateAsset(ScenarioAsset asset, ImportPayload data)
+    {
+        if (asset == null)
+            throw new ArgumentNullException(nameof(asset));
+        if (data == null || data.steps == null)
+            throw new ArgumentException("Invalid scenario payload", nameof(data));
+
         asset.steps = new List<ScenarioStep>(data.steps.Length);
         foreach (var importStep in data.steps)
             asset.steps.Add(ConvertStep(importStep));
-
-        return asset;
     }
 
     static ScenarioStep ConvertStep(ImportStep src)
@@ -87,6 +103,12 @@ public static class ScenarioImporter
             cursorTargetId = src.cursorTargetId,
             autoAdvanceDelay = src.autoAdvanceDelay,
             waitForClick = src.waitForClick,
+            playerActionRequired = src.playerActionRequired,
+            playerPrompt = src.playerPrompt,
+            expectedKeywords = src.expectedKeywords,
+            allowLlmAssist = src.allowLlmAssist,
+            expectedIntents = src.expectedIntents,
+            minLlmConfidence = Mathf.Clamp01(src.minLlmConfidence),
             explicitNextIndex = src.explicitNextIndex
         };
         if (src.subtitle != null && !string.IsNullOrEmpty(src.subtitle.text))
@@ -155,6 +177,51 @@ public static class ScenarioImporter
         catch (Exception ex)
         {
             Debug.LogError("[ScenarioImporter] 解析失敗: " + ex.Message);
+        }
+    }
+
+    [UnityEditor.MenuItem("VRNursing/Update Scenario Asset From JSON...")]
+    static void UpdateExistingAssetFromJson()
+    {
+        var jsonPath = UnityEditor.EditorUtility.OpenFilePanel("Scenario JSON", Application.dataPath, "json");
+        if (string.IsNullOrEmpty(jsonPath)) return;
+
+        var assetPath = UnityEditor.EditorUtility.OpenFilePanel("Scenario Asset", Application.dataPath, "asset");
+        if (string.IsNullOrEmpty(assetPath)) return;
+
+        string projectDataPath = Application.dataPath.Replace('\\', '/');
+        string normalizedAssetPath = assetPath.Replace('\\', '/');
+        if (!normalizedAssetPath.StartsWith(projectDataPath, StringComparison.OrdinalIgnoreCase))
+        {
+            Debug.LogError("[ScenarioImporter] 請選擇專案 Assets 內的 ScenarioAsset。");
+            return;
+        }
+
+        string unityAssetPath = "Assets" + normalizedAssetPath.Substring(projectDataPath.Length);
+        var targetAsset = UnityEditor.AssetDatabase.LoadAssetAtPath<ScenarioAsset>(unityAssetPath);
+        if (targetAsset == null)
+        {
+            Debug.LogError("[ScenarioImporter] 選擇的檔案不是 ScenarioAsset。");
+            return;
+        }
+
+        try
+        {
+            string json = File.ReadAllText(jsonPath);
+            var data = JsonUtility.FromJson<ImportPayload>(json);
+            if (data == null || data.steps == null)
+                throw new Exception("Invalid scenario json");
+
+            PopulateAsset(targetAsset, data);
+            UnityEditor.EditorUtility.SetDirty(targetAsset);
+            UnityEditor.AssetDatabase.SaveAssets();
+            UnityEditor.AssetDatabase.Refresh();
+            UnityEditor.EditorGUIUtility.PingObject(targetAsset);
+            Debug.Log($"[ScenarioImporter] 已更新: {unityAssetPath}");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[ScenarioImporter] 更新失敗: " + ex.Message);
         }
     }
 #endif

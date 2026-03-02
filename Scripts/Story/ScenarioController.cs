@@ -23,6 +23,13 @@ public class ScenarioController : MonoBehaviour
     public bool suppressGateAfterQuiz = true;
     public float gateSuppressSeconds = 0.8f;
 
+    [Header("Auto Flow")]
+    public bool forceAutoAdvanceAll = true;
+    public float forcedAutoAdvanceDelay = 3f;
+    public bool keepPlayerActionStepsManual = true;
+    public bool keepNurseStepsManual = true;
+    public bool ensureSubtitleDurationBeforeAdvance = true;
+
     public bool globalEmotionGate = false;
     public int globalAnxiousStageThreshold = 1;
     public int globalFallbackStepIndex = -1;
@@ -214,6 +221,23 @@ public class ScenarioController : MonoBehaviour
         if (step.quiz != null && !string.IsNullOrEmpty(step.quiz.question))
         {
             ShowQuiz(step.quiz);
+            return;
+        }
+
+        if (forceAutoAdvanceAll)
+        {
+            if (keepPlayerActionStepsManual && step.playerActionRequired)
+                return;
+            if (keepNurseStepsManual && step.speaker == ScenarioSpeaker.Nurse)
+                return;
+
+            float delay = forcedAutoAdvanceDelay > 0f ? forcedAutoAdvanceDelay : defaultSubtitleDuration;
+            if (ensureSubtitleDurationBeforeAdvance && step.subtitle != null)
+                delay = Mathf.Max(delay, step.subtitle.duration);
+            if (delay > 0f)
+                StartCoroutine(AutoAdvance(delay));
+            else
+                Next();
             return;
         }
 

@@ -1,14 +1,25 @@
 using System;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Playables;
 
 public class AnimationCommandTarget : MonoBehaviour
 {
+    public Animator defaultAnimator;
+    public bool enableConventionFallback = true;
+    [Header("Speaker Auto Route")]
+    public Animator motherAnimator;
+    public Animator childAnimator;
+    public string speakerTriggerName = "Talk";
+    public bool useSpeakerTrigger = true;
+    public bool useSpeakerBoolParam = true;
+    public string motherSpeakingParam = "MomTalking";
+    public string childSpeakingParam = "KidTalking";
     public AnimationBinding[] bindings;
 
-    public void Play(string command)
+    public bool Play(string command)
     {
-        if (string.IsNullOrWhiteSpace(command)) return;
+        if (string.IsNullOrWhiteSpace(command)) return false;
 
         // 支援 bool 開關：例如 "MomTalking=true"
         int eq = command.IndexOf('=');
@@ -23,23 +34,53 @@ public class AnimationCommandTarget : MonoBehaviour
                 if (anim)
                 {
                     anim.SetBool(param, b);
-                    return;
+                    return true;
                 }
+                if (TrySetBoolOnAny(param, b))
+                    return true;
             }
         }
 
         var binding = FindBinding(command);
         if (binding == null)
         {
-            Debug.LogWarning($"[AnimationCommand] 找不到對應命令 {command}");
-            return;
+            if (enableConventionFallback && TryPlayByConvention(command))
+                return true;
+            if (ShouldWarnMissingCommand(command))
+                Debug.LogWarning($"[AnimationCommand] 找不到對應命令 {command}");
+            return false;
         }
         if (!binding.animator)
-            return;
+            return false;
         if (!string.IsNullOrEmpty(binding.triggerName))
+        {
             binding.animator.SetTrigger(binding.triggerName);
+            return true;
+        }
         else if (!string.IsNullOrEmpty(binding.stateName))
+        {
             binding.animator.Play(binding.stateName);
+            return true;
+        }
+        return false;
+    }
+
+    bool ShouldWarnMissingCommand(string command)
+    {
+        string candidate = command?.Trim() ?? "";
+        if (string.IsNullOrEmpty(candidate))
+            return false;
+
+        int sep = candidate.IndexOf(':');
+        if (sep > 0 && sep + 1 < candidate.Length)
+        {
+            string prefix = candidate.Substring(0, sep).Trim().ToLowerInvariant();
+            string key = candidate.Substring(sep + 1).Trim().ToLowerInvariant();
+            if (prefix == "speaker")
+                return key == "mother" || key == "child";
+        }
+
+        return true;
     }
 
     AnimationBinding FindBinding(string command)
@@ -52,6 +93,183 @@ public class AnimationCommandTarget : MonoBehaviour
                 return b;
         }
         return null;
+    }
+
+    bool TryPlayByConvention(string command)
+    {
+        string candidate = command?.Trim();
+        if (string.IsNullOrEmpty(candidate))
+            return false;
+
+        string prefix = "";
+        int sep = candidate.IndexOf(':');
+        if (sep > 0 && sep + 1 < candidate.Length)
+        {
+            prefix = candidate.Substring(0, sep).Trim().ToLowerInvariant();
+            candidate = candidate.Substring(sep + 1).Trim();
+        }
+
+        if (string.IsNullOrEmpty(candidate))
+            return false;
+
+        var anim = ResolveAnimator(prefix, candidate);
+        if (!anim)
+            return false;
+
+        if (prefix == "speaker" && useSpeakerTrigger && !string.IsNullOrWhiteSpace(speakerTriggerName))
+        {
+            if (HasTrigger(anim, speakerTriggerName))
+            {
+                anim.SetTrigger(speakerTriggerName);
+                return true;
+            }
+            if (anim.HasState(0, Animator.StringToHash(speakerTriggerName)))
+            {
+                anim.Play(speakerTriggerName);
+                return true;
+            }
+        }
+
+        if (prefix == "speaker" && useSpeakerBoolParam)
+        {
+            string speakingParam = GetSpeakerSpeakingParam(candidate);
+            if (!string.IsNullOrWhiteSpace(speakingParam) && HasBool(anim, speakingParam))
+            {
+                anim.SetBool(speakingParam, true);
+                return true;
+            }
+        }
+
+        if (anim.HasState(0, Animator.StringToHash(candidate)))
+        {
+            anim.Play(candidate);
+            return true;
+        }
+        if (HasTrigger(anim, candidate))
+        {
+            anim.SetTrigger(candidate);
+            return true;
+        }
+        if (TrySetBoolByName(anim, candidate, true))
+            return true;
+
+        return false;
+    }
+
+    Animator ResolveAnimator(string prefix, string key)
+    {
+        if (prefix == "speaker")
+            return ResolveSpeakerAnimator(key);
+        var inferred = ResolveAnimatorByCommandKey(key);
+        return inferred ? inferred : defaultAnimator;
+    }
+
+    Animator ResolveSpeakerAnimator(string speaker)
+    {
+        string s = (speaker ?? "").Trim().ToLowerInvariant();
+        switch (s)
+        {
+            case "mother":
+                return motherAnimator ? motherAnimator : defaultAnimator;
+            case "child":
+                return childAnimator ? childAnimator : defaultAnimator;
+            default:
+                return null;
+        }
+    }
+
+    static bool HasTrigger(Animator animator, string name)
+    {
+        if (!animator || string.IsNullOrEmpty(name))
+            return false;
+
+        var parameters = animator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var p = parameters[i];
+            if (p.type == AnimatorControllerParameterType.Trigger &&
+                string.Equals(p.name, name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    static bool HasBool(Animator animator, string name)
+    {
+        if (!animator || string.IsNullOrEmpty(name))
+            return false;
+
+        var parameters = animator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var p = parameters[i];
+            if (p.type == AnimatorControllerParameterType.Bool &&
+                string.Equals(p.name, name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    static string NormalizeToken(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        return Regex.Replace(s.ToLowerInvariant(), "[^a-z0-9]", "");
+    }
+
+    static bool TrySetBoolByName(Animator animator, string requestedName, bool value)
+    {
+        if (!animator || string.IsNullOrWhiteSpace(requestedName))
+            return false;
+
+        string requestedNorm = NormalizeToken(requestedName);
+        foreach (var p in animator.parameters)
+        {
+            if (p.type != AnimatorControllerParameterType.Bool) continue;
+            if (string.Equals(p.name, requestedName, StringComparison.OrdinalIgnoreCase) ||
+                NormalizeToken(p.name) == requestedNorm)
+            {
+                animator.SetBool(p.name, value);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool TrySetBoolOnAny(string param, bool value)
+    {
+        if (string.IsNullOrWhiteSpace(param))
+            return false;
+
+        var animators = new Animator[] { motherAnimator, childAnimator, defaultAnimator };
+        for (int i = 0; i < animators.Length; i++)
+        {
+            var anim = animators[i];
+            if (!anim) continue;
+            if (TrySetBoolByName(anim, param, value))
+                return true;
+        }
+        return false;
+    }
+
+    Animator ResolveAnimatorByCommandKey(string key)
+    {
+        string n = NormalizeToken(key);
+        if (n.StartsWith("mom") || n.StartsWith("mother"))
+            return motherAnimator ? motherAnimator : defaultAnimator;
+        if (n.StartsWith("kid") || n.StartsWith("child"))
+            return childAnimator ? childAnimator : defaultAnimator;
+        return defaultAnimator;
+    }
+
+    string GetSpeakerSpeakingParam(string speaker)
+    {
+        string s = (speaker ?? "").Trim().ToLowerInvariant();
+        switch (s)
+        {
+            case "mother": return motherSpeakingParam;
+            case "child": return childSpeakingParam;
+            default: return string.Empty;
+        }
     }
 }
 
