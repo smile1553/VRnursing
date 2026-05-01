@@ -5,15 +5,15 @@ using System.Threading.Tasks;
 public class RunAI_Network : MonoBehaviour
 {
     [Header("Auto Discovery")]
-    public string serverBaseUrl = "";   // ?ôÁ©∫?íÂ??ïÊ??™Â??¢Ê∏¨ÔºõÊ?Â°´Âõ∫ÂÆöÂÄºË???
+    public string serverBaseUrl = "";   // Leave empty to auto-discover the emotion server.
     public float intervalSec = 1f;
     public bool autoUploadOnConnect = true;
     public bool useWebSocketFeed = true;
     public bool logIncomingJson = false;
 
     [Header("Components")]
-    public RunAI runAi;                 // ËßíËâ≤‰∏äÁ? RunAIÔºàÊ??≤‰?Ôº?
-    public AudioUploader audioUploader; // ?¥ÊôØ‰∏äÁ? AudioUploaderÔºàÊ??≤‰?Ôº?
+    public RunAI runAi;                 // Optional; auto-linked from the scene if empty.
+    public AudioUploader audioUploader; // Optional; auto-linked from the scene if empty.
 
     IEmotionFeed feed;
     string _lastLoggedJson;
@@ -23,9 +23,6 @@ public class RunAI_Network : MonoBehaviour
     async void Start()
     {
         _lastLoggedJson = null;
-<<<<<<< HEAD
-        // 1) ?æ‰º∫?çÂô® URLÔºàÁî®‰Ω†‰??çÂ???UDP ?¢Ê∏¨ÔºõÈÄôË£°Áµ¶Ê?Á∞°ÂñÆÊµÅÁ?Ôº?
-=======
 
         if (audioUploader == null)
         {
@@ -43,16 +40,15 @@ public class RunAI_Network : MonoBehaviour
                 Debug.LogWarning("[RunAI_Network] RunAI not found. Feed JSON will not be applied to avatar.");
         }
 
-        // 1) Êâæ‰º∫ÊúçÂô® URLÔºàÁî®‰Ω†‰πãÂâçÂÅöÁöÑ UDP Êé¢Ê∏¨ÔºõÈÄôË£°Áµ¶ÊúÄÁ∞°ÂñÆÊµÅÁ®ãÔºâ
->>>>>>> 09a4a4177026960556b85e8f86fa2c437ce9e28f
+        // 1) Resolve the server URL. Prefer the Inspector value, then cached value, then UDP discovery.
         if (string.IsNullOrEmpty(serverBaseUrl))
         {
-            // ?àË?Âø´Â?
+            // Use cached discovery result first.
             serverBaseUrl = PlayerPrefs.GetString("emo_server_url", "");
             if (string.IsNullOrEmpty(serverBaseUrl))
             {
                 Debug.Log("[DISCOVERY] scanning...");
-                var url = await ServerDiscovery.FindServerUrlAsync(); // ‰Ω†Â??¢Â???B-1
+                var url = await ServerDiscovery.FindServerUrlAsync();
                 if (!string.IsNullOrEmpty(url))
                 {
                     serverBaseUrl = url; // e.g. http://192.168.0.50:8000
@@ -62,7 +58,7 @@ public class RunAI_Network : MonoBehaviour
                 }
                 else
                 {
-                    // ?æ‰??∞Â∞±?®Êú¨Ê©üÔ??π‰æø??Editor Ê∏?
+                    // Fallback for local editor testing.
                     serverBaseUrl = "http://127.0.0.1:8000";
                     Debug.LogWarning("[DISCOVERY] not found, fallback " + serverBaseUrl);
                 }
@@ -70,7 +66,7 @@ public class RunAI_Network : MonoBehaviour
             else Debug.Log("[DISCOVERY] use cached " + serverBaseUrl);
         }
 
-        // 2) ??/audio URL ?áÁµ¶ AudioUploaderÔºà‚? ?çÈ?Ôº?
+        // 2) Configure the /audio endpoint for AudioUploader.
         if (audioUploader != null)
         {
             audioUploader.serverUrl = serverBaseUrl.TrimEnd('/') + "/audio";
@@ -91,7 +87,7 @@ public class RunAI_Network : MonoBehaviour
             Debug.LogError("[RunAI_Network] audioUploader is null. Please bind it in Inspector.");
         }
 
-        // 3) ?üÂ??ÖÁ?Ë≥áÊ?‰æÜÊ?ÔºàHTTP Ëº™Ë©¢??WebSocket ?®Êí≠Ôº?
+        // 3) Start the selected emotion feed.
         feed?.Stop();
         feed = useWebSocketFeed ? (IEmotionFeed)new WsEmotionFeed() : new HttpEmotionFeed();
 
@@ -125,15 +121,11 @@ public class RunAI_Network : MonoBehaviour
         EmotionJsonReceived?.Invoke(json);
     }
 
-<<<<<<< HEAD
-    // ?ØÈÅ∏ÔºöÊ?‰æõ‰??ãÈ??∞Ê??èÊñπÊ≥ïÔ??öÊ? UI ?âÈ?
-=======
-    // ÂèØÈÅ∏ÔºöÊèê‰æõ‰∏ÄÂÄãÈáçÊñ∞ÊéÉÊèèÊñπÊ≥ïÔºåÂÅöÊàê UI ÊåâÈàï
->>>>>>> 09a4a4177026960556b85e8f86fa2c437ce9e28f
+    // Optional entry point for a UI button to rescan the server.
     public void RescanServer()
     {
         PlayerPrefs.DeleteKey("emo_server_url");
         serverBaseUrl = "";
-        Start(); // Á∞°ÂñÆÁ≤óÊö¥?ÑÈ??üÊ?Á®?
+        Start(); // Simple restart path for discovery.
     }
 }

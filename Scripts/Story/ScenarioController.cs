@@ -29,6 +29,7 @@ public class ScenarioController : MonoBehaviour
     public bool keepPlayerActionStepsManual = true;
     public bool keepNurseStepsManual = true;
     public bool ensureSubtitleDurationBeforeAdvance = true;
+    public float defaultSubtitleDuration = 3f;
 
     public bool globalEmotionGate = false;
     public int globalAnxiousStageThreshold = 1;
