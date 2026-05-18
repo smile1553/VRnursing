@@ -59,11 +59,22 @@ public class LoginController : MonoBehaviour
 
         LogPose("[LoginController] MoveRigTo BEFORE", cam.transform, xrRig, spawn);
 
-        // Apply yaw only (+180 for post-teleport facing), then position rig so camera aligns to spawn position.
+        var spawnPosition = spawn.position;
         var spawnYaw = spawn.rotation.eulerAngles.y + 180f;
-        xrRig.rotation = Quaternion.Euler(0f, spawnYaw, 0f);
+        if (spawn.IsChildOf(cam.transform) || spawn.IsChildOf(xrRig))
+        {
+            Debug.LogWarning("[LoginController] Spawn is under the HMD/XR rig. Use a fixed scene marker for stable teleport targets.");
+        }
+
+        var yawDelta = spawnYaw - cam.transform.rotation.eulerAngles.y;
+        xrRig.RotateAround(cam.transform.position, Vector3.up, yawDelta);
+
         var camOffset = cam.transform.position - xrRig.position;
-        xrRig.position = spawn.position - camOffset;
+        xrRig.position = new Vector3(
+            spawnPosition.x - camOffset.x,
+            spawnPosition.y,
+            spawnPosition.z - camOffset.z
+        );
 
         LogPose("[LoginController] MoveRigTo AFTER", cam.transform, xrRig, spawn);
     }
