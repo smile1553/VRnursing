@@ -54,7 +54,7 @@ public class UIEventButton : MonoBehaviour
 
             if (logSignals)
             {
-                Debug.Log($"[UIEventButton] Emit {uiEvent} choiceIndex={choiceIndex}", this);
+                RuntimeLog.Info($"[UIEventButton] Emit {uiEvent} choiceIndex={choiceIndex}", this);
             }
 
             UISignalBus.Emit(uiEvent, payload);
@@ -63,7 +63,7 @@ public class UIEventButton : MonoBehaviour
 
         if (logSignals)
         {
-            Debug.Log($"[UIEventButton] Emit {uiEvent}", this);
+            RuntimeLog.Info($"[UIEventButton] Emit {uiEvent}", this);
         }
 
         UISignalBus.Emit(uiEvent, null);

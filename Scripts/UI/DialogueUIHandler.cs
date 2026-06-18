@@ -36,7 +36,7 @@ public class DialogueUIHandler : MonoBehaviour
     {
         if (logSignals)
         {
-            Debug.Log("[DialogueUIHandler] Emit UI.Next", this);
+            RuntimeLog.Info("[DialogueUIHandler] Emit UI.Next", this);
         }
 
         UISignalBus.Emit("UI.Next", null);

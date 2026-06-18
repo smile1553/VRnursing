@@ -17,12 +17,21 @@ public class RunAI_Network : MonoBehaviour
 
     IEmotionFeed feed;
     string _lastLoggedJson;
+    int _initGeneration;
+    bool _destroyed;
 
     public event Action<string> EmotionJsonReceived;
 
-    async void Start()
+    void Start()
     {
+        _ = InitializeAsync(false);
+    }
+
+    async Task InitializeAsync(bool forceRescan)
+    {
+        int generation = ++_initGeneration;
         _lastLoggedJson = null;
+        StopRuntime();
 
         if (audioUploader == null)
         {
@@ -30,56 +39,68 @@ public class RunAI_Network : MonoBehaviour
             if (audioUploader == null)
                 Debug.LogError("[RunAI_Network] AudioUploader is missing. /audio POST will never start.");
             else
-                Debug.Log("[RunAI_Network] Auto-linked AudioUploader from scene.");
+                RuntimeLog.Info("[RunAI_Network] Auto-linked AudioUploader from scene.");
         }
 
         if (runAi == null)
         {
             runAi = FindObjectOfType<RunAI>();
             if (runAi == null)
-                Debug.LogWarning("[RunAI_Network] RunAI not found. Feed JSON will not be applied to avatar.");
+                RuntimeLog.Warning("[RunAI_Network] RunAI not found. Feed JSON will not be applied to avatar.");
         }
 
         // 1) Resolve the server URL. Prefer the Inspector value, then cached value, then UDP discovery.
-        if (string.IsNullOrEmpty(serverBaseUrl))
+        if (forceRescan)
+        {
+            PlayerPrefs.DeleteKey("emo_server_url");
+            serverBaseUrl = "";
+        }
+
+        string resolvedUrl = serverBaseUrl;
+        if (string.IsNullOrEmpty(resolvedUrl))
         {
             // Use cached discovery result first.
-            serverBaseUrl = PlayerPrefs.GetString("emo_server_url", "");
-            if (string.IsNullOrEmpty(serverBaseUrl))
+            resolvedUrl = PlayerPrefs.GetString("emo_server_url", "");
+            if (string.IsNullOrEmpty(resolvedUrl))
             {
-                Debug.Log("[DISCOVERY] scanning...");
+                RuntimeLog.Info("[DISCOVERY] scanning...");
                 var url = await ServerDiscovery.FindServerUrlAsync();
+                if (_destroyed || generation != _initGeneration)
+                    return;
+
                 if (!string.IsNullOrEmpty(url))
                 {
-                    serverBaseUrl = url; // e.g. http://192.168.0.50:8000
-                    PlayerPrefs.SetString("emo_server_url", serverBaseUrl);
+                    resolvedUrl = url; // e.g. http://192.168.0.50:8000
+                    PlayerPrefs.SetString("emo_server_url", resolvedUrl);
                     PlayerPrefs.Save();
-                    Debug.Log("[DISCOVERY] found " + serverBaseUrl);
+                    RuntimeLog.Info("[DISCOVERY] found " + resolvedUrl);
                 }
                 else
                 {
                     // Fallback for local editor testing.
-                    serverBaseUrl = "http://127.0.0.1:8000";
-                    Debug.LogWarning("[DISCOVERY] not found, fallback " + serverBaseUrl);
+                    resolvedUrl = "http://127.0.0.1:8000";
+                    RuntimeLog.Warning("[DISCOVERY] not found, fallback " + resolvedUrl);
                 }
             }
-            else Debug.Log("[DISCOVERY] use cached " + serverBaseUrl);
+            else RuntimeLog.Info("[DISCOVERY] use cached " + resolvedUrl);
         }
+
+        serverBaseUrl = resolvedUrl;
 
         // 2) Configure the /audio endpoint for AudioUploader.
         if (audioUploader != null)
         {
             audioUploader.serverUrl = serverBaseUrl.TrimEnd('/') + "/audio";
-            Debug.Log($"[RunAI_Network] audio url = {audioUploader.serverUrl}");
-            Debug.Log($"[RunAI_Network] autoUploadOnConnect = {autoUploadOnConnect}");
+            RuntimeLog.Info($"[RunAI_Network] audio url = {audioUploader.serverUrl}");
+            RuntimeLog.Info($"[RunAI_Network] autoUploadOnConnect = {autoUploadOnConnect}");
             if (autoUploadOnConnect)
             {
                 audioUploader.StartLoop();
-                Debug.Log("[RunAI_Network] StartLoop() called.");
+                RuntimeLog.Info("[RunAI_Network] StartLoop() called.");
             }
             else
             {
-                Debug.LogWarning("[RunAI_Network] autoUploadOnConnect is false, so /audio POST will not run automatically.");
+                RuntimeLog.Warning("[RunAI_Network] autoUploadOnConnect is false, so /audio POST will not run automatically.");
             }
         }
         else
@@ -88,7 +109,6 @@ public class RunAI_Network : MonoBehaviour
         }
 
         // 3) Start the selected emotion feed.
-        feed?.Stop();
         feed = useWebSocketFeed ? (IEmotionFeed)new WsEmotionFeed() : new HttpEmotionFeed();
 
         if (!useWebSocketFeed && feed is HttpEmotionFeed http)
@@ -101,6 +121,13 @@ public class RunAI_Network : MonoBehaviour
 
     void OnDestroy()
     {
+        _destroyed = true;
+        _initGeneration++;
+        StopRuntime();
+    }
+
+    void StopRuntime()
+    {
         feed?.Stop();
         feed = null;
         audioUploader?.StopLoop();
@@ -112,7 +139,7 @@ public class RunAI_Network : MonoBehaviour
         {
             if (!string.Equals(json, _lastLoggedJson))
             {
-                Debug.Log("[EmotionFeed] " + json);
+                RuntimeLog.Info("[EmotionFeed] " + json);
                 _lastLoggedJson = json;
             }
         }
@@ -124,8 +151,6 @@ public class RunAI_Network : MonoBehaviour
     // Optional entry point for a UI button to rescan the server.
     public void RescanServer()
     {
-        PlayerPrefs.DeleteKey("emo_server_url");
-        serverBaseUrl = "";
-        Start(); // Simple restart path for discovery.
+        _ = InitializeAsync(true);
     }
 }

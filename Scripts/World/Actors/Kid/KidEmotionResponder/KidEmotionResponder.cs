@@ -31,14 +31,14 @@ public class KidEmotionResponder : MonoBehaviour
         if (next == _current) return;
         _current = next;
         PlayState(next);
-        Debug.Log($"[KidEmotion] score {clamped:0} => {_current}");
+        RuntimeLog.Info($"[KidEmotion] score {clamped:0} => {_current}");
     }
 
     public void ForceState(KidEmotionState state)
     {
         _current = state;
         PlayState(state);
-        Debug.Log($"[KidEmotion] forced state {state}");
+        RuntimeLog.Info($"[KidEmotion] forced state {state}");
     }
 
     KidEmotionState DetermineState(float score)
@@ -53,7 +53,7 @@ public class KidEmotionResponder : MonoBehaviour
     {
         if (!animator)
         {
-            Debug.LogWarning("[KidEmotion] Missing animator, only logging state change.");
+            RuntimeLog.Warning("[KidEmotion] Missing animator, only logging state change.");
             return;
         }
 

@@ -26,10 +26,13 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
     [Min(1)] public int anySpeechMinChars = 2;
     [Min(1)] public int fallbackMinAttempts = 2;
     public bool logDecisionJson = false;
+    [Header("Stale Result Guard")]
+    public bool discardStaleScenarioResults = true;
 
     string _lastSignature;
     float _lastAdvanceTime;
     readonly Dictionary<string, int> _attemptsByStep = new Dictionary<string, int>();
+    readonly List<string> _hitKeywords = new List<string>(4);
 
     void Awake()
     {
@@ -55,74 +58,94 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
     {
         if (snapshot == null) return;
 
-        var trace = new DecisionTrace();
+        DecisionTrace trace = CreateTrace();
         string stepId = controller != null && controller.CurrentStep != null ? controller.CurrentStep.id : string.Empty;
-        trace.stepId = stepId;
-        trace.text = snapshot.text ?? string.Empty;
-        trace.intent = snapshot.llm?.intent ?? string.Empty;
-        trace.confidence = snapshot.llm != null && !float.IsNaN(snapshot.llm.confidence) ? snapshot.llm.confidence : 0f;
+        if (trace != null)
+        {
+            trace.stepId = stepId;
+            trace.sourceStepId = snapshot.sourceScenarioStepId;
+            trace.sourceStepIndex = snapshot.sourceScenarioStepIndex;
+            trace.text = snapshot.text ?? string.Empty;
+            trace.intent = snapshot.llm?.intent ?? string.Empty;
+            trace.confidence = snapshot.llm != null && !float.IsNaN(snapshot.llm.confidence) ? snapshot.llm.confidence : 0f;
+        }
 
         if (string.IsNullOrWhiteSpace(snapshot.text) && snapshot.llm == null)
         {
-            trace.reason = "empty_input";
+            SetReason(trace, "empty_input");
             LogTrace(trace);
             return;
         }
-
-        // Include current step id so the same utterance can still advance after step changes.
-        string signature = BuildSignature(stepId, snapshot);
-        if (signature == _lastSignature)
-        {
-            trace.reason = "duplicate_signature";
-            LogTrace(trace);
-            return;
-        }
-        _lastSignature = signature;
 
         if (controller == null || controller.CurrentStep == null)
         {
-            trace.reason = "no_current_step";
+            SetReason(trace, "no_current_step");
             LogTrace(trace);
             return;
         }
+
+        if (discardStaleScenarioResults && IsStaleForCurrentStep(snapshot, controller.CurrentStep, controller.CurrentStepIndex))
+        {
+            SetReason(trace, "stale_scenario_result");
+            LogTrace(trace);
+            return;
+        }
+
         if (controller.IsQuizActive)
         {
-            trace.reason = "quiz_active";
+            SetReason(trace, "quiz_active");
             LogTrace(trace);
             return;
         }
         if (Time.time - _lastAdvanceTime < minIntervalSeconds)
         {
-            trace.reason = "cooldown";
+            SetReason(trace, "cooldown");
             LogTrace(trace);
             return;
         }
 
         var step = controller.CurrentStep;
-        trace.stepId = step.id;
-        trace.expectedKeywords = step.expectedKeywords;
-        trace.expectedIntents = step.expectedIntents;
+        if (trace != null)
+        {
+            trace.stepId = step.id;
+            trace.expectedKeywords = step.expectedKeywords;
+            trace.expectedIntents = step.expectedIntents;
+        }
 
         if (requirePlayerAction && !step.playerActionRequired)
         {
-            trace.reason = "player_action_not_required";
+            SetReason(trace, "player_action_not_required");
             LogTrace(trace);
             return;
         }
 
-        List<string> hitKeywords = new List<string>();
-        bool keywordMatched = IsKeywordMatch(step.expectedKeywords, snapshot.text, hitKeywords);
+        // Include current step id so the same utterance can still advance after step changes.
+        string signature = BuildSignature(step.id, snapshot);
+        if (signature == _lastSignature)
+        {
+            SetReason(trace, "duplicate_signature");
+            LogTrace(trace);
+            return;
+        }
+        _lastSignature = signature;
+
+        _hitKeywords.Clear();
+        bool keywordMatched = IsKeywordMatch(step.expectedKeywords, snapshot.text, trace != null ? _hitKeywords : null);
         bool llmMatched = !keywordMatched && IsLlmIntentMatch(step, snapshot.llm);
-        trace.keywordMatched = keywordMatched;
-        trace.llmMatched = llmMatched;
-        trace.hitKeywords = hitKeywords.ToArray();
+        if (trace != null)
+        {
+            trace.keywordMatched = keywordMatched;
+            trace.llmMatched = llmMatched;
+            trace.hitKeywords = _hitKeywords.ToArray();
+        }
 
         if (keywordMatched || llmMatched)
         {
             _lastAdvanceTime = Time.time;
-            _attemptsByStep[trace.stepId ?? string.Empty] = 0;
-            trace.advanced = true;
-            trace.reason = keywordMatched ? "keyword_match" : "llm_intent_match";
+            _attemptsByStep[step.id ?? string.Empty] = 0;
+            if (trace != null)
+                trace.advanced = true;
+            SetReason(trace, keywordMatched ? "keyword_match" : "llm_intent_match");
             LogTrace(trace);
             controller.Next();
             return;
@@ -132,7 +155,7 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
         bool allowFallback = gateMode == InputGateMode.DebugOpen && allowAnySpeechFallback;
         if (allowFallback && IsAnySpeechFallback(step, snapshot))
         {
-            string key = trace.stepId ?? string.Empty;
+            string key = step.id ?? string.Empty;
             int attempts = 0;
             _attemptsByStep.TryGetValue(key, out attempts);
             attempts += 1;
@@ -142,19 +165,20 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
             {
                 _lastAdvanceTime = Time.time;
                 _attemptsByStep[key] = 0;
-                trace.advanced = true;
-                trace.reason = "any_speech_fallback";
+                if (trace != null)
+                    trace.advanced = true;
+                SetReason(trace, "any_speech_fallback");
                 LogTrace(trace);
                 controller.Next();
                 return;
             }
 
-            trace.reason = $"fallback_wait_{attempts}/{Mathf.Max(1, fallbackMinAttempts)}";
+            SetReason(trace, $"fallback_wait_{attempts}/{Mathf.Max(1, fallbackMinAttempts)}");
             LogTrace(trace);
             return;
         }
 
-        trace.reason = "no_match";
+        SetReason(trace, "no_match");
         LogTrace(trace);
     }
 
@@ -218,6 +242,22 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
         return chars >= Mathf.Max(1, anySpeechMinChars);
     }
 
+    static bool IsStaleForCurrentStep(EmotionSnapshot snapshot, ScenarioStep currentStep, int currentStepIndex)
+    {
+        if (snapshot == null || currentStep == null)
+            return false;
+
+        if (!string.IsNullOrEmpty(snapshot.sourceScenarioStepId) && !string.IsNullOrEmpty(currentStep.id))
+        {
+            return !string.Equals(snapshot.sourceScenarioStepId, currentStep.id, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (snapshot.sourceScenarioStepIndex >= 0 && currentStepIndex >= 0)
+            return snapshot.sourceScenarioStepIndex != currentStepIndex;
+
+        return false;
+    }
+
     static string BuildSignature(string stepId, EmotionSnapshot snapshot)
     {
         string text = snapshot.text ?? string.Empty;
@@ -226,15 +266,29 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
         return $"{stepId}|{text}|{intent}|{conf:0.00}";
     }
 
+    DecisionTrace CreateTrace()
+    {
+        return logDecisionJson ? new DecisionTrace() : null;
+    }
+
+    static void SetReason(DecisionTrace trace, string reason)
+    {
+        if (trace != null)
+            trace.reason = reason;
+    }
+
     void LogTrace(DecisionTrace trace)
     {
-        if (!logDecisionJson) return;
+        if (!logDecisionJson || trace == null) return;
+        RuntimeLog.Info(JsonUtility.ToJson(trace));
     }
 
     [Serializable]
     class DecisionTrace
     {
         public string stepId;
+        public string sourceStepId;
+        public int sourceStepIndex;
         public string text;
         public string intent;
         public float confidence;

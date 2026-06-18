@@ -31,7 +31,7 @@ public class WsEmotionFeed : IEmotionFeed
         _cts = new CancellationTokenSource();
         var localCts = _cts;
         _worker = RunAsync(wsUrl, localCts.Token);
-        Debug.Log("[WsEmotionFeed] connect " + wsUrl);
+        RuntimeLog.Info("[WsEmotionFeed] connect " + wsUrl);
         _worker.ContinueWith(t =>
         {
             if (t.IsFaulted)
@@ -94,7 +94,7 @@ public class WsEmotionFeed : IEmotionFeed
                 socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
 
                 await socket.ConnectAsync(new Uri(wsUrl), token).ConfigureAwait(false);
-                Debug.Log("[WsEmotionFeed] connected " + wsUrl);
+                RuntimeLog.Info("[WsEmotionFeed] connected " + wsUrl);
 
                 var buffer = new byte[4096];
 
@@ -110,7 +110,7 @@ public class WsEmotionFeed : IEmotionFeed
                         if (result.MessageType == WebSocketMessageType.Close)
                         {
                             await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "close", CancellationToken.None).ConfigureAwait(false);
-                            Debug.Log("[WsEmotionFeed] server closed connection");
+                            RuntimeLog.Info("[WsEmotionFeed] server closed connection");
                             return;
                         }
 

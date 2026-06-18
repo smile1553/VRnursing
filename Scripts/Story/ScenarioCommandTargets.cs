@@ -1,10 +1,14 @@
 using System;
-using System.Text.RegularExpressions;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Playables;
 
 public class AnimationCommandTarget : MonoBehaviour
 {
+    readonly Dictionary<Animator, HashSet<string>> triggerCache = new Dictionary<Animator, HashSet<string>>();
+    readonly Dictionary<Animator, HashSet<string>> boolCache = new Dictionary<Animator, HashSet<string>>();
+    readonly Dictionary<Animator, Dictionary<string, string>> boolNameCache = new Dictionary<Animator, Dictionary<string, string>>();
+
     public Animator defaultAnimator;
     public bool enableConventionFallback = true;
     [Header("Speaker Auto Route")]
@@ -47,7 +51,7 @@ public class AnimationCommandTarget : MonoBehaviour
             if (enableConventionFallback && TryPlayByConvention(command))
                 return true;
             if (ShouldWarnMissingCommand(command))
-                Debug.LogWarning($"[AnimationCommand] 找不到對應命令 {command}");
+                RuntimeLog.Warning($"[AnimationCommand] 找不到對應命令 {command}");
             return false;
         }
         if (!binding.animator)
@@ -178,61 +182,90 @@ public class AnimationCommandTarget : MonoBehaviour
         }
     }
 
-    static bool HasTrigger(Animator animator, string name)
+    bool HasTrigger(Animator animator, string name)
     {
         if (!animator || string.IsNullOrEmpty(name))
             return false;
 
-        var parameters = animator.parameters;
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var p = parameters[i];
-            if (p.type == AnimatorControllerParameterType.Trigger &&
-                string.Equals(p.name, name, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        return false;
+        return GetParameterSet(animator, AnimatorControllerParameterType.Trigger, triggerCache).Contains(name);
     }
 
-    static bool HasBool(Animator animator, string name)
+    bool HasBool(Animator animator, string name)
     {
         if (!animator || string.IsNullOrEmpty(name))
             return false;
 
-        var parameters = animator.parameters;
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var p = parameters[i];
-            if (p.type == AnimatorControllerParameterType.Bool &&
-                string.Equals(p.name, name, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        return false;
+        return GetParameterSet(animator, AnimatorControllerParameterType.Bool, boolCache).Contains(name);
     }
 
     static string NormalizeToken(string s)
     {
         if (string.IsNullOrEmpty(s)) return string.Empty;
-        return Regex.Replace(s.ToLowerInvariant(), "[^a-z0-9]", "");
+        char[] buffer = new char[s.Length];
+        int count = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = char.ToLowerInvariant(s[i]);
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
+                buffer[count++] = c;
+        }
+        return count == s.Length ? new string(buffer) : new string(buffer, 0, count);
     }
 
-    static bool TrySetBoolByName(Animator animator, string requestedName, bool value)
+    bool TrySetBoolByName(Animator animator, string requestedName, bool value)
     {
         if (!animator || string.IsNullOrWhiteSpace(requestedName))
             return false;
 
-        string requestedNorm = NormalizeToken(requestedName);
-        foreach (var p in animator.parameters)
+        var names = GetBoolNameMap(animator);
+        if (names.TryGetValue(requestedName, out string actualName) ||
+            names.TryGetValue(NormalizeToken(requestedName), out actualName))
         {
-            if (p.type != AnimatorControllerParameterType.Bool) continue;
-            if (string.Equals(p.name, requestedName, StringComparison.OrdinalIgnoreCase) ||
-                NormalizeToken(p.name) == requestedNorm)
-            {
-                animator.SetBool(p.name, value);
-                return true;
-            }
+            animator.SetBool(actualName, value);
+            return true;
         }
         return false;
+    }
+
+    static HashSet<string> GetParameterSet(Animator animator, AnimatorControllerParameterType type, Dictionary<Animator, HashSet<string>> cache)
+    {
+        if (cache.TryGetValue(animator, out var set))
+            return set;
+
+        set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parameters = animator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var p = parameters[i];
+            if (p.type == type && !string.IsNullOrEmpty(p.name))
+                set.Add(p.name);
+        }
+
+        cache[animator] = set;
+        return set;
+    }
+
+    Dictionary<string, string> GetBoolNameMap(Animator animator)
+    {
+        if (boolNameCache.TryGetValue(animator, out var map))
+            return map;
+
+        map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var parameters = animator.parameters;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var p = parameters[i];
+            if (p.type != AnimatorControllerParameterType.Bool || string.IsNullOrEmpty(p.name))
+                continue;
+
+            map[p.name] = p.name;
+            string normalized = NormalizeToken(p.name);
+            if (!string.IsNullOrEmpty(normalized))
+                map[normalized] = p.name;
+        }
+
+        boolNameCache[animator] = map;
+        return map;
     }
 
     bool TrySetBoolOnAny(string param, bool value)
@@ -299,7 +332,7 @@ public class AudioCommandTarget : MonoBehaviour
         var binding = FindBinding(command);
         if (binding == null)
         {
-            Debug.LogWarning($"[AudioCommand] 找不到對應命令 {command}");
+            RuntimeLog.Warning($"[AudioCommand] 找不到對應命令 {command}");
             return;
         }
         var src = binding.source ? binding.source : defaultSource;
@@ -408,7 +441,7 @@ public class CameraCommandTarget : MonoBehaviour
         var point = FindPoint(id);
         if (point == null)
         {
-            Debug.LogWarning($"[CameraCommand] 找不到 {id}");
+            RuntimeLog.Warning($"[CameraCommand] 找不到 {id}");
             return;
         }
         if (!rig)

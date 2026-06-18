@@ -9,7 +9,7 @@ public class SignalBridge : MonoBehaviour
     public SignalBus bus;
 
     [Header("Debug")]
-    public bool logSignals = true;
+    public bool logSignals = false;
 
     void Awake()
     {
@@ -62,7 +62,7 @@ public class SignalBridge : MonoBehaviour
     // UI -> Story
     void HandleUIEvent(string key, SignalPayload payload)
     {
-        if (logSignals) Debug.Log($"[SignalBridge] UI {key} {payload}");
+        if (logSignals) RuntimeLog.Info($"[SignalBridge] UI {key} {payload}");
 
         if (key == "UI.Next")
         {
@@ -78,7 +78,10 @@ public class SignalBridge : MonoBehaviour
     // Input.Click / UI.Click -> Story + World
     void HandleInputEvent(string key, SignalPayload payload)
     {
-        if (logSignals) Debug.Log($"[SignalBridge] Input {key} {payload}");
+        if (logSignals) RuntimeLog.Info($"[SignalBridge] Input {key} {payload}");
+        if (key == "Input.Point")
+            return;
+
         if (payload == null || string.IsNullOrEmpty(payload.targetId)) return;
 
         switch (payload.targetId)
@@ -122,7 +125,7 @@ public class SignalBridge : MonoBehaviour
 
     void EmitWorld(string key, SignalPayload payload)
     {
-        if (logSignals) Debug.Log($"[SignalBridge] World {key} {payload}");
+        if (logSignals) RuntimeLog.Info($"[SignalBridge] World {key} {payload}");
         world?.ReceiveSignal(key, payload);
     }
 }

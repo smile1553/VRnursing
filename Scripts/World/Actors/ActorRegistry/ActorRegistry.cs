@@ -24,7 +24,7 @@ public class ActorRegistry : MonoBehaviour
         var root = Mom;
         if (root == null)
         {
-            Debug.LogWarning("[ActorRegistry] MomRoot not found in scene.");
+            RuntimeLog.Warning("[ActorRegistry] MomRoot not found in scene.");
             return null;
         }
         return root.actionResponder;
@@ -35,7 +35,7 @@ public class ActorRegistry : MonoBehaviour
         var root = Kid;
         if (root == null)
         {
-            Debug.LogWarning("[ActorRegistry] KidRoot not found in scene.");
+            RuntimeLog.Warning("[ActorRegistry] KidRoot not found in scene.");
             return null;
         }
         return root.emotionResponder;

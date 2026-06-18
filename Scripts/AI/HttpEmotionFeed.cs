@@ -9,6 +9,7 @@ public class HttpEmotionFeed : IEmotionFeed
     string _url;
     bool _running;
     public float intervalSec = 1f;
+    public bool logResponses = false;
 
     public void Start(MonoBehaviour host, string serverUrl, Action<string> onJson)
     {
@@ -34,8 +35,8 @@ public class HttpEmotionFeed : IEmotionFeed
                 if (!req.isNetworkError && !req.isHttpError)
 #endif
                 {
-                    // ✅ 印出收到的 JSON
-                    Debug.Log("[HTTP] Response: " + req.downloadHandler.text);
+                    if (logResponses)
+                        RuntimeLog.Info("[HTTP] Response: " + req.downloadHandler.text);
                     onJson?.Invoke(req.downloadHandler.text);
                 }
                 else

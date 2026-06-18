@@ -20,13 +20,13 @@ public class MomActionResponder : MonoBehaviour
     {
         if (action == MomActionType.None)
         {
-            Debug.LogWarning("[MomAction] None action requested; skipped.");
+            RuntimeLog.Warning("[MomAction] None action requested; skipped.");
             return;
         }
 
         if (!animator)
         {
-            Debug.LogWarning($"[MomAction] Missing animator, logging only: {action}");
+            RuntimeLog.Warning($"[MomAction] Missing animator, logging only: {action}");
             return;
         }
 
@@ -46,6 +46,6 @@ public class MomActionResponder : MonoBehaviour
                 break;
         }
 
-        Debug.Log($"[MomAction] Triggered {action}");
+        RuntimeLog.Info($"[MomAction] Triggered {action}");
     }
 }

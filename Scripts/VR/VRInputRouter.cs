@@ -2,6 +2,8 @@
 
 public class VRInputRouter : MonoBehaviour
 {
+    [SerializeField] private bool bridgePointEventsToCore = false;
+
     private static class SignalBus
     {
         public delegate void SignalHandler(string signalName, object payload);
@@ -79,7 +81,7 @@ public class VRInputRouter : MonoBehaviour
         SignalBus.Emit(signalName, payload);
 
         // Bridge VR input signals to Core SignalBus for Story/World listeners.
-        if (global::SignalBus.Instance != null && payload != null)
+        if (global::SignalBus.Instance != null && payload != null && (bridgePointEventsToCore || signalName != "Input.Point"))
         {
             global::SignalBus.Instance.PublishInputEvent(signalName, new SignalPayload
             {

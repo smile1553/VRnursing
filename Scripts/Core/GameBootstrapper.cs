@@ -38,11 +38,11 @@ public class GameBootstrapper : MonoBehaviour
     void Start()
     {
         if (runAiNetwork == null)
-            Debug.LogWarning("[GameBootstrapper] RunAI_Network not found. Emotion feed will not start.");
+            RuntimeLog.Warning("[GameBootstrapper] RunAI_Network not found. Emotion feed will not start.");
         if (emotionStateManager == null)
-            Debug.LogWarning("[GameBootstrapper] EmotionStateManager not found.");
+            RuntimeLog.Warning("[GameBootstrapper] EmotionStateManager not found.");
         if (scenarioController == null)
-            Debug.LogWarning("[GameBootstrapper] ScenarioController not found.");
+            RuntimeLog.Warning("[GameBootstrapper] ScenarioController not found.");
 
         if (autoStartScenario && scenarioController != null)
             scenarioController.StartScenario();
@@ -53,7 +53,7 @@ public class GameBootstrapper : MonoBehaviour
         var controller = scenarioController ? scenarioController : FindObjectOfType<ScenarioController>();
         if (controller == null)
         {
-            Debug.LogWarning("[GameBootstrapper] ScenarioController not found. Skip command runtime setup.");
+            RuntimeLog.Warning("[GameBootstrapper] ScenarioController not found. Skip command runtime setup.");
             return;
         }
 
@@ -64,7 +64,7 @@ public class GameBootstrapper : MonoBehaviour
         {
             var go = new GameObject("ScenarioCommandRuntime");
             executor = go.AddComponent<ScenarioCommandExecutor>();
-            Debug.Log("[GameBootstrapper] Auto-created ScenarioCommandExecutor.");
+            RuntimeLog.Info("[GameBootstrapper] Auto-created ScenarioCommandExecutor.");
         }
 
         if (animTarget == null)
@@ -73,7 +73,7 @@ public class GameBootstrapper : MonoBehaviour
             animTarget = go.GetComponent<AnimationCommandTarget>();
             if (animTarget == null)
                 animTarget = go.AddComponent<AnimationCommandTarget>();
-            Debug.Log("[GameBootstrapper] Auto-created AnimationCommandTarget.");
+            RuntimeLog.Info("[GameBootstrapper] Auto-created AnimationCommandTarget.");
         }
 
         executor.controller = controller;
@@ -105,6 +105,6 @@ public class GameBootstrapper : MonoBehaviour
         string mom = target.motherAnimator ? target.motherAnimator.name : "null";
         string kid = target.childAnimator ? target.childAnimator.name : "null";
         string def = target.defaultAnimator ? target.defaultAnimator.name : "null";
-        Debug.Log($"[GameBootstrapper] Animation auto-bind mother={mom}, child={kid}, default={def}");
+        RuntimeLog.Info($"[GameBootstrapper] Animation auto-bind mother={mom}, child={kid}, default={def}");
     }
 }

@@ -43,7 +43,7 @@ public class ChoiceButtonUI : MonoBehaviour
 
         if (logSignals)
         {
-            Debug.Log($"[ChoiceButtonUI] Emit UI.Choice choiceIndex={choiceIndex}", this);
+            RuntimeLog.Info($"[ChoiceButtonUI] Emit UI.Choice choiceIndex={choiceIndex}", this);
         }
 
         UISignalBus.Emit("UI.Choice", payload);

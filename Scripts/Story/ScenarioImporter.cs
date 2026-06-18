@@ -217,7 +217,7 @@ public static class ScenarioImporter
             UnityEditor.AssetDatabase.SaveAssets();
             UnityEditor.AssetDatabase.Refresh();
             UnityEditor.EditorGUIUtility.PingObject(targetAsset);
-            Debug.Log($"[ScenarioImporter] 已更新: {unityAssetPath}");
+            RuntimeLog.Info($"[ScenarioImporter] 已更新: {unityAssetPath}");
         }
         catch (Exception ex)
         {

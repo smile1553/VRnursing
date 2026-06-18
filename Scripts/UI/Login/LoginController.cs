@@ -13,17 +13,17 @@ public class LoginController : MonoBehaviour
 
     private void Start()
     {
-        Debug.Log("[LoginController] Start()");
+        RuntimeLog.Info("[LoginController] Start()");
         StartCoroutine(AlignOnStart());
     }
 
     public void OnLoginClicked()
     {
-        Debug.Log("LOGIN CLICKED");
-        Debug.Log("[LoginController] OnLoginClicked");
+        RuntimeLog.Info("LOGIN CLICKED");
+        RuntimeLog.Info("[LoginController] OnLoginClicked");
         if (wardSpawn != null)
         {
-            Debug.Log($"[LoginController] Target spawn={wardSpawn.name} pos={FormatVec(wardSpawn.position)} yaw={wardSpawn.rotation.eulerAngles.y:0.###}");
+            RuntimeLog.Info($"[LoginController] Target spawn={wardSpawn.name} pos={FormatVec(wardSpawn.position)} yaw={wardSpawn.rotation.eulerAngles.y:0.###}");
         }
         MoveRigTo(wardSpawn);
 
@@ -41,11 +41,11 @@ public class LoginController : MonoBehaviour
         {
             if (xrRig == null)
             {
-                Debug.LogWarning("[LoginController] MoveRigTo aborted: xrRig is null.");
+                RuntimeLog.Warning("[LoginController] MoveRigTo aborted: xrRig is null.");
             }
             if (spawn == null)
             {
-                Debug.LogWarning("[LoginController] MoveRigTo aborted: spawn is null.");
+                RuntimeLog.Warning("[LoginController] MoveRigTo aborted: spawn is null.");
             }
             return;
         }
@@ -53,7 +53,7 @@ public class LoginController : MonoBehaviour
         var cam = Camera.main;
         if (cam == null)
         {
-            Debug.LogWarning("[LoginController] MoveRigTo aborted: Camera.main is null.");
+            RuntimeLog.Warning("[LoginController] MoveRigTo aborted: Camera.main is null.");
             return;
         }
 
@@ -63,7 +63,7 @@ public class LoginController : MonoBehaviour
         var spawnYaw = spawn.rotation.eulerAngles.y + 180f;
         if (spawn.IsChildOf(cam.transform) || spawn.IsChildOf(xrRig))
         {
-            Debug.LogWarning("[LoginController] Spawn is under the HMD/XR rig. Use a fixed scene marker for stable teleport targets.");
+            RuntimeLog.Warning("[LoginController] Spawn is under the HMD/XR rig. Use a fixed scene marker for stable teleport targets.");
         }
 
         var yawDelta = spawnYaw - cam.transform.rotation.eulerAngles.y;
@@ -83,14 +83,14 @@ public class LoginController : MonoBehaviour
     {
         if (xrRig == null)
         {
-            Debug.LogWarning("[LoginController] MoveRigToPose aborted: xrRig is null.");
+            RuntimeLog.Warning("[LoginController] MoveRigToPose aborted: xrRig is null.");
             return;
         }
 
         var cam = Camera.main;
         if (cam == null)
         {
-            Debug.LogWarning("[LoginController] MoveRigToPose aborted: Camera.main is null.");
+            RuntimeLog.Warning("[LoginController] MoveRigToPose aborted: Camera.main is null.");
             return;
         }
 
@@ -111,7 +111,7 @@ public class LoginController : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("[LoginController] EmitSignal skipped: signalBus not set or does not implement ISignalBus.");
+            RuntimeLog.Warning("[LoginController] EmitSignal skipped: signalBus not set or does not implement ISignalBus.");
         }
     }
 
@@ -129,7 +129,7 @@ public class LoginController : MonoBehaviour
 
         for (int i = 0; i < initialFrameDelay; i++)
         {
-            Debug.Log($"[LoginController] AlignOnStart initial delay frame {i + 1}/{initialFrameDelay}");
+            RuntimeLog.Info($"[LoginController] AlignOnStart initial delay frame {i + 1}/{initialFrameDelay}");
             yield return null;
         }
 
@@ -139,17 +139,17 @@ public class LoginController : MonoBehaviour
             var cam = Camera.main;
             if (cam == null)
             {
-                Debug.LogWarning("[LoginController] AlignOnStart waiting: Camera.main is null.");
+                RuntimeLog.Warning("[LoginController] AlignOnStart waiting: Camera.main is null.");
                 continue;
             }
 
             if (xrRig == null)
             {
-                Debug.LogWarning("[LoginController] AlignOnStart aborted: xrRig is null.");
+                RuntimeLog.Warning("[LoginController] AlignOnStart aborted: xrRig is null.");
                 yield break;
             }
 
-            Debug.Log($"[LoginController] AlignOnStart attempt {i + 1}/{maxAttempts}");
+            RuntimeLog.Info($"[LoginController] AlignOnStart attempt {i + 1}/{maxAttempts}");
             MoveRigToPose(targetCamPos, targetYaw);
             yield return null;
             MoveRigToPose(targetCamPos, targetYaw);
@@ -162,7 +162,7 @@ public class LoginController : MonoBehaviour
         var rigYaw = rig != null ? rig.rotation.eulerAngles.y : 0f;
         var spawnYaw = spawn != null ? spawn.rotation.eulerAngles.y : 0f;
 
-        Debug.Log(
+        RuntimeLog.Info(
             $"{label} | camPos={FormatVec(cam != null ? cam.position : Vector3.zero)} camYaw={camYaw:0.###} " +
             $"| rigPos={FormatVec(rig != null ? rig.position : Vector3.zero)} rigYaw={rigYaw:0.###} " +
             $"| spawnPos={(spawn != null ? FormatVec(spawn.position) : "(none)")} spawnYaw={(spawn != null ? spawnYaw.ToString("0.###") : "(none)")}"

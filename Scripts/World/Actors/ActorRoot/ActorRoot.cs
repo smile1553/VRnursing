@@ -15,12 +15,12 @@ public class ActorRoot : MonoBehaviour
     {
         if (animator == null)
         {
-            Debug.LogWarning($"[{nameof(ActorRoot)}] Missing animator on {name}, trigger {trigger} skipped.");
+            RuntimeLog.Warning($"[{nameof(ActorRoot)}] Missing animator on {name}, trigger {trigger} skipped.");
             return;
         }
         if (string.IsNullOrEmpty(trigger))
         {
-            Debug.LogWarning($"[{nameof(ActorRoot)}] Empty trigger requested on {name}.");
+            RuntimeLog.Warning($"[{nameof(ActorRoot)}] Empty trigger requested on {name}.");
             return;
         }
         animator.ResetTrigger(trigger);

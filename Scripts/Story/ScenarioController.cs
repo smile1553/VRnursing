@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
@@ -120,7 +120,7 @@ public class ScenarioController : MonoBehaviour
         if (index >= 0)
             ProceedToIndex(index);
         else
-            Debug.LogWarning($"[Scenario] 找不到 id={stepId} 的步驟");
+            RuntimeLog.Warning($"[Scenario] 找不到 id={stepId} 的步驟");
     }
 
     public void JumpToIndex(int index)

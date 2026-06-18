@@ -94,7 +94,7 @@ public class ScenarioCommandExecutor : MonoBehaviour
                 timelineTarget?.TriggerVfx(cmd.payload);
                 break;
             default:
-                Debug.Log($"[ScenarioCommand] 未處理的命令 {cmd.type} payload={cmd.payload}");
+                RuntimeLog.Info($"[ScenarioCommand] 未處理的命令 {cmd.type} payload={cmd.payload}");
                 break;
         }
     }

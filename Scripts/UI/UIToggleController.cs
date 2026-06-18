@@ -11,7 +11,7 @@ public class UIToggleController : MonoBehaviour
     {
         if (medicalRecordUI == null)
         {
-            Debug.LogWarning("[UIToggleController] ToggleMedicalRecord skipped: medicalRecordUI is not assigned.");
+            RuntimeLog.Warning("[UIToggleController] ToggleMedicalRecord skipped: medicalRecordUI is not assigned.");
             return;
         }
 
@@ -25,7 +25,7 @@ public class UIToggleController : MonoBehaviour
     {
         if (medicalRecordUI == null)
         {
-            Debug.LogWarning("[UIToggleController] ShowMedicalRecord skipped: medicalRecordUI is not assigned.");
+            RuntimeLog.Warning("[UIToggleController] ShowMedicalRecord skipped: medicalRecordUI is not assigned.");
             return;
         }
 
@@ -34,19 +34,19 @@ public class UIToggleController : MonoBehaviour
         if (dialogueUI != null)
             dialogueUI.SetActive(false);
         else
-            Debug.LogWarning("[UIToggleController] dialogueUI is not assigned.");
+            RuntimeLog.Warning("[UIToggleController] dialogueUI is not assigned.");
 
         if (quizUI != null)
             quizUI.SetActive(false);
         else
-            Debug.LogWarning("[UIToggleController] quizUI is not assigned.");
+            RuntimeLog.Warning("[UIToggleController] quizUI is not assigned.");
     }
 
     public void HideMedicalRecord()
     {
         if (medicalRecordUI == null)
         {
-            Debug.LogWarning("[UIToggleController] HideMedicalRecord skipped: medicalRecordUI is not assigned.");
+            RuntimeLog.Warning("[UIToggleController] HideMedicalRecord skipped: medicalRecordUI is not assigned.");
             return;
         }
 

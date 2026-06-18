@@ -11,6 +11,8 @@ public class EmotionSnapshot
     public int stage;
     public string rawJson;
     public string timestampIso;
+    public string sourceScenarioStepId;
+    public int sourceScenarioStepIndex = -1;
 
     public EmotionSnapshot Clone()
     {
@@ -22,7 +24,9 @@ public class EmotionSnapshot
             llm = llm != null ? llm.Clone() : null,
             stage = stage,
             rawJson = rawJson,
-            timestampIso = timestampIso
+            timestampIso = timestampIso,
+            sourceScenarioStepId = sourceScenarioStepId,
+            sourceScenarioStepIndex = sourceScenarioStepIndex
         };
     }
 }
@@ -47,6 +51,7 @@ public class EmotionStateManager : MonoBehaviour
     [Header("Dependencies")]
     public RunAI_Network network;
     public RunAI runAi;
+    public ScenarioController scenarioController;
 
     [Header("Stage Gates")]
     public int anxiousStage = 1;  // >= 1 代表緊張、不配合
@@ -68,7 +73,7 @@ public class EmotionStateManager : MonoBehaviour
     {
         if (Instance && Instance != this)
         {
-            Debug.LogWarning("Duplicate EmotionStateManager detected. Destroying the new one.");
+            RuntimeLog.Warning("Duplicate EmotionStateManager detected. Destroying the new one.");
             Destroy(this);
             return;
         }
@@ -76,6 +81,7 @@ public class EmotionStateManager : MonoBehaviour
 
         if (!runAi) runAi = GetComponent<RunAI>();
         if (!network) network = GetComponent<RunAI_Network>();
+        if (!scenarioController) scenarioController = FindObjectOfType<ScenarioController>();
     }
 
     void OnEnable()
@@ -103,7 +109,7 @@ public class EmotionStateManager : MonoBehaviour
     {
         if (!allowManualOverride)
         {
-            Debug.LogWarning("[EmotionState] Manual override disabled.");
+            RuntimeLog.Warning("[EmotionState] Manual override disabled.");
             return;
         }
 
@@ -126,6 +132,10 @@ public class EmotionStateManager : MonoBehaviour
         var snapshot = Current?.Clone() ?? new EmotionSnapshot();
         snapshot.rawJson = json;
         snapshot.timestampIso = DateTime.UtcNow.ToString("o");
+        snapshot.sourceScenarioStepId = scenarioController != null && scenarioController.CurrentStep != null
+            ? scenarioController.CurrentStep.id
+            : string.Empty;
+        snapshot.sourceScenarioStepIndex = scenarioController != null ? scenarioController.CurrentStepIndex : -1;
 
         try
         {
@@ -150,7 +160,7 @@ public class EmotionStateManager : MonoBehaviour
         }
         catch (Exception e)
         {
-            Debug.LogWarning($"[EmotionState] Failed to parse JSON: {e.Message}");
+            RuntimeLog.Warning($"[EmotionState] Failed to parse JSON: {e.Message}");
         }
 
         IsManualOverrideActive = false;

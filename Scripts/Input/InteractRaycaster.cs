@@ -10,9 +10,13 @@ public class InteractRaycaster : MonoBehaviour
     [SerializeField] private string hand = "Right";
     [SerializeField] private string source = "VR";
     [SerializeField] private bool emitPointContinuously = true;
+    [SerializeField] private bool throttlePointEvents = false;
+    [SerializeField] private float pointEmitInterval = 0.05f;
 
     public bool HasHit { get; private set; }
     public RaycastHit LastHit { get; private set; }
+
+    private float nextPointEmitTime;
 
     private void Awake()
     {
@@ -29,10 +33,22 @@ public class InteractRaycaster : MonoBehaviour
 
     private void Update()
     {
-        if (emitPointContinuously)
+        if (!emitPointContinuously)
         {
-            EmitPoint();
+            return;
         }
+
+        if (throttlePointEvents)
+        {
+            if (Time.unscaledTime < nextPointEmitTime)
+            {
+                return;
+            }
+
+            nextPointEmitTime = Time.unscaledTime + Mathf.Max(0.01f, pointEmitInterval);
+        }
+
+        EmitPoint();
     }
 
     public void SetRayOrigin(Transform origin)
