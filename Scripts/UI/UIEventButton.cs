@@ -1,71 +1,16 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
 [DisallowMultipleComponent]
-[RequireComponent(typeof(Button))]
-public class UIEventButton : MonoBehaviour
+public class UIEventButton : UISignalButton
 {
     [Header("Signal")]
     [SerializeField] private string uiEvent = "UI.Next";
     [SerializeField] private int choiceIndex = 0;
-    [SerializeField] private bool logSignals = false;
 
-    [Header("Refs")]
-    [SerializeField] private Button button;
-
-    private void Awake()
-    {
-        if (button == null)
-        {
-            button = GetComponent<Button>();
-        }
-    }
-
-    private void OnEnable()
-    {
-        if (button != null)
-        {
-            button.onClick.AddListener(HandleClick);
-        }
-    }
-
-    private void OnDisable()
-    {
-        if (button != null)
-        {
-            button.onClick.RemoveListener(HandleClick);
-        }
-    }
-
-    private void HandleClick()
-    {
-        if (string.IsNullOrEmpty(uiEvent))
-        {
-            return;
-        }
-
-        if (uiEvent == "UI.Choice")
-        {
-            var payload = new Dictionary<string, object>
-            {
-                { "choiceIndex", choiceIndex }
-            };
-
-            if (logSignals)
-            {
-                RuntimeLog.Info($"[UIEventButton] Emit {uiEvent} choiceIndex={choiceIndex}", this);
-            }
-
-            UISignalBus.Emit(uiEvent, payload);
-            return;
-        }
-
-        if (logSignals)
-        {
-            RuntimeLog.Info($"[UIEventButton] Emit {uiEvent}", this);
-        }
-
-        UISignalBus.Emit(uiEvent, null);
-    }
+    protected override string SignalName => uiEvent;
+    protected override object CreatePayload() => uiEvent == "UI.Choice"
+        ? new Dictionary<string, object> { { "choiceIndex", choiceIndex } }
+        : null;
+    protected override string LogDetails => uiEvent == "UI.Choice" ? $" choiceIndex={choiceIndex}" : string.Empty;
 }

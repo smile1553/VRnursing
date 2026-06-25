@@ -34,6 +34,8 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
     readonly Dictionary<string, int> _attemptsByStep = new Dictionary<string, int>();
     readonly List<string> _hitKeywords = new List<string>(4);
 
+    public event Action<ScenarioKeywordMatch> MatchAccepted;
+
     void Awake()
     {
         if (!controller)
@@ -143,6 +145,14 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
         {
             _lastAdvanceTime = Time.time;
             _attemptsByStep[step.id ?? string.Empty] = 0;
+            MatchAccepted?.Invoke(new ScenarioKeywordMatch
+            {
+                stepId = step.id,
+                matchedByKeyword = keywordMatched,
+                matchedByLlm = llmMatched,
+                hitKeywords = _hitKeywords.ToArray(),
+                intent = snapshot.llm?.intent
+            });
             if (trace != null)
                 trace.advanced = true;
             SetReason(trace, keywordMatched ? "keyword_match" : "llm_intent_match");
@@ -300,4 +310,14 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
         public string[] expectedKeywords;
         public string[] expectedIntents;
     }
+}
+
+[Serializable]
+public class ScenarioKeywordMatch
+{
+    public string stepId;
+    public bool matchedByKeyword;
+    public bool matchedByLlm;
+    public string[] hitKeywords;
+    public string intent;
 }
