@@ -13,11 +13,6 @@ public class GameBootstrapper : MonoBehaviour
     [Header("AI / Emotion")]
     public RunAI_Network runAiNetwork;
 
-    [Header("Assessment")]
-    public bool autoCreateScoreExport = true;
-    public ScenarioScoreManager scoreManager;
-    public ScenarioScoreCsvExporter scoreCsvExporter;
-
     [Header("Options")]
     public bool dontDestroyOnLoad = true;
     public bool autoStartScenario = true;
@@ -38,17 +33,16 @@ public class GameBootstrapper : MonoBehaviour
             scenarioController.scenario = defaultScenario;
 
         EnsureScenarioCommandRuntime();
-        EnsureAssessmentRuntime();
     }
 
     void Start()
     {
         if (runAiNetwork == null)
-            RuntimeLog.Warning("[GameBootstrapper] RunAI_Network not found. Emotion feed will not start.");
+            Debug.LogWarning("[GameBootstrapper] RunAI_Network not found. Emotion feed will not start.");
         if (emotionStateManager == null)
-            RuntimeLog.Warning("[GameBootstrapper] EmotionStateManager not found.");
+            Debug.LogWarning("[GameBootstrapper] EmotionStateManager not found.");
         if (scenarioController == null)
-            RuntimeLog.Warning("[GameBootstrapper] ScenarioController not found.");
+            Debug.LogWarning("[GameBootstrapper] ScenarioController not found.");
 
         if (autoStartScenario && scenarioController != null)
             scenarioController.StartScenario();
@@ -59,7 +53,7 @@ public class GameBootstrapper : MonoBehaviour
         var controller = scenarioController ? scenarioController : FindObjectOfType<ScenarioController>();
         if (controller == null)
         {
-            RuntimeLog.Warning("[GameBootstrapper] ScenarioController not found. Skip command runtime setup.");
+            Debug.LogWarning("[GameBootstrapper] ScenarioController not found. Skip command runtime setup.");
             return;
         }
 
@@ -70,7 +64,7 @@ public class GameBootstrapper : MonoBehaviour
         {
             var go = new GameObject("ScenarioCommandRuntime");
             executor = go.AddComponent<ScenarioCommandExecutor>();
-            RuntimeLog.Info("[GameBootstrapper] Auto-created ScenarioCommandExecutor.");
+            Debug.Log("[GameBootstrapper] Auto-created ScenarioCommandExecutor.");
         }
 
         if (animTarget == null)
@@ -79,7 +73,7 @@ public class GameBootstrapper : MonoBehaviour
             animTarget = go.GetComponent<AnimationCommandTarget>();
             if (animTarget == null)
                 animTarget = go.AddComponent<AnimationCommandTarget>();
-            RuntimeLog.Info("[GameBootstrapper] Auto-created AnimationCommandTarget.");
+            Debug.Log("[GameBootstrapper] Auto-created AnimationCommandTarget.");
         }
 
         executor.controller = controller;
@@ -111,31 +105,6 @@ public class GameBootstrapper : MonoBehaviour
         string mom = target.motherAnimator ? target.motherAnimator.name : "null";
         string kid = target.childAnimator ? target.childAnimator.name : "null";
         string def = target.defaultAnimator ? target.defaultAnimator.name : "null";
-        RuntimeLog.Info($"[GameBootstrapper] Animation auto-bind mother={mom}, child={kid}, default={def}");
-    }
-
-    void EnsureAssessmentRuntime()
-    {
-        if (!autoCreateScoreExport) return;
-
-        if (!scoreManager)
-            scoreManager = FindObjectOfType<ScenarioScoreManager>();
-        if (!scoreManager)
-        {
-            var go = new GameObject("ScenarioAssessmentRuntime");
-            scoreManager = go.AddComponent<ScenarioScoreManager>();
-            RuntimeLog.Info("[GameBootstrapper] Auto-created ScenarioScoreManager.");
-        }
-
-        if (!scoreCsvExporter)
-            scoreCsvExporter = FindObjectOfType<ScenarioScoreCsvExporter>();
-        if (!scoreCsvExporter)
-        {
-            scoreCsvExporter = scoreManager.gameObject.AddComponent<ScenarioScoreCsvExporter>();
-            RuntimeLog.Info("[GameBootstrapper] Auto-created ScenarioScoreCsvExporter.");
-        }
-
-        scoreManager.controller = scenarioController;
-        scoreCsvExporter.scoreManager = scoreManager;
+        Debug.Log($"[GameBootstrapper] Animation auto-bind mother={mom}, child={kid}, default={def}");
     }
 }

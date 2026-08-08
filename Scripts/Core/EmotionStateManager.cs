@@ -35,6 +35,7 @@ public class EmotionSnapshot
 public class EmotionLlmInfo
 {
     public string intent;
+    public string actionTag;
     public string sentiment;
     public float toxicity;
     public float coercion;
@@ -51,7 +52,6 @@ public class EmotionStateManager : MonoBehaviour
     [Header("Dependencies")]
     public RunAI_Network network;
     public RunAI runAi;
-    public ScenarioController scenarioController;
 
     [Header("Stage Gates")]
     public int anxiousStage = 1;  // >= 1 代表緊張、不配合
@@ -73,7 +73,7 @@ public class EmotionStateManager : MonoBehaviour
     {
         if (Instance && Instance != this)
         {
-            RuntimeLog.Warning("Duplicate EmotionStateManager detected. Destroying the new one.");
+            Debug.LogWarning("Duplicate EmotionStateManager detected. Destroying the new one.");
             Destroy(this);
             return;
         }
@@ -81,7 +81,6 @@ public class EmotionStateManager : MonoBehaviour
 
         if (!runAi) runAi = GetComponent<RunAI>();
         if (!network) network = GetComponent<RunAI_Network>();
-        if (!scenarioController) scenarioController = FindObjectOfType<ScenarioController>();
     }
 
     void OnEnable()
@@ -109,7 +108,7 @@ public class EmotionStateManager : MonoBehaviour
     {
         if (!allowManualOverride)
         {
-            RuntimeLog.Warning("[EmotionState] Manual override disabled.");
+            Debug.LogWarning("[EmotionState] Manual override disabled.");
             return;
         }
 
@@ -132,10 +131,6 @@ public class EmotionStateManager : MonoBehaviour
         var snapshot = Current?.Clone() ?? new EmotionSnapshot();
         snapshot.rawJson = json;
         snapshot.timestampIso = DateTime.UtcNow.ToString("o");
-        snapshot.sourceScenarioStepId = scenarioController != null && scenarioController.CurrentStep != null
-            ? scenarioController.CurrentStep.id
-            : string.Empty;
-        snapshot.sourceScenarioStepIndex = scenarioController != null ? scenarioController.CurrentStepIndex : -1;
 
         try
         {
@@ -145,11 +140,14 @@ public class EmotionStateManager : MonoBehaviour
                 snapshot.tension = data.tension;
                 snapshot.emotion = data.emotion;
                 snapshot.text = data.text;
+                snapshot.sourceScenarioStepId = data.source_step_id;
+                snapshot.sourceScenarioStepIndex = data.source_step_index;
                 if (data.llm != null)
                 {
                     snapshot.llm = new EmotionLlmInfo
                     {
                         intent = data.llm.intent,
+                        actionTag = data.llm.action_tag,
                         sentiment = data.llm.sentiment,
                         toxicity = data.llm.toxicity,
                         coercion = data.llm.coercion,
@@ -160,7 +158,7 @@ public class EmotionStateManager : MonoBehaviour
         }
         catch (Exception e)
         {
-            RuntimeLog.Warning($"[EmotionState] Failed to parse JSON: {e.Message}");
+            Debug.LogWarning($"[EmotionState] Failed to parse JSON: {e.Message}");
         }
 
         IsManualOverrideActive = false;
@@ -190,6 +188,8 @@ public class EmotionStateManager : MonoBehaviour
         public float tension;
         public string emotion;
         public string text;
+        public string source_step_id;
+        public int source_step_index = -1;
         public LlmPayload llm;
     }
 
@@ -197,6 +197,7 @@ public class EmotionStateManager : MonoBehaviour
     class LlmPayload
     {
         public string intent;
+        public string action_tag;
         public string sentiment;
         public float toxicity;
         public float coercion;
