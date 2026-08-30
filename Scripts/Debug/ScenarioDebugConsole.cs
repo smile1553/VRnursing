@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class ScenarioDebugConsole : MonoBehaviour
 {
@@ -7,9 +8,14 @@ public class ScenarioDebugConsole : MonoBehaviour
     public EmotionStateSimulator emotionSimulator;
     public bool showWindow = true;
     public Rect windowRect = new Rect(20, 20, 520, 360);
+    public bool showLogConsole = true;
+    public int maxLogEntries = 80;
+    public Rect logWindowRect = new Rect(560, 20, 700, 360);
 
     string _jumpStepId = "";
     Vector2 _scroll;
+    Vector2 _logScroll;
+    readonly Queue<string> _logEntries = new Queue<string>();
 
     void Awake()
     {
@@ -21,10 +27,22 @@ public class ScenarioDebugConsole : MonoBehaviour
             emotionSimulator = FindObjectOfType<EmotionStateSimulator>();
     }
 
+    void OnEnable()
+    {
+        Application.logMessageReceived += HandleLogMessage;
+    }
+
+    void OnDisable()
+    {
+        Application.logMessageReceived -= HandleLogMessage;
+    }
+
     void OnGUI()
     {
         if (!showWindow) return;
         windowRect = GUILayout.Window(GetInstanceID(), windowRect, DrawWindow, "Scenario Debug");
+        if (showLogConsole)
+            logWindowRect = GUILayout.Window(GetInstanceID() + 1, logWindowRect, DrawLogWindow, "Runtime Console");
     }
 
     void DrawWindow(int id)
@@ -73,6 +91,43 @@ public class ScenarioDebugConsole : MonoBehaviour
 
         if (GUILayout.Button("Close")) showWindow = false;
         GUI.DragWindow(new Rect(0, 0, 10000, 20));
+    }
+
+    void DrawLogWindow(int id)
+    {
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Clear", GUILayout.Width(80)))
+            _logEntries.Clear();
+        if (GUILayout.Button("Hide", GUILayout.Width(80)))
+            showLogConsole = false;
+        GUILayout.Label($"Entries: {_logEntries.Count}");
+        GUILayout.EndHorizontal();
+
+        _logScroll = GUILayout.BeginScrollView(_logScroll);
+        foreach (var entry in _logEntries)
+            GUILayout.Label(entry);
+        GUILayout.EndScrollView();
+
+        GUI.DragWindow(new Rect(0, 0, 10000, 20));
+    }
+
+    void HandleLogMessage(string condition, string stackTrace, LogType type)
+    {
+        string prefix = type switch
+        {
+            LogType.Error => "[Error]",
+            LogType.Assert => "[Assert]",
+            LogType.Warning => "[Warn]",
+            LogType.Exception => "[Exception]",
+            _ => "[Log]"
+        };
+
+        string line = $"{prefix} {condition}";
+        _logEntries.Enqueue(line);
+        while (_logEntries.Count > Mathf.Max(10, maxLogEntries))
+            _logEntries.Dequeue();
+
+        _logScroll.y = float.MaxValue;
     }
 
     void SetStage(int stage)

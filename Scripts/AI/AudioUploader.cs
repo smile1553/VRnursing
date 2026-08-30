@@ -127,7 +127,6 @@ public class AudioUploader : MonoBehaviour
             useContinuousAtRuntime = false;
         }
 
-        EnsureUploadWorker();
         loopRoutine = StartCoroutine(CaptureLoop());
     }
 
@@ -438,7 +437,10 @@ public class AudioUploader : MonoBehaviour
     void EnsureUploadWorker()
     {
         if (uploadWorkerRoutine == null)
+        {
+            Debug.Log("[AudioUploader] EnsureUploadWorker -> start worker");
             uploadWorkerRoutine = StartCoroutine(UploadWorker());
+        }
     }
 
     void EnqueueUpload(byte[] bytes)
@@ -460,11 +462,13 @@ public class AudioUploader : MonoBehaviour
         }
 
         pendingUploads.Enqueue(bytes);
+        Debug.Log($"[AudioUploader] enqueue wav bytes={bytes.Length} queue={pendingUploads.Count}");
         EnsureUploadWorker();
     }
 
     IEnumerator UploadWorker()
     {
+        Debug.Log("[AudioUploader] UploadWorker started");
         while (true)
         {
             if (pendingUploads.Count == 0)
@@ -476,10 +480,13 @@ public class AudioUploader : MonoBehaviour
                 continue;
             }
 
+            Debug.Log($"[AudioUploader] UploadWorker dequeue queue_before={pendingUploads.Count}");
             byte[] payload = pendingUploads.Dequeue();
+            Debug.Log($"[AudioUploader] UploadWorker sending payload bytes={payload.Length} queue_after={pendingUploads.Count}");
             yield return Upload(payload);
         }
 
+        Debug.Log("[AudioUploader] UploadWorker stopped");
         uploadWorkerRoutine = null;
     }
 
@@ -775,12 +782,16 @@ public class AudioUploader : MonoBehaviour
 
     IEnumerator Upload(byte[] bytes)
     {
+        Debug.Log($"[AudioUploader] Upload begin url={serverUrl} bytes={bytes?.Length ?? 0}");
         using (UnityWebRequest req = new UnityWebRequest(serverUrl, "POST"))
         {
             req.uploadHandler = new UploadHandlerRaw(bytes);
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "audio/wav");
+            req.timeout = 5;
+            Debug.Log("[AudioUploader] SendWebRequest start");
             yield return req.SendWebRequest();
+            Debug.Log("[AudioUploader] SendWebRequest finished");
 
 #if UNITY_2020_2_OR_NEWER
             if (req.result == UnityWebRequest.Result.Success)
