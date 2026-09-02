@@ -1,90 +1,28 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Playables;
 
 public class AnimationCommandTarget : MonoBehaviour
 {
-    readonly Dictionary<Animator, HashSet<string>> triggerCache = new Dictionary<Animator, HashSet<string>>();
-    readonly Dictionary<Animator, HashSet<string>> boolCache = new Dictionary<Animator, HashSet<string>>();
-    readonly Dictionary<Animator, Dictionary<string, string>> boolNameCache = new Dictionary<Animator, Dictionary<string, string>>();
-
     public Animator defaultAnimator;
-    public bool enableConventionFallback = true;
-    [Header("Speaker Auto Route")]
     public Animator motherAnimator;
     public Animator childAnimator;
-    public string speakerTriggerName = "Talk";
-    public bool useSpeakerTrigger = true;
-    public bool useSpeakerBoolParam = true;
-    public string motherSpeakingParam = "MomTalking";
-    public string childSpeakingParam = "KidTalking";
     public AnimationBinding[] bindings;
 
-    public bool Play(string command)
+    public void Play(string command)
     {
-        if (string.IsNullOrWhiteSpace(command)) return false;
-
-        // 支援 bool 開關：例如 "MomTalking=true"
-        int eq = command.IndexOf('=');
-        if (eq > 0)
-        {
-            string param = command.Substring(0, eq).Trim();
-            string val = command.Substring(eq + 1).Trim();
-            if (bool.TryParse(val, out bool b))
-            {
-                var bindingForBool = FindBinding(param) ?? FindBinding(command);
-                var anim = bindingForBool != null ? bindingForBool.animator : null;
-                if (anim)
-                {
-                    anim.SetBool(param, b);
-                    return true;
-                }
-                if (TrySetBoolOnAny(param, b))
-                    return true;
-            }
-        }
-
         var binding = FindBinding(command);
         if (binding == null)
         {
-            if (enableConventionFallback && TryPlayByConvention(command))
-                return true;
-            if (ShouldWarnMissingCommand(command))
-                RuntimeLog.Warning($"[AnimationCommand] 找不到對應命令 {command}");
-            return false;
+            Debug.LogWarning($"[AnimationCommand] 找不到對應命令 {command}");
+            return;
         }
         if (!binding.animator)
-            return false;
+            return;
         if (!string.IsNullOrEmpty(binding.triggerName))
-        {
             binding.animator.SetTrigger(binding.triggerName);
-            return true;
-        }
         else if (!string.IsNullOrEmpty(binding.stateName))
-        {
             binding.animator.Play(binding.stateName);
-            return true;
-        }
-        return false;
-    }
-
-    bool ShouldWarnMissingCommand(string command)
-    {
-        string candidate = command?.Trim() ?? "";
-        if (string.IsNullOrEmpty(candidate))
-            return false;
-
-        int sep = candidate.IndexOf(':');
-        if (sep > 0 && sep + 1 < candidate.Length)
-        {
-            string prefix = candidate.Substring(0, sep).Trim().ToLowerInvariant();
-            string key = candidate.Substring(sep + 1).Trim().ToLowerInvariant();
-            if (prefix == "speaker")
-                return key == "mother" || key == "child";
-        }
-
-        return true;
     }
 
     AnimationBinding FindBinding(string command)
@@ -99,210 +37,18 @@ public class AnimationCommandTarget : MonoBehaviour
         return null;
     }
 
-    bool TryPlayByConvention(string command)
+    public Animator ResolveAnimator(string command)
     {
-        string candidate = command?.Trim();
-        if (string.IsNullOrEmpty(candidate))
-            return false;
-
-        string prefix = "";
-        int sep = candidate.IndexOf(':');
-        if (sep > 0 && sep + 1 < candidate.Length)
-        {
-            prefix = candidate.Substring(0, sep).Trim().ToLowerInvariant();
-            candidate = candidate.Substring(sep + 1).Trim();
-        }
-
-        if (string.IsNullOrEmpty(candidate))
-            return false;
-
-        var anim = ResolveAnimator(prefix, candidate);
-        if (!anim)
-            return false;
-
-        if (prefix == "speaker" && useSpeakerTrigger && !string.IsNullOrWhiteSpace(speakerTriggerName))
-        {
-            if (HasTrigger(anim, speakerTriggerName))
-            {
-                anim.SetTrigger(speakerTriggerName);
-                return true;
-            }
-            if (anim.HasState(0, Animator.StringToHash(speakerTriggerName)))
-            {
-                anim.Play(speakerTriggerName);
-                return true;
-            }
-        }
-
-        if (prefix == "speaker" && useSpeakerBoolParam)
-        {
-            string speakingParam = GetSpeakerSpeakingParam(candidate);
-            if (!string.IsNullOrWhiteSpace(speakingParam) && HasBool(anim, speakingParam))
-            {
-                anim.SetBool(speakingParam, true);
-                return true;
-            }
-        }
-
-        if (anim.HasState(0, Animator.StringToHash(candidate)))
-        {
-            anim.Play(candidate);
-            return true;
-        }
-        if (HasTrigger(anim, candidate))
-        {
-            anim.SetTrigger(candidate);
-            return true;
-        }
-        if (TrySetBoolByName(anim, candidate, true))
-            return true;
-
-        return false;
-    }
-
-    Animator ResolveAnimator(string prefix, string key)
-    {
-        if (prefix == "speaker")
-            return ResolveSpeakerAnimator(key);
-        var inferred = ResolveAnimatorByCommandKey(key);
-        return inferred ? inferred : defaultAnimator;
-    }
-
-    Animator ResolveSpeakerAnimator(string speaker)
-    {
-        string s = (speaker ?? "").Trim().ToLowerInvariant();
-        switch (s)
-        {
-            case "mother":
-                return motherAnimator ? motherAnimator : defaultAnimator;
-            case "child":
-                return childAnimator ? childAnimator : defaultAnimator;
-            default:
-                return null;
-        }
-    }
-
-    bool HasTrigger(Animator animator, string name)
-    {
-        if (!animator || string.IsNullOrEmpty(name))
-            return false;
-
-        return GetParameterSet(animator, AnimatorControllerParameterType.Trigger, triggerCache).Contains(name);
-    }
-
-    bool HasBool(Animator animator, string name)
-    {
-        if (!animator || string.IsNullOrEmpty(name))
-            return false;
-
-        return GetParameterSet(animator, AnimatorControllerParameterType.Bool, boolCache).Contains(name);
-    }
-
-    static string NormalizeToken(string s)
-    {
-        if (string.IsNullOrEmpty(s)) return string.Empty;
-        char[] buffer = new char[s.Length];
-        int count = 0;
-        for (int i = 0; i < s.Length; i++)
-        {
-            char c = char.ToLowerInvariant(s[i]);
-            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
-                buffer[count++] = c;
-        }
-        return count == s.Length ? new string(buffer) : new string(buffer, 0, count);
-    }
-
-    bool TrySetBoolByName(Animator animator, string requestedName, bool value)
-    {
-        if (!animator || string.IsNullOrWhiteSpace(requestedName))
-            return false;
-
-        var names = GetBoolNameMap(animator);
-        if (names.TryGetValue(requestedName, out string actualName) ||
-            names.TryGetValue(NormalizeToken(requestedName), out actualName))
-        {
-            animator.SetBool(actualName, value);
-            return true;
-        }
-        return false;
-    }
-
-    static HashSet<string> GetParameterSet(Animator animator, AnimatorControllerParameterType type, Dictionary<Animator, HashSet<string>> cache)
-    {
-        if (cache.TryGetValue(animator, out var set))
-            return set;
-
-        set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var parameters = animator.parameters;
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var p = parameters[i];
-            if (p.type == type && !string.IsNullOrEmpty(p.name))
-                set.Add(p.name);
-        }
-
-        cache[animator] = set;
-        return set;
-    }
-
-    Dictionary<string, string> GetBoolNameMap(Animator animator)
-    {
-        if (boolNameCache.TryGetValue(animator, out var map))
-            return map;
-
-        map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var parameters = animator.parameters;
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var p = parameters[i];
-            if (p.type != AnimatorControllerParameterType.Bool || string.IsNullOrEmpty(p.name))
-                continue;
-
-            map[p.name] = p.name;
-            string normalized = NormalizeToken(p.name);
-            if (!string.IsNullOrEmpty(normalized))
-                map[normalized] = p.name;
-        }
-
-        boolNameCache[animator] = map;
-        return map;
-    }
-
-    bool TrySetBoolOnAny(string param, bool value)
-    {
-        if (string.IsNullOrWhiteSpace(param))
-            return false;
-
-        var animators = new Animator[] { motherAnimator, childAnimator, defaultAnimator };
-        for (int i = 0; i < animators.Length; i++)
-        {
-            var anim = animators[i];
-            if (!anim) continue;
-            if (TrySetBoolByName(anim, param, value))
-                return true;
-        }
-        return false;
-    }
-
-    Animator ResolveAnimatorByCommandKey(string key)
-    {
-        string n = NormalizeToken(key);
-        if (n.StartsWith("mom") || n.StartsWith("mother"))
+        string key = command ?? string.Empty;
+        if (key.IndexOf("mom", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            key.IndexOf("mother", StringComparison.OrdinalIgnoreCase) >= 0)
             return motherAnimator ? motherAnimator : defaultAnimator;
-        if (n.StartsWith("kid") || n.StartsWith("child"))
-            return childAnimator ? childAnimator : defaultAnimator;
-        return defaultAnimator;
-    }
 
-    string GetSpeakerSpeakingParam(string speaker)
-    {
-        string s = (speaker ?? "").Trim().ToLowerInvariant();
-        switch (s)
-        {
-            case "mother": return motherSpeakingParam;
-            case "child": return childSpeakingParam;
-            default: return string.Empty;
-        }
+        if (key.IndexOf("kid", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            key.IndexOf("child", StringComparison.OrdinalIgnoreCase) >= 0)
+            return childAnimator ? childAnimator : defaultAnimator;
+
+        return defaultAnimator;
     }
 }
 
@@ -327,12 +73,10 @@ public class AudioCommandTarget : MonoBehaviour
 
     public void Play(string command)
     {
-        if (string.IsNullOrWhiteSpace(command)) return;
-
         var binding = FindBinding(command);
         if (binding == null)
         {
-            RuntimeLog.Warning($"[AudioCommand] 找不到對應命令 {command}");
+            Debug.LogWarning($"[AudioCommand] 找不到對應命令 {command}");
             return;
         }
         var src = binding.source ? binding.source : defaultSource;
@@ -376,8 +120,6 @@ public class TimelineCommandTarget : MonoBehaviour
 
     public void Play(string command)
     {
-        if (string.IsNullOrWhiteSpace(command)) return;
-
         var binding = FindBinding(command);
         if (binding?.director)
             binding.director.Play();
@@ -441,19 +183,23 @@ public class CameraCommandTarget : MonoBehaviour
         var point = FindPoint(id);
         if (point == null)
         {
-            RuntimeLog.Warning($"[CameraCommand] 找不到 {id}");
+            Debug.LogWarning($"[CameraCommand] 找不到 {id}");
             return;
         }
         if (!rig)
             return;
+        var target = point.transform;
+        if (!target)
+            return;
+
         if (smoothMove)
         {
-            _currentTarget = point.transform;
+            _currentTarget = target;
         }
         else
         {
-            rig.position = point.transform.position;
-            rig.rotation = point.transform.rotation;
+            rig.position = target.position;
+            rig.rotation = target.rotation;
         }
     }
 

@@ -59,7 +59,7 @@ public class EmotionStateSimulator : MonoBehaviour
     {
         if (clip == null || clip.keyframes == null || clip.keyframes.Length == 0)
         {
-            RuntimeLog.Warning("[EmotionSim] clip empty");
+            Debug.LogWarning("[EmotionSim] clip empty");
             return;
         }
         _playing = true;

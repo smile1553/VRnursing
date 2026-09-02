@@ -159,14 +159,14 @@ public class RunAI : MonoBehaviour
     {
         int clamped = ClampStage(stage);
         if (logStageChanges)
-            RuntimeLog.Info($"[RunAI] stage -> {clamped}");
+            Debug.Log($"[RunAI] stage -> {clamped}");
 
         bool changed = _lastStage != clamped;
         _lastStage = clamped;
         _pendingStage = _lastStage; _pendingCount = 0;
         if (animator) animator.SetInteger(stageParam, _lastStage);
         else if (logStageChanges)
-            RuntimeLog.Warning("[RunAI] animator reference missing");
+            Debug.LogWarning("[RunAI] animator reference missing");
 
         if (changed)
             StageChanged?.Invoke(_lastStage);

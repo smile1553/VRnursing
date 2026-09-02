@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
@@ -108,6 +109,35 @@ public class WorldDirector : MonoBehaviour
         loopSetter(true);
     }
 
+    private bool ApplyKidEmotionState(string state)
+    {
+        if (kid == null || string.IsNullOrWhiteSpace(state)) return false;
+
+        if (string.Equals(state, "Calm", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "Normal", StringComparison.OrdinalIgnoreCase))
+        {
+            kid.ClearAllLoops();
+            return true;
+        }
+
+        if (string.Equals(state, "Uneasy", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "Fear", StringComparison.OrdinalIgnoreCase))
+        {
+            SetKidSingleLoop(kid.SetDisbelief);
+            return true;
+        }
+
+        if (string.Equals(state, "Crying", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "Cry", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "Meltdown", StringComparison.OrdinalIgnoreCase))
+        {
+            SetKidSingleLoop(kid.SetCrying);
+            return true;
+        }
+
+        return false;
+    }
+
     // -------------------------------------------------- Legacy compatibility for debug panels
 
     public void KidReactFear() => HandleEvent("Act1_KidFear");
@@ -160,6 +190,9 @@ public class WorldDirector : MonoBehaviour
 
         if (key == "emotion_score" && payload != null)
         {
+            if (ApplyKidEmotionState(payload.kidEmotionState))
+                return;
+
             float score = payload.tension != 0f
                 ? Mathf.InverseLerp(-5f, 5f, payload.tension) * 100f
                 : payload.stage * 25f;

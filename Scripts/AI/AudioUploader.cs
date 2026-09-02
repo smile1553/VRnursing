@@ -11,69 +11,26 @@ public class AudioUploader : MonoBehaviour
 
     [Header("Record")]
     public int sampleRate = 16000;
-    public int recordSeconds = 3;
-    [Range(0f, 0.05f)] public float minUploadRms = 0.003f;
+    public int recordSeconds = 1;
 
     [Header("Auto Loop")]
     public float loopInterval = 0f; // 追加延遲；0 代表接力錄
-    public bool continuousMicInLoop = true; // Loop 模式時持續開啟麥克風（系統麥克風燈會常亮）
-    public bool forceSegmentedLoop = true; // 穩定優先：強制使用分段錄音，避免部分裝置在 continuous 模式無資料
-    [Min(2)] public int continuousBufferSeconds = 20; // ring buffer 長度（秒）
-    [Min(1)] public int maxQueuedChunks = 2; // server 忙時最多保留幾段，避免延遲後一次噴一堆舊結果
-    [Header("Upload Queue")]
-    [Min(1)] public int maxUploadQueue = 4;
-    public bool dropOldestOnQueueFull = true;
 
     [Header("Voice Activity Detection (VAD)")]
-    public bool enableVad = true;
-    [Range(0f, 0.5f)] public float vadThreshold = 0.008f;      // legacy linear RMS threshold
+    public bool enableVad = false;
+    [Range(0f, 0.5f)] public float vadThreshold = 0.02f;      // 每個 frame 的平均能量門檻
     [Range(10f, 100f)] public float vadFrameMs = 30f;          // 分析用的 frame 長度（毫秒）
-    public float vadPreRollMs = 200f;                          // 在檢測到語音前保留的緩衝
-    public float vadPostRollMs = 200f;                         // 在語音結束後保留的緩衝
-    public float vadMinSpeechMs = 350f;                        // 低於這個長度就視為無效
-    [Header("Advanced VAD (dB)")]
-    public bool useDbVad = true;
-    public float startThresholdDb = -35f;
-    public float endThresholdDb = -45f;
-    public float maxSilenceMs = 600f;
-    public float endPaddingMs = 200f;
-    public bool autoCalibrateNoise = true;
-    public float noiseCalibrateSec = 1f;
-    public bool adaptiveNoiseTracking = true;
-    [Range(0.001f, 1f)] public float noiseTrackAlpha = 0.08f;
-    public float startAboveNoiseDb = 12f;
-    public float endAboveNoiseDb = 6f;
-    public float adaptiveNoiseCeilDb = -20f;
-    public bool logVadState = false;
-    public bool logUploads = false;
-
-    [Header("Microphone Selection")]
-    public int microphoneDeviceIndex = -1; // -1 = use OS default input device
+    public float vadPreRollMs = 80f;                           // 在檢測到語音前保留的緩衝
+    public float vadPostRollMs = 120f;                         // 在語音結束後保留的緩衝
+    public float vadMinSpeechMs = 120f;                        // 低於這個長度就視為無效
 
     string micDevice;
     Coroutine loopRoutine;
-    AudioClip liveClip;
-    int liveReadPos;
-    Coroutine startRetryRoutine;
-    Coroutine uploadWorkerRoutine;
-    readonly Queue<byte[]> pendingUploads = new Queue<byte[]>();
-    bool useContinuousAtRuntime;
-    bool noiseCalibrated;
-    float calibratedNoiseFloorDb = -55f;
-    string currentVadState = "Idle";
-
-    [Header("Startup Retry")]
-    public float startRetryInterval = 1f;
-    public int startRetryMaxTimes = 10;
 
     void Start()
     {
-        ConfigureMicrophoneDevice();
-    }
-
-    void OnDisable()
-    {
-        StopLoop();
+        if (Microphone.devices.Length > 0) micDevice = Microphone.devices[0];
+        else Debug.LogError("No microphone detected!");
     }
 
     // 給 UI 按鈕綁這個
@@ -81,38 +38,17 @@ public class AudioUploader : MonoBehaviour
     {
         if (string.IsNullOrEmpty(serverUrl))
         {
-            RuntimeLog.Warning("serverUrl not set yet.");
+            Debug.LogWarning("serverUrl not set yet.");
             return;
         }
-        if (Microphone.devices == null || Microphone.devices.Length == 0) return;
+        if (micDevice == null) return;
         StartCoroutine(CaptureAndSendOnce());
     }
 
     public void StartLoop()
     {
         if (loopRoutine != null) return;
-
-        if (!CanRecord())
-        {
-            RuntimeLog.Warning("[AudioUploader] StartLoop deferred: mic/server not ready.");
-            if (startRetryRoutine == null)
-                startRetryRoutine = StartCoroutine(RetryStartLoop());
-            return;
-        }
-
-        useContinuousAtRuntime = continuousMicInLoop && !forceSegmentedLoop;
-        noiseCalibrated = false;
-        currentVadState = "Idle";
-        if (continuousMicInLoop && forceSegmentedLoop)
-            RuntimeLog.Warning("[AudioUploader] forceSegmentedLoop=true, skip continuous mic mode.");
-
-        if (useContinuousAtRuntime && !StartContinuousMic())
-        {
-            RuntimeLog.Warning("[AudioUploader] Continuous mic start failed, fallback to segmented recording.");
-            useContinuousAtRuntime = false;
-        }
-
-        EnsureUploadWorker();
+        if (!CanRecord()) return;
         loopRoutine = StartCoroutine(CaptureLoop());
     }
 
@@ -123,141 +59,30 @@ public class AudioUploader : MonoBehaviour
             StopCoroutine(loopRoutine);
             loopRoutine = null;
         }
-
-        if (startRetryRoutine != null)
-        {
-            StopCoroutine(startRetryRoutine);
-            startRetryRoutine = null;
-        }
-
-        StopContinuousMic();
-        useContinuousAtRuntime = false;
-        currentVadState = "Idle";
-        if (uploadWorkerRoutine != null)
-        {
-            StopCoroutine(uploadWorkerRoutine);
-            uploadWorkerRoutine = null;
-        }
-        pendingUploads.Clear();
     }
 
     bool CanRecord()
     {
         if (string.IsNullOrEmpty(serverUrl))
         {
-            RuntimeLog.Warning("serverUrl not set yet.");
+            Debug.LogWarning("serverUrl not set yet.");
             return false;
         }
-
-        if (Microphone.devices == null || Microphone.devices.Length == 0)
+        if (micDevice == null)
         {
-            RuntimeLog.Warning("microphone not ready.");
+            Debug.LogWarning("microphone not ready.");
             return false;
         }
-
         return true;
-    }
-
-    void ConfigureMicrophoneDevice()
-    {
-        string[] devices = Microphone.devices;
-        if (devices == null || devices.Length == 0)
-        {
-            micDevice = null;
-            Debug.LogError("[AudioUploader] No microphone detected!");
-            return;
-        }
-
-        RuntimeLog.Info("[AudioUploader] Microphone devices: " + string.Join(" | ", devices));
-
-        if (microphoneDeviceIndex < 0)
-        {
-            micDevice = null; // Unity null device name = OS default input
-            RuntimeLog.Info("[AudioUploader] Using OS default microphone.");
-            return;
-        }
-
-        int idx = Mathf.Clamp(microphoneDeviceIndex, 0, devices.Length - 1);
-        micDevice = devices[idx];
-        RuntimeLog.Info($"[AudioUploader] Using microphone[{idx}]={micDevice}");
-    }
-
-    IEnumerator RetryStartLoop()
-    {
-        int maxRetry = Mathf.Max(1, startRetryMaxTimes);
-        float waitSec = Mathf.Max(0.2f, startRetryInterval);
-
-        for (int i = 0; i < maxRetry; i++)
-        {
-            yield return new WaitForSeconds(waitSec);
-            if (loopRoutine != null)
-                break;
-
-            if (!CanRecord())
-                continue;
-
-            startRetryRoutine = null;
-            StartLoop();
-            yield break;
-        }
-
-        Debug.LogError("[AudioUploader] StartLoop retry exhausted. Please check microphone permission/device.");
-        startRetryRoutine = null;
     }
 
     IEnumerator CaptureLoop()
     {
-        if (useContinuousAtRuntime)
-        {
-            yield return CaptureLoopContinuous();
-            yield break;
-        }
-
         while (true)
         {
             yield return CaptureAndSendOnce();
             if (loopInterval > 0f)
                 yield return new WaitForSeconds(loopInterval);
-        }
-    }
-
-    IEnumerator CaptureLoopContinuous()
-    {
-        int targetSamples = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(0.1f, recordSeconds) * sampleRate));
-        int maxPendingSamples = targetSamples * Mathf.Max(1, maxQueuedChunks);
-        float[] chunk = new float[targetSamples];
-
-        while (true)
-        {
-            if (liveClip == null || !Microphone.IsRecording(micDevice))
-                yield break;
-
-            int currentPos = Microphone.GetPosition(micDevice);
-            int available = GetAvailableSamples(currentPos, liveReadPos, liveClip.samples);
-
-            // Drop oldest backlog when server is slower than capture speed.
-            if (available > maxPendingSamples)
-            {
-                int drop = available - maxPendingSamples;
-                liveReadPos = AdvanceReadPosition(liveReadPos, drop, liveClip.samples);
-                available -= drop;
-                if (logUploads)
-                    RuntimeLog.Warning($"[AudioUploader] backlog drop {drop} samples (~{drop / (float)sampleRate:F2}s)");
-            }
-
-            if (available >= targetSamples)
-            {
-                liveClip.GetData(chunk, liveReadPos);
-                liveReadPos = AdvanceReadPosition(liveReadPos, targetSamples, liveClip.samples);
-                yield return ProcessAndUploadChunk(chunk);
-
-                if (loopInterval > 0f)
-                    yield return new WaitForSeconds(loopInterval);
-
-                continue;
-            }
-
-            yield return null;
         }
     }
 
@@ -272,7 +97,7 @@ public class AudioUploader : MonoBehaviour
             yield return CaptureUsingVad(result => samples = result);
             if (samples == null || samples.Length == 0)
             {
-                RuntimeLog.Warning("[AudioUploader] VAD 沒偵測到語音，跳過上傳。");
+                Debug.LogWarning("[AudioUploader] VAD 沒偵測到語音，跳過上傳。");
                 yield break;
             }
         }
@@ -292,182 +117,14 @@ public class AudioUploader : MonoBehaviour
             samples = new float[clip.samples];
             clip.GetData(samples, 0);
 
+            byte[] wavData = WavUtility.FromAudioFloat(samples, 1, sampleRate);
             Destroy(clip);
-            yield return ProcessAndUploadChunk(samples);
+            yield return Upload(wavData);
             yield break;
         }
 
-        yield return ProcessAndUploadChunk(samples);
-    }
-
-    IEnumerator ProcessAndUploadChunk(float[] rawSamples)
-    {
-        if (rawSamples == null || rawSamples.Length == 0)
-            yield break;
-
-        float[] uploadSamples = rawSamples;
-        if (enableVad)
-        {
-            uploadSamples = ApplyVadTrim(rawSamples, sampleRate);
-            if (!HasSpeech(uploadSamples))
-            {
-                RuntimeLog.Warning("[AudioUploader] VAD 沒偵測到語音，跳過上傳。");
-                yield break;
-            }
-        }
-
-        float rms = ComputeRms(uploadSamples);
-        float peak = ComputePeak(uploadSamples);
-        if (logUploads)
-            RuntimeLog.Info($"[AudioUploader] upload chunk samples={uploadSamples.Length} rms={rms:F5} peak={peak:F5} vad={enableVad}");
-
-        if (rms < minUploadRms)
-        {
-            if (logUploads)
-                RuntimeLog.Info($"[AudioUploader] skip low-rms chunk rms={rms:F5} < minUploadRms={minUploadRms:F5}");
-            yield break;
-        }
-
-        byte[] wav = WavUtility.FromAudioFloat(uploadSamples, 1, sampleRate);
-        EnqueueUpload(wav);
-        yield break;
-    }
-
-    void EnsureUploadWorker()
-    {
-        if (uploadWorkerRoutine == null)
-            uploadWorkerRoutine = StartCoroutine(UploadWorker());
-    }
-
-    void EnqueueUpload(byte[] bytes)
-    {
-        if (bytes == null || bytes.Length == 0)
-            return;
-
-        int limit = Mathf.Max(1, maxUploadQueue);
-        if (pendingUploads.Count >= limit)
-        {
-            if (!dropOldestOnQueueFull)
-            {
-                RuntimeLog.Warning($"[AudioUploader] upload queue full ({pendingUploads.Count}), drop newest chunk.");
-                return;
-            }
-
-            pendingUploads.Dequeue();
-            RuntimeLog.Warning($"[AudioUploader] upload queue full ({limit}), drop oldest chunk.");
-        }
-
-        pendingUploads.Enqueue(bytes);
-        EnsureUploadWorker();
-    }
-
-    IEnumerator UploadWorker()
-    {
-        while (true)
-        {
-            if (pendingUploads.Count == 0)
-            {
-                if (loopRoutine == null)
-                    break;
-
-                yield return null;
-                continue;
-            }
-
-            byte[] payload = pendingUploads.Dequeue();
-            yield return Upload(payload);
-        }
-
-        uploadWorkerRoutine = null;
-    }
-
-    bool StartContinuousMic()
-    {
-        StopContinuousMic();
-        if (Microphone.devices == null || Microphone.devices.Length == 0) return false;
-
-        int lengthSec = Mathf.Max(2, continuousBufferSeconds);
-        liveClip = Microphone.Start(micDevice, true, lengthSec, sampleRate);
-        if (!liveClip) return false;
-
-        liveReadPos = 0;
-        return true;
-    }
-
-    void StopContinuousMic()
-    {
-        if (Microphone.IsRecording(micDevice))
-            Microphone.End(micDevice);
-
-        if (liveClip != null)
-        {
-            Destroy(liveClip);
-            liveClip = null;
-        }
-        liveReadPos = 0;
-    }
-
-    static int GetAvailableSamples(int currentPos, int readPos, int clipSamples)
-    {
-        if (clipSamples <= 0 || currentPos < 0)
-            return 0;
-
-        int available = currentPos - readPos;
-        if (available < 0) available += clipSamples;
-        return available;
-    }
-
-    static int AdvanceReadPosition(int readPos, int sampleCount, int clipSamples)
-    {
-        if (clipSamples <= 0)
-            return 0;
-        return (readPos + sampleCount) % clipSamples;
-    }
-
-    static void AppendFrame(float[] target, ref int targetCount, float[] frame)
-    {
-        if (target == null || frame == null || targetCount >= target.Length)
-            return;
-
-        int copyCount = Mathf.Min(frame.Length, target.Length - targetCount);
-        Array.Copy(frame, 0, target, targetCount, copyCount);
-        targetCount += copyCount;
-    }
-
-    static void AppendPreRoll(float[] ring, float[] frame, ref int ringStart, ref int ringCount)
-    {
-        if (ring == null || ring.Length == 0 || frame == null)
-            return;
-
-        for (int i = 0; i < frame.Length; i++)
-        {
-            int writeIndex;
-            if (ringCount < ring.Length)
-            {
-                writeIndex = (ringStart + ringCount) % ring.Length;
-                ringCount++;
-            }
-            else
-            {
-                writeIndex = ringStart;
-                ringStart = (ringStart + 1) % ring.Length;
-            }
-
-            ring[writeIndex] = frame[i];
-        }
-    }
-
-    static void AppendPreRollToCollected(float[] ring, int ringStart, int ringCount, float[] target, ref int targetCount)
-    {
-        if (ring == null || target == null || ringCount <= 0 || targetCount >= target.Length)
-            return;
-
-        int copyCount = Mathf.Min(ringCount, target.Length - targetCount);
-        for (int i = 0; i < copyCount; i++)
-        {
-            int sourceIndex = (ringStart + i) % ring.Length;
-            target[targetCount++] = ring[sourceIndex];
-        }
+        byte[] vadWav = WavUtility.FromAudioFloat(samples, 1, sampleRate);
+        yield return Upload(vadWav);
     }
 
     IEnumerator CaptureUsingVad(Action<float[]> onFinished)
@@ -483,41 +140,29 @@ public class AudioUploader : MonoBehaviour
         while (Microphone.GetPosition(micDevice) <= 0) yield return null;
 
         int frameSamples = Mathf.Max(1, Mathf.RoundToInt(vadFrameMs * 0.001f * sampleRate));
+        float threshold = Mathf.Max(0f, vadThreshold);
         int preRollSamples = Mathf.Max(0, Mathf.RoundToInt(vadPreRollMs * 0.001f * sampleRate));
-        int endPaddingSamples = Mathf.Max(0, Mathf.RoundToInt(endPaddingMs * 0.001f * sampleRate));
+        int postRollFrames = Mathf.Max(0, Mathf.CeilToInt(vadPostRollMs / Mathf.Max(1f, vadFrameMs)));
         int minSpeechSamples = Mathf.Max(0, Mathf.RoundToInt(vadMinSpeechMs * 0.001f * sampleRate));
-        float maxSilenceSec = Mathf.Max(0f, maxSilenceMs * 0.001f);
 
-        if (useDbVad && autoCalibrateNoise && !noiseCalibrated)
-        {
-            yield return CalibrateNoiseFloor(clip, frameSamples);
-            noiseCalibrated = true;
-        }
-
-        GetRuntimeVadThresholds(out float runtimeStartDb, out float runtimeEndDb);
-
-        int expectedCapacity = Mathf.Min(clip.samples, Mathf.CeilToInt(maxDuration * sampleRate));
-        float[] collected = new float[Mathf.Max(frameSamples, expectedCapacity)];
-        int collectedCount = 0;
-        float[] preBuffer = preRollSamples > 0 ? new float[preRollSamples] : null;
-        int preBufferStart = 0;
-        int preBufferCount = 0;
+        Queue<float> preBuffer = preRollSamples > 0 ? new Queue<float>(preRollSamples + frameSamples) : null;
+        List<float> collected = new List<float>();
 
         bool speechStarted = false;
-        bool collectingPadding = false;
-        int paddingCollected = 0;
-        float silenceSec = 0f;
-        int readPos = Mathf.Max(0, Microphone.GetPosition(micDevice) - frameSamples);
+        int silenceFrames = 0;
+        int readPos = 0;
         float elapsed = 0f;
-        float timeout = maxDuration + 1.0f;
-        float[] frameBuffer = new float[frameSamples];
+        float timeout = maxDuration + 0.5f;
 
-        currentVadState = "Idle";
+        float[] frameBuffer = new float[frameSamples];
 
         while (true)
         {
             bool recording = Microphone.IsRecording(micDevice);
             int currentPos = Microphone.GetPosition(micDevice);
+
+            if (!recording && currentPos <= 0 && readPos >= currentPos)
+                break;
 
             int samplesAvailable = currentPos - readPos;
             if (samplesAvailable < frameSamples)
@@ -536,58 +181,42 @@ public class AudioUploader : MonoBehaviour
             clip.GetData(frameBuffer, readPos);
             readPos += frameSamples;
 
-            float rms = ComputeRms(frameBuffer);
-            float db = LinearToDb(rms);
+            float sum = 0f;
+            for (int i = 0; i < frameSamples; i++)
+                sum += Mathf.Abs(frameBuffer[i]);
+            float avg = sum / frameSamples;
 
             if (!speechStarted)
             {
-                currentVadState = "Idle";
-                UpdateAdaptiveNoiseFloor(db);
-                GetRuntimeVadThresholds(out runtimeStartDb, out runtimeEndDb);
                 if (preBuffer != null)
-                    AppendPreRoll(preBuffer, frameBuffer, ref preBufferStart, ref preBufferCount);
+                {
+                    for (int i = 0; i < frameSamples; i++)
+                    {
+                        if (preBuffer.Count >= preRollSamples)
+                            preBuffer.Dequeue();
+                        preBuffer.Enqueue(frameBuffer[i]);
+                    }
+                }
 
-                if (db >= runtimeStartDb)
+                if (avg >= threshold)
                 {
                     speechStarted = true;
-                    currentVadState = "Speaking";
-                    if (preBuffer != null && preBufferCount > 0)
-                        AppendPreRollToCollected(preBuffer, preBufferStart, preBufferCount, collected, ref collectedCount);
-                    AppendFrame(collected, ref collectedCount, frameBuffer);
-                    silenceSec = 0f;
-                    if (logVadState)
-                        RuntimeLog.Info($"[AudioUploader/VAD] start db={db:F1}, startTh={runtimeStartDb:F1}, endTh={runtimeEndDb:F1}");
+                    if (preBuffer != null && preBuffer.Count > 0)
+                        collected.AddRange(preBuffer);
+                    collected.AddRange(frameBuffer);
+                    silenceFrames = 0;
                 }
             }
             else
             {
-                AppendFrame(collected, ref collectedCount, frameBuffer);
-
-                if (collectingPadding)
-                {
-                    paddingCollected += frameSamples;
-                    currentVadState = "EndPadding";
-                    if (paddingCollected >= endPaddingSamples)
-                        break;
-                    continue;
-                }
-
-                if (db >= runtimeEndDb)
-                {
-                    silenceSec = 0f;
-                    currentVadState = "Speaking";
-                }
+                collected.AddRange(frameBuffer);
+                if (avg >= threshold)
+                    silenceFrames = 0;
                 else
                 {
-                    silenceSec += (float)frameSamples / sampleRate;
-                    currentVadState = "SilenceCounting";
-                    if (silenceSec >= maxSilenceSec)
-                    {
-                        collectingPadding = true;
-                        paddingCollected = 0;
-                        if (endPaddingSamples <= 0)
-                            break;
-                    }
+                    silenceFrames++;
+                    if (postRollFrames <= 0 || silenceFrames >= postRollFrames)
+                        break;
                 }
             }
 
@@ -596,105 +225,29 @@ public class AudioUploader : MonoBehaviour
         }
 
         int recordedSamples = Mathf.Clamp(Mathf.Max(readPos, Microphone.GetPosition(micDevice)), 0, clip.samples);
+        float[] fallback = null;
+        if (recordedSamples > 0)
+        {
+            fallback = new float[recordedSamples];
+            clip.GetData(fallback, 0);
+        }
+
         Microphone.End(micDevice);
 
         float[] result = null;
-        if (collectedCount >= minSpeechSamples)
+        if (collected.Count >= minSpeechSamples)
         {
-            result = new float[collectedCount];
-            Array.Copy(collected, result, collectedCount);
+            result = collected.ToArray();
         }
-        else
+        else if (fallback != null)
         {
-            if (recordedSamples > 0)
-            {
-                float[] fallback = new float[recordedSamples];
-                clip.GetData(fallback, 0);
-
-                float[] trimmed = ApplyVadTrim(fallback, sampleRate);
-                if (HasSpeech(trimmed))
-                    result = trimmed;
-                else if (HasSpeech(fallback))
-                    result = fallback;
-            }
+            float[] trimmed = ApplyVadTrim(fallback, sampleRate);
+            if (!ReferenceEquals(trimmed, fallback))
+                result = trimmed;
         }
 
         Destroy(clip);
-        currentVadState = "Idle";
         onFinished?.Invoke(result);
-    }
-
-    IEnumerator CalibrateNoiseFloor(AudioClip clip, int frameSamples)
-    {
-        int targetSamples = Mathf.Max(frameSamples, Mathf.RoundToInt(Mathf.Max(0.2f, noiseCalibrateSec) * sampleRate));
-        int readPos = 0;
-        int collected = 0;
-        float[] frameBuffer = new float[frameSamples];
-        float timeout = Mathf.Max(1.0f, noiseCalibrateSec + 0.8f);
-        float elapsed = 0f;
-        float dbSum = 0f;
-        int dbCount = 0;
-
-        while (collected < targetSamples && elapsed < timeout)
-        {
-            int currentPos = Microphone.GetPosition(micDevice);
-            int available = currentPos - readPos;
-            if (available < frameSamples)
-            {
-                elapsed += Time.deltaTime;
-                yield return null;
-                continue;
-            }
-
-            clip.GetData(frameBuffer, readPos);
-            readPos += frameSamples;
-            collected += frameSamples;
-            dbSum += LinearToDb(ComputeRms(frameBuffer));
-            dbCount++;
-        }
-
-        if (dbCount > 0)
-        {
-            calibratedNoiseFloorDb = dbSum / dbCount;
-        }
-        else
-        {
-            calibratedNoiseFloorDb = -55f;
-        }
-
-        if (logVadState)
-            RuntimeLog.Info($"[AudioUploader/VAD] noiseFloor={calibratedNoiseFloorDb:F1} dB");
-    }
-
-    void GetRuntimeVadThresholds(out float runtimeStartDb, out float runtimeEndDb)
-    {
-        if (!useDbVad)
-        {
-            runtimeStartDb = LinearToDb(Mathf.Max(1e-6f, vadThreshold));
-            runtimeEndDb = LinearToDb(Mathf.Max(1e-6f, vadThreshold * 0.7f));
-            return;
-        }
-
-        bool useNoiseRelative = autoCalibrateNoise || adaptiveNoiseTracking;
-        runtimeStartDb = useNoiseRelative ? Mathf.Max(startThresholdDb, calibratedNoiseFloorDb + startAboveNoiseDb) : startThresholdDb;
-        runtimeEndDb = useNoiseRelative ? Mathf.Max(endThresholdDb, calibratedNoiseFloorDb + endAboveNoiseDb) : endThresholdDb;
-
-        if (runtimeEndDb >= runtimeStartDb)
-            runtimeEndDb = runtimeStartDb - 1f;
-    }
-
-    void UpdateAdaptiveNoiseFloor(float frameDb)
-    {
-        if (!useDbVad || !adaptiveNoiseTracking)
-            return;
-
-        // Only learn clearly non-speech frames to avoid pulling thresholds upward while user talks.
-        float guardCeil = Mathf.Min(adaptiveNoiseCeilDb, startThresholdDb - 3f);
-        if (frameDb > guardCeil)
-            return;
-
-        float alpha = Mathf.Clamp01(noiseTrackAlpha);
-        calibratedNoiseFloorDb = Mathf.Lerp(calibratedNoiseFloorDb, frameDb, alpha);
     }
 
     IEnumerator Upload(byte[] bytes)
@@ -711,14 +264,9 @@ public class AudioUploader : MonoBehaviour
 #else
             if (!req.isNetworkError && !req.isHttpError)
 #endif
-            {
-                if (logUploads)
-                    RuntimeLog.Info("Upload OK: " + req.downloadHandler.text);
-            }
+                Debug.Log("Upload OK: " + req.downloadHandler.text);
             else
-            {
                 Debug.LogError("Upload Error: " + req.error);
-            }
         }
     }
 
@@ -775,60 +323,5 @@ public class AudioUploader : MonoBehaviour
         float[] trimmed = new float[length];
         Array.Copy(source, startSample, trimmed, 0, length);
         return trimmed;
-    }
-
-    float LinearToDb(float rms)
-    {
-        return 20f * Mathf.Log10(Mathf.Max(1e-6f, rms));
-    }
-
-    bool HasSpeech(float[] source)
-    {
-        if (source == null || source.Length == 0) return false;
-
-        int frameSamples = Mathf.Max(1, Mathf.RoundToInt(vadFrameMs * 0.001f * sampleRate));
-        float threshold = Mathf.Max(0f, vadThreshold);
-        int frames = Mathf.CeilToInt(source.Length / (float)frameSamples);
-
-        for (int frame = 0; frame < frames; frame++)
-        {
-            int offset = frame * frameSamples;
-            int count = Math.Min(frameSamples, source.Length - offset);
-            if (count <= 0) break;
-
-            float sum = 0f;
-            for (int i = 0; i < count; i++)
-                sum += Mathf.Abs(source[offset + i]);
-
-            if ((sum / count) >= threshold)
-                return true;
-        }
-
-        return false;
-    }
-
-    float ComputeRms(float[] source)
-    {
-        if (source == null || source.Length == 0) return 0f;
-
-        double sum = 0.0;
-        for (int i = 0; i < source.Length; i++)
-            sum += source[i] * source[i];
-
-        return Mathf.Sqrt((float)(sum / source.Length));
-    }
-
-    float ComputePeak(float[] source)
-    {
-        if (source == null || source.Length == 0) return 0f;
-
-        float peak = 0f;
-        for (int i = 0; i < source.Length; i++)
-        {
-            float a = Mathf.Abs(source[i]);
-            if (a > peak) peak = a;
-        }
-
-        return peak;
     }
 }

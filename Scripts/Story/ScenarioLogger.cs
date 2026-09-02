@@ -1,20 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 using UnityEngine;
 
 public class ScenarioLogger : MonoBehaviour
 {
     public ScenarioController controller;
     public EmotionStateManager emotionState;
-    public bool logToConsole = false;
+    public bool logToConsole = true;
     public bool autoSaveOnComplete = true;
     public string fileNamePrefix = "scenario_log";
 
     readonly List<ScenarioLogEvent> _events = new();
     float _startTime;
-    bool _saveInProgress;
 
     void Awake()
     {
@@ -90,16 +88,13 @@ public class ScenarioLogger : MonoBehaviour
         };
         _events.Add(evt);
         if (logToConsole)
-            RuntimeLog.Info($"[ScenarioLog] {type} {subject} @ {evt.time:0.00}s stage={evt.emotion?.stage}");
+            Debug.Log($"[ScenarioLog] {type} {subject} @ {evt.time:0.00}s stage={evt.emotion?.stage}");
     }
 
-    public async void SaveToFile()
+    public void SaveToFile()
     {
-        if (_saveInProgress)
-            return;
-
-        _saveInProgress = true;
         string folder = Path.Combine(Application.persistentDataPath, "ScenarioLogs");
+        Directory.CreateDirectory(folder);
         string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         string fileName = string.IsNullOrEmpty(fileNamePrefix) ? "scenario_log" : fileNamePrefix;
         string path = Path.Combine(folder, fileName + "_" + timeStamp + ".json");
@@ -109,24 +104,8 @@ public class ScenarioLogger : MonoBehaviour
             events = _events.ToArray()
         };
         var json = JsonUtility.ToJson(payload, true);
-
-        try
-        {
-            await Task.Run(() =>
-            {
-                Directory.CreateDirectory(folder);
-                File.WriteAllText(path, json);
-            });
-            RuntimeLog.Info("[ScenarioLog] saved -> " + path);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("[ScenarioLog] save failed: " + ex.Message);
-        }
-        finally
-        {
-            _saveInProgress = false;
-        }
+        File.WriteAllText(path, json);
+        Debug.Log("[ScenarioLog] saved -> " + path);
     }
 }
 
