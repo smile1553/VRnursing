@@ -14,6 +14,11 @@ public class GameBootstrapper : MonoBehaviour
     [Header("AI / Emotion")]
     public RunAI_Network runAiNetwork;
 
+    [Header("Assessment")]
+    public bool autoCreateScoreExport = true;
+    public ScenarioScoreManager scoreManager;
+    public ScenarioScoreCsvExporter scoreCsvExporter;
+
     [Header("Options")]
     public bool dontDestroyOnLoad = true;
     public bool autoStartScenario = true;
@@ -37,6 +42,7 @@ public class GameBootstrapper : MonoBehaviour
 
         EnsureScenarioCommandRuntime();
         EnsurePerformanceScoreRuntime();
+        EnsureAssessmentRuntime();
     }
 
     void Start()
@@ -134,5 +140,30 @@ public class GameBootstrapper : MonoBehaviour
         string kid = target.childAnimator ? target.childAnimator.name : "null";
         string def = target.defaultAnimator ? target.defaultAnimator.name : "null";
         RuntimeLog.Info($"[GameBootstrapper] Animation auto-bind mother={mom}, child={kid}, default={def}");
+    }
+
+    void EnsureAssessmentRuntime()
+    {
+        if (!autoCreateScoreExport) return;
+
+        if (!scoreManager)
+            scoreManager = FindObjectOfType<ScenarioScoreManager>();
+        if (!scoreManager)
+        {
+            var go = new GameObject("ScenarioAssessmentRuntime");
+            scoreManager = go.AddComponent<ScenarioScoreManager>();
+            RuntimeLog.Info("[GameBootstrapper] Auto-created ScenarioScoreManager.");
+        }
+
+        if (!scoreCsvExporter)
+            scoreCsvExporter = FindObjectOfType<ScenarioScoreCsvExporter>();
+        if (!scoreCsvExporter)
+        {
+            scoreCsvExporter = scoreManager.gameObject.AddComponent<ScenarioScoreCsvExporter>();
+            RuntimeLog.Info("[GameBootstrapper] Auto-created ScenarioScoreCsvExporter.");
+        }
+
+        scoreManager.controller = scenarioController;
+        scoreCsvExporter.scoreManager = scoreManager;
     }
 }
