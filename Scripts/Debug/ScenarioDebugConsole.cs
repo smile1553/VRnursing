@@ -1,12 +1,12 @@
 using UnityEngine;
+using TMPro;
 
 public class ScenarioDebugConsole : MonoBehaviour
 {
     public ScenarioController controller;
     public EmotionStateManager emotionState;
-    public EmotionStateSimulator emotionSimulator;
     public bool showWindow = true;
-    public Rect windowRect = new Rect(20, 20, 520, 360);
+    public Rect windowRect = new Rect(20, 20, 360, 260);
 
     string _jumpStepId = "";
     Vector2 _scroll;
@@ -17,8 +17,6 @@ public class ScenarioDebugConsole : MonoBehaviour
             controller = FindObjectOfType<ScenarioController>();
         if (!emotionState)
             emotionState = FindObjectOfType<EmotionStateManager>();
-        if (!emotionSimulator)
-            emotionSimulator = FindObjectOfType<EmotionStateSimulator>();
     }
 
     void OnGUI()
@@ -43,13 +41,6 @@ public class ScenarioDebugConsole : MonoBehaviour
         GUILayout.EndHorizontal();
 
         GUILayout.BeginHorizontal();
-        if (GUILayout.Button("Stage 0")) SetStage(0);
-        if (GUILayout.Button("Stage 1")) SetStage(1);
-        if (GUILayout.Button("Stage 2")) SetStage(2);
-        if (GUILayout.Button("ApplyManual")) emotionSimulator?.ApplyManual();
-        GUILayout.EndHorizontal();
-
-        GUILayout.BeginHorizontal();
         GUILayout.Label("Jump Id", GUILayout.Width(60));
         _jumpStepId = GUILayout.TextField(_jumpStepId);
         if (GUILayout.Button("Go", GUILayout.Width(50))) controller?.JumpToStepId(_jumpStepId);
@@ -65,7 +56,7 @@ public class ScenarioDebugConsole : MonoBehaviour
                 GUILayout.BeginHorizontal();
                 GUILayout.Label(i.ToString(), GUILayout.Width(30));
                 GUILayout.Label(step.id, GUILayout.Width(120));
-                if (GUILayout.Button("Jump", GUILayout.Width(60))) controller.JumpToIndex(i);
+                //if (GUILayout.Button("Jump", GUILayout.Width(60))) controller.JumpToIndex(i);
                 GUILayout.EndHorizontal();
             }
             GUILayout.EndScrollView();
@@ -73,11 +64,5 @@ public class ScenarioDebugConsole : MonoBehaviour
 
         if (GUILayout.Button("Close")) showWindow = false;
         GUI.DragWindow(new Rect(0, 0, 10000, 20));
-    }
-
-    void SetStage(int stage)
-    {
-        if (emotionSimulator == null) return;
-        emotionSimulator.stage = stage;
     }
 }

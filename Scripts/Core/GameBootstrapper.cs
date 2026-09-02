@@ -5,6 +5,7 @@ public class GameBootstrapper : MonoBehaviour
 {
     [Header("Core References")]
     public EmotionStateManager emotionStateManager;
+    public PerformanceScoreManager performanceScoreManager;
 
     [Header("Scenario")]
     public ScenarioController scenarioController;
@@ -12,6 +13,11 @@ public class GameBootstrapper : MonoBehaviour
 
     [Header("AI / Emotion")]
     public RunAI_Network runAiNetwork;
+
+    [Header("Assessment")]
+    public bool autoCreateScoreExport = true;
+    public ScenarioScoreManager scoreManager;
+    public ScenarioScoreCsvExporter scoreCsvExporter;
 
     [Header("Options")]
     public bool dontDestroyOnLoad = true;
@@ -28,21 +34,25 @@ public class GameBootstrapper : MonoBehaviour
             scenarioController = FindObjectOfType<ScenarioController>();
         if (!runAiNetwork)
             runAiNetwork = FindObjectOfType<RunAI_Network>();
+        if (!performanceScoreManager)
+            performanceScoreManager = FindObjectOfType<PerformanceScoreManager>();
 
         if (scenarioController && defaultScenario && scenarioController.scenario == null)
             scenarioController.scenario = defaultScenario;
 
         EnsureScenarioCommandRuntime();
+        EnsurePerformanceScoreRuntime();
+        EnsureAssessmentRuntime();
     }
 
     void Start()
     {
         if (runAiNetwork == null)
-            Debug.LogWarning("[GameBootstrapper] RunAI_Network not found. Emotion feed will not start.");
+            RuntimeLog.Warning("[GameBootstrapper] RunAI_Network not found. Emotion feed will not start.");
         if (emotionStateManager == null)
-            Debug.LogWarning("[GameBootstrapper] EmotionStateManager not found.");
+            RuntimeLog.Warning("[GameBootstrapper] EmotionStateManager not found.");
         if (scenarioController == null)
-            Debug.LogWarning("[GameBootstrapper] ScenarioController not found.");
+            RuntimeLog.Warning("[GameBootstrapper] ScenarioController not found.");
 
         if (autoStartScenario && scenarioController != null)
             scenarioController.StartScenario();
@@ -53,7 +63,7 @@ public class GameBootstrapper : MonoBehaviour
         var controller = scenarioController ? scenarioController : FindObjectOfType<ScenarioController>();
         if (controller == null)
         {
-            Debug.LogWarning("[GameBootstrapper] ScenarioController not found. Skip command runtime setup.");
+            RuntimeLog.Warning("[GameBootstrapper] ScenarioController not found. Skip command runtime setup.");
             return;
         }
 
@@ -64,7 +74,7 @@ public class GameBootstrapper : MonoBehaviour
         {
             var go = new GameObject("ScenarioCommandRuntime");
             executor = go.AddComponent<ScenarioCommandExecutor>();
-            Debug.Log("[GameBootstrapper] Auto-created ScenarioCommandExecutor.");
+            RuntimeLog.Info("[GameBootstrapper] Auto-created ScenarioCommandExecutor.");
         }
 
         if (animTarget == null)
@@ -73,13 +83,37 @@ public class GameBootstrapper : MonoBehaviour
             animTarget = go.GetComponent<AnimationCommandTarget>();
             if (animTarget == null)
                 animTarget = go.AddComponent<AnimationCommandTarget>();
-            Debug.Log("[GameBootstrapper] Auto-created AnimationCommandTarget.");
+            RuntimeLog.Info("[GameBootstrapper] Auto-created AnimationCommandTarget.");
         }
 
         executor.controller = controller;
         executor.animationTarget = animTarget;
 
         AutoBindLikelyAnimators(animTarget);
+    }
+
+    void EnsurePerformanceScoreRuntime()
+    {
+        var controller = scenarioController ? scenarioController : FindObjectOfType<ScenarioController>();
+        var emotion = emotionStateManager ? emotionStateManager : FindObjectOfType<EmotionStateManager>();
+        if (controller == null || emotion == null)
+            return;
+
+        if (performanceScoreManager == null)
+        {
+            var runtime = GameObject.Find("ScenarioCommandRuntime");
+            if (runtime == null)
+                runtime = new GameObject("ScenarioCommandRuntime");
+
+            performanceScoreManager = runtime.GetComponent<PerformanceScoreManager>();
+            if (performanceScoreManager == null)
+                performanceScoreManager = runtime.AddComponent<PerformanceScoreManager>();
+
+            RuntimeLog.Info("[GameBootstrapper] Auto-created PerformanceScoreManager.");
+        }
+
+        performanceScoreManager.controller = controller;
+        performanceScoreManager.emotionState = emotion;
     }
 
     static void AutoBindLikelyAnimators(AnimationCommandTarget target)
@@ -105,6 +139,31 @@ public class GameBootstrapper : MonoBehaviour
         string mom = target.motherAnimator ? target.motherAnimator.name : "null";
         string kid = target.childAnimator ? target.childAnimator.name : "null";
         string def = target.defaultAnimator ? target.defaultAnimator.name : "null";
-        Debug.Log($"[GameBootstrapper] Animation auto-bind mother={mom}, child={kid}, default={def}");
+        RuntimeLog.Info($"[GameBootstrapper] Animation auto-bind mother={mom}, child={kid}, default={def}");
+    }
+
+    void EnsureAssessmentRuntime()
+    {
+        if (!autoCreateScoreExport) return;
+
+        if (!scoreManager)
+            scoreManager = FindObjectOfType<ScenarioScoreManager>();
+        if (!scoreManager)
+        {
+            var go = new GameObject("ScenarioAssessmentRuntime");
+            scoreManager = go.AddComponent<ScenarioScoreManager>();
+            RuntimeLog.Info("[GameBootstrapper] Auto-created ScenarioScoreManager.");
+        }
+
+        if (!scoreCsvExporter)
+            scoreCsvExporter = FindObjectOfType<ScenarioScoreCsvExporter>();
+        if (!scoreCsvExporter)
+        {
+            scoreCsvExporter = scoreManager.gameObject.AddComponent<ScenarioScoreCsvExporter>();
+            RuntimeLog.Info("[GameBootstrapper] Auto-created ScenarioScoreCsvExporter.");
+        }
+
+        scoreManager.controller = scenarioController;
+        scoreCsvExporter.scoreManager = scoreManager;
     }
 }

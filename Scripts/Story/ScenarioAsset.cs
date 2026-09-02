@@ -32,13 +32,10 @@ public class ScenarioStep
     [TextArea]
     public string playerPrompt;
     public string[] expectedKeywords;
-    [Tooltip("允許使用 LLM intent 作為輔助判斷")]
+    [Header("LLM Intent Match")]
     public bool allowLlmAssist = true;
-    [Tooltip("可接受的 LLM intent 名稱")]
     public string[] expectedIntents;
-    [Range(0f, 1f)]
-    [Tooltip("LLM intent 最低信心值")]
-    public float minLlmConfidence = 0.7f;
+    [Range(0f, 1f)] public float minLlmConfidence = 0.7f;
     public ScenarioHint[] hints;
     public ScenarioSubtitle subtitle;
     public ScenarioQuiz quiz;

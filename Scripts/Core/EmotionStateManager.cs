@@ -4,29 +4,39 @@ using UnityEngine;
 [Serializable]
 public class EmotionSnapshot
 {
+    public string source;
+    public string utteranceId;
     public float tension;
     public string emotion;
     public string text;
+    public string rawText;
+    public string kidEmotionState;
+    public string previousKidEmotionState;
     public EmotionLlmInfo llm;
     public int stage;
-    public string rawJson;
-    public string timestampIso;
     public string sourceScenarioStepId;
     public int sourceScenarioStepIndex = -1;
+    public string rawJson;
+    public string timestampIso;
 
     public EmotionSnapshot Clone()
     {
         return new EmotionSnapshot
         {
+            source = source,
+            utteranceId = utteranceId,
             tension = tension,
             emotion = emotion,
             text = text,
+            rawText = rawText,
+            kidEmotionState = kidEmotionState,
+            previousKidEmotionState = previousKidEmotionState,
             llm = llm != null ? llm.Clone() : null,
             stage = stage,
-            rawJson = rawJson,
-            timestampIso = timestampIso,
             sourceScenarioStepId = sourceScenarioStepId,
-            sourceScenarioStepIndex = sourceScenarioStepIndex
+            sourceScenarioStepIndex = sourceScenarioStepIndex,
+            rawJson = rawJson,
+            timestampIso = timestampIso
         };
     }
 }
@@ -137,21 +147,27 @@ public class EmotionStateManager : MonoBehaviour
             var data = JsonUtility.FromJson<EmotionPayload>(json);
             if (data != null)
             {
+                snapshot.source = data.source;
+                snapshot.utteranceId = data.utteranceId;
                 snapshot.tension = data.tension;
                 snapshot.emotion = data.emotion;
                 snapshot.text = data.text;
-                snapshot.sourceScenarioStepId = data.source_step_id;
-                snapshot.sourceScenarioStepIndex = data.source_step_index;
-                if (data.llm != null)
+                snapshot.rawText = string.IsNullOrEmpty(data.raw_text) ? data.rawText : data.raw_text;
+                snapshot.kidEmotionState = data.kidEmotionState;
+                snapshot.previousKidEmotionState = data.previousKidEmotionState;
+                snapshot.sourceScenarioStepId = ResolveStepId(data);
+                snapshot.sourceScenarioStepIndex = ResolveStepIndex(data);
+                var llmSource = data.llm;
+                if (llmSource != null)
                 {
                     snapshot.llm = new EmotionLlmInfo
                     {
-                        intent = data.llm.intent,
-                        actionTag = data.llm.action_tag,
-                        sentiment = data.llm.sentiment,
-                        toxicity = data.llm.toxicity,
-                        coercion = data.llm.coercion,
-                        confidence = data.llm.confidence
+                        intent = llmSource.intent,
+                        actionTag = string.IsNullOrEmpty(llmSource.actionTag) ? llmSource.action_tag : llmSource.actionTag,
+                        sentiment = llmSource.sentiment,
+                        toxicity = llmSource.toxicity,
+                        coercion = llmSource.coercion,
+                        confidence = llmSource.confidence
                     };
                 }
             }
@@ -170,6 +186,8 @@ public class EmotionStateManager : MonoBehaviour
     {
         var snapshot = Current?.Clone() ?? new EmotionSnapshot();
         snapshot.stage = stage;
+        snapshot.kidEmotionState = null;
+        snapshot.previousKidEmotionState = null;
         if (string.IsNullOrEmpty(snapshot.timestampIso))
             snapshot.timestampIso = DateTime.UtcNow.ToString("o");
         IsManualOverrideActive = false;
@@ -182,12 +200,36 @@ public class EmotionStateManager : MonoBehaviour
         OnEmotionChanged?.Invoke(Current);
     }
 
+    static string ResolveStepId(EmotionPayload data)
+    {
+        if (!string.IsNullOrEmpty(data.scenarioStepId)) return data.scenarioStepId;
+        if (!string.IsNullOrEmpty(data.sourceScenarioStepId)) return data.sourceScenarioStepId;
+        return data.source_step_id;
+    }
+
+    static int ResolveStepIndex(EmotionPayload data)
+    {
+        if (data.scenarioStepIndex >= 0) return data.scenarioStepIndex;
+        if (data.sourceScenarioStepIndex >= 0) return data.sourceScenarioStepIndex;
+        return data.source_step_index;
+    }
+
     [Serializable]
     class EmotionPayload
     {
+        public string source;
+        public string utteranceId;
         public float tension;
         public string emotion;
         public string text;
+        public string raw_text;
+        public string rawText;
+        public string kidEmotionState;
+        public string previousKidEmotionState;
+        public string scenarioStepId;
+        public int scenarioStepIndex = -1;
+        public string sourceScenarioStepId;
+        public int sourceScenarioStepIndex = -1;
         public string source_step_id;
         public int source_step_index = -1;
         public LlmPayload llm;
@@ -198,6 +240,7 @@ public class EmotionStateManager : MonoBehaviour
     {
         public string intent;
         public string action_tag;
+        public string actionTag;
         public string sentiment;
         public float toxicity;
         public float coercion;

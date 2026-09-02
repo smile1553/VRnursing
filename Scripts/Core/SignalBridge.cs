@@ -120,7 +120,7 @@ public class SignalBridge : MonoBehaviour
     void OnEmotionChanged(EmotionSnapshot snapshot)
     {
         if (snapshot == null) return;
-        EmitWorld("emotion_score", new SignalPayload { stage = snapshot.stage, tension = snapshot.tension });
+        EmitWorld("emotion_score", new SignalPayload { stage = snapshot.stage, tension = snapshot.tension, kidEmotionState = snapshot.kidEmotionState });
     }
 
     void EmitWorld(string key, SignalPayload payload)

@@ -8,10 +8,11 @@ public class SignalPayload
     public bool correct;
     public int stage;
     public float tension;
+    public string kidEmotionState;
     public string targetId;
 
     public override string ToString()
     {
-        return $"{{stepId={stepId}, choiceIndex={choiceIndex}, correct={correct}, stage={stage}, tension={tension}, targetId={targetId}}}";
+        return $"{{stepId={stepId}, choiceIndex={choiceIndex}, correct={correct}, stage={stage}, tension={tension}, kidEmotionState={kidEmotionState}, targetId={targetId}}}";
     }
 }

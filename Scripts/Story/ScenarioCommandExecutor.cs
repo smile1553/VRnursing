@@ -7,10 +7,6 @@ public class ScenarioCommandExecutor : MonoBehaviour
     public AudioCommandTarget audioTarget;
     public TimelineCommandTarget timelineTarget;
     public CameraCommandTarget cameraTarget;
-    [Header("Auto Animation Fallback")]
-    public bool autoAnimationFallback = true;
-    public bool fallbackUseStepId = true;
-    public bool fallbackUseSpeaker = true;
 
     void Awake()
     {
@@ -40,37 +36,9 @@ public class ScenarioCommandExecutor : MonoBehaviour
 
     void HandleStep(ScenarioStep step)
     {
-        if (step == null) return;
-
-        bool hasAnimationCommand = false;
-        if (step.commands != null)
-        {
-            foreach (var cmd in step.commands)
-            {
-                if (cmd != null && cmd.type == ScenarioCommandType.PlayAnimation)
-                    hasAnimationCommand = true;
-                Execute(cmd);
-            }
-        }
-
-        if (!autoAnimationFallback || animationTarget == null || hasAnimationCommand)
-            return;
-
-        if (fallbackUseStepId && !string.IsNullOrWhiteSpace(step.id))
-        {
-            if (animationTarget.Play($"step:{step.id}"))
-                return;
-            if (animationTarget.Play(step.id))
-                return;
-        }
-
-        if (fallbackUseSpeaker)
-        {
-            string speaker = step.speaker.ToString();
-            if (animationTarget.Play($"speaker:{speaker}"))
-                return;
-            animationTarget.Play(speaker);
-        }
+        if (step?.commands == null) return;
+        foreach (var cmd in step.commands)
+            Execute(cmd);
     }
 
     void Execute(ScenarioCommand cmd)
@@ -94,7 +62,7 @@ public class ScenarioCommandExecutor : MonoBehaviour
                 timelineTarget?.TriggerVfx(cmd.payload);
                 break;
             default:
-                RuntimeLog.Info($"[ScenarioCommand] 未處理的命令 {cmd.type} payload={cmd.payload}");
+                Debug.Log($"[ScenarioCommand] 未處理的命令 {cmd.type} payload={cmd.payload}");
                 break;
         }
     }
