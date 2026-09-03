@@ -5,6 +5,7 @@ public class GameBootstrapper : MonoBehaviour
 {
     [Header("Core References")]
     public EmotionStateManager emotionStateManager;
+    public PerformanceScoreManager performanceScoreManager;
 
     [Header("Scenario")]
     public ScenarioController scenarioController;
@@ -33,11 +34,14 @@ public class GameBootstrapper : MonoBehaviour
             scenarioController = FindObjectOfType<ScenarioController>();
         if (!runAiNetwork)
             runAiNetwork = FindObjectOfType<RunAI_Network>();
+        if (!performanceScoreManager)
+            performanceScoreManager = FindObjectOfType<PerformanceScoreManager>();
 
         if (scenarioController && defaultScenario && scenarioController.scenario == null)
             scenarioController.scenario = defaultScenario;
 
         EnsureScenarioCommandRuntime();
+        EnsurePerformanceScoreRuntime();
         EnsureAssessmentRuntime();
     }
 
@@ -86,6 +90,30 @@ public class GameBootstrapper : MonoBehaviour
         executor.animationTarget = animTarget;
 
         AutoBindLikelyAnimators(animTarget);
+    }
+
+    void EnsurePerformanceScoreRuntime()
+    {
+        var controller = scenarioController ? scenarioController : FindObjectOfType<ScenarioController>();
+        var emotion = emotionStateManager ? emotionStateManager : FindObjectOfType<EmotionStateManager>();
+        if (controller == null || emotion == null)
+            return;
+
+        if (performanceScoreManager == null)
+        {
+            var runtime = GameObject.Find("ScenarioCommandRuntime");
+            if (runtime == null)
+                runtime = new GameObject("ScenarioCommandRuntime");
+
+            performanceScoreManager = runtime.GetComponent<PerformanceScoreManager>();
+            if (performanceScoreManager == null)
+                performanceScoreManager = runtime.AddComponent<PerformanceScoreManager>();
+
+            RuntimeLog.Info("[GameBootstrapper] Auto-created PerformanceScoreManager.");
+        }
+
+        performanceScoreManager.controller = controller;
+        performanceScoreManager.emotionState = emotion;
     }
 
     static void AutoBindLikelyAnimators(AnimationCommandTarget target)
