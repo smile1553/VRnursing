@@ -69,6 +69,7 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
             trace.sourceStepIndex = snapshot.sourceScenarioStepIndex;
             trace.text = snapshot.text ?? string.Empty;
             trace.intent = snapshot.llm?.intent ?? string.Empty;
+            trace.actionTag = snapshot.llm?.actionTag ?? string.Empty;
             trace.confidence = snapshot.llm != null && !float.IsNaN(snapshot.llm.confidence) ? snapshot.llm.confidence : 0f;
         }
 
@@ -151,7 +152,8 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
                 matchedByKeyword = keywordMatched,
                 matchedByLlm = llmMatched,
                 hitKeywords = _hitKeywords.ToArray(),
-                intent = snapshot.llm?.intent
+                intent = snapshot.llm?.intent,
+                actionTag = snapshot.llm?.actionTag
             });
             if (trace != null)
                 trace.advanced = true;
@@ -220,7 +222,7 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
     {
         if (!enableLlmAssist) return false;
         if (step == null || !step.allowLlmAssist) return false;
-        if (llm == null || string.IsNullOrWhiteSpace(llm.intent)) return false;
+        if (llm == null) return false;
 
         var intents = step.expectedIntents;
         if (intents == null || intents.Length == 0) return false;
@@ -229,12 +231,16 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
         float minConfidence = Mathf.Clamp01(step.minLlmConfidence > 0f ? step.minLlmConfidence : defaultLlmConfidence);
         if (confidence < minConfidence) return false;
 
-        string currentIntent = llm.intent.Trim();
+        string currentIntent = string.IsNullOrWhiteSpace(llm.intent) ? string.Empty : llm.intent.Trim();
+        string currentActionTag = string.IsNullOrWhiteSpace(llm.actionTag) ? string.Empty : llm.actionTag.Trim();
         for (int i = 0; i < intents.Length; i++)
         {
             var expected = intents[i];
             if (string.IsNullOrWhiteSpace(expected)) continue;
-            if (string.Equals(expected.Trim(), currentIntent, StringComparison.OrdinalIgnoreCase))
+            string normalizedExpected = expected.Trim();
+            if (string.Equals(normalizedExpected, currentIntent, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (string.Equals(normalizedExpected, currentActionTag, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
         return false;
@@ -272,8 +278,9 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
     {
         string text = snapshot.text ?? string.Empty;
         string intent = snapshot.llm?.intent ?? string.Empty;
+        string actionTag = snapshot.llm?.actionTag ?? string.Empty;
         float conf = snapshot.llm != null && !float.IsNaN(snapshot.llm.confidence) ? snapshot.llm.confidence : 0f;
-        return $"{stepId}|{text}|{intent}|{conf:0.00}";
+        return $"{stepId}|{text}|{intent}|{actionTag}|{conf:0.00}";
     }
 
     DecisionTrace CreateTrace()
@@ -301,6 +308,7 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
         public int sourceStepIndex;
         public string text;
         public string intent;
+        public string actionTag;
         public float confidence;
         public bool keywordMatched;
         public bool llmMatched;
@@ -320,4 +328,5 @@ public class ScenarioKeywordMatch
     public bool matchedByLlm;
     public string[] hitKeywords;
     public string intent;
+    public string actionTag;
 }
