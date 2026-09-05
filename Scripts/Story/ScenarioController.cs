@@ -1,9 +1,9 @@
-using System;
+﻿using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
-using UnityEngine.UI; // 保留給 Button 使用
-using TMPro; // 必須引用，處理 TMP 元件
+using UnityEngine.UI;
+using TMPro;
 
 public class ScenarioController : MonoBehaviour
 {
@@ -11,8 +11,34 @@ public class ScenarioController : MonoBehaviour
     public ScenarioAsset scenario;
     public EmotionStateManager emotionManager;
 
+    [Header("字幕設定")]
+    public float defaultSubtitleDuration = 1.5f;
+    public bool repeatSubtitleWhileBlocked = true;
+    public float repeatSubtitleInterval = 3f;
+
     [Header("UI 綁定")]
     public ScenarioUiBinding ui;
+
+    [Header("Quiz Placement (2F)")]
+    [SerializeField] private Transform quizUiAnchor;
+    [SerializeField] private Transform xrRigRoot;
+    [SerializeField] private Transform quizXrSpawn;
+    [Header("情緒全域 Gate")]
+    public bool suppressGateAfterQuiz = true;
+    public float gateSuppressSeconds = 0.8f;
+
+    [Header("Auto Flow")]
+    public bool forceAutoAdvanceAll = true;
+    public float forcedAutoAdvanceDelay = 3f;
+    public bool keepPlayerActionStepsManual = true;
+    public bool keepNurseStepsManual = true;
+    public bool ensureSubtitleDurationBeforeAdvance = true;
+
+    public bool globalEmotionGate = false;
+    public int globalAnxiousStageThreshold = 1;
+    public int globalFallbackStepIndex = -1;
+    public int globalCalmStageRequirement = 0;
+    [TextArea] public string globalBlockedSubtitle = "芽芽太緊張，先安撫後再繼續。";
 
     [Header("事件")]
     public StringEvent cursorTargetChanged;
@@ -26,7 +52,12 @@ public class ScenarioController : MonoBehaviour
     ScenarioStep _currentStep;
     Coroutine _subtitleRoutine;
     ScenarioQuiz _activeQuiz;
+    QuizUi _activeQuizUi;
+    int _quizShownCount;
     bool _waitingForCalm;
+    float _gateSuppressedUntil;
+    string _lastSubtitleText;
+    float _lastSubtitleShownAt;
 
     public ScenarioStep CurrentStep => _currentStep;
     public int CurrentStepIndex => _currentIndex;
@@ -52,20 +83,44 @@ public class ScenarioController : MonoBehaviour
 
     void Start()
     {
+        ClearUiText();
         if (scenario != null)
             StartScenario();
+    }
+
+    void Update()
+    {
+        if (!repeatSubtitleWhileBlocked) return;
+        if (!_waitingForCalm) return;
+        if (string.IsNullOrEmpty(_lastSubtitleText)) return;
+        if (repeatSubtitleInterval <= 0f) return;
+        if (Time.time - _lastSubtitleShownAt >= repeatSubtitleInterval)
+        {
+            ShowSubtitle(_lastSubtitleText, defaultSubtitleDuration);
+        }
     }
 
     public void StartScenario()
     {
         _currentIndex = -1;
+        _quizShownCount = 0;
+        _activeQuizUi = null;
         ProceedToIndex(0);
+    }
+
+    public void SelectChoice(int index)
+    {
+        if (_activeQuiz == null) return;
+        OnQuizOptionSelected(index);
     }
 
     public void Next()
     {
-        if (_currentStep == null) return;
-        if (!CanProgressPastCurrent()) return;
+        if (_currentStep == null)
+            return;
+
+        if (!CanProgressPastCurrent())
+            return;
 
         if (!string.IsNullOrEmpty(_currentStep.id))
             stepCompleted?.Invoke(_currentStep.id);
@@ -82,24 +137,50 @@ public class ScenarioController : MonoBehaviour
 
     public void JumpToStepId(string stepId)
     {
-        if (scenario == null || string.IsNullOrEmpty(stepId)) return;
+        if (scenario == null || string.IsNullOrEmpty(stepId))
+            return;
         int index = scenario.steps.FindIndex(s => s != null && string.Equals(s.id, stepId, StringComparison.OrdinalIgnoreCase));
-        if (index >= 0) ProceedToIndex(index);
+        if (index >= 0)
+            ProceedToIndex(index);
+        else
+            Debug.LogWarning($"[Scenario] 找不到 id={stepId} 的步驟");
+    }
+
+    public void JumpToIndex(int index)
+    {
+        ProceedToIndex(index);
     }
 
     bool CanProgressPastCurrent()
     {
+        if (globalEmotionGate && Time.time >= _gateSuppressedUntil)
+        {
+            int gateStage = emotionManager?.Current?.stage ?? 0;
+            if (gateStage >= globalAnxiousStageThreshold)
+            {
+                _waitingForCalm = true;
+                if (!string.IsNullOrEmpty(globalBlockedSubtitle))
+                    ShowSubtitle(globalBlockedSubtitle, 3f);
+                if (globalFallbackStepIndex >= 0)
+                    ProceedToIndex(globalFallbackStepIndex);
+                return false;
+            }
+        }
+
         var gate = _currentStep.emotionGate;
         if (gate == null) return true;
         if (!gate.blockWhenAnxious) return true;
 
-        int stage = emotionManager?.Current?.stage ?? 0;
-        if (stage >= gate.anxiousStageThreshold)
+        int stepStage = emotionManager?.Current?.stage ?? 0;
+        if (stepStage >= gate.anxiousStageThreshold)
         {
             _waitingForCalm = true;
             if (!string.IsNullOrEmpty(gate.blockedSubtitle))
                 ShowSubtitle(gate.blockedSubtitle, 3f);
-            if (gate.fallbackStepIndex >= 0) ProceedToIndex(gate.fallbackStepIndex);
+            if (gate.fallbackStepIndex >= 0)
+            {
+                ProceedToIndex(gate.fallbackStepIndex);
+            }
             return false;
         }
         return true;
@@ -130,12 +211,41 @@ public class ScenarioController : MonoBehaviour
 
         if (ui != null)
         {
-            if (ui.speakerText) ui.speakerText.text = step.speaker.ToString();
-            if (ui.dialogueText) ui.dialogueText.text = step.dialogue;
-            if (ui.playerPromptText)
+            if (ui.speakerText)
+                ui.speakerText.text = step.speaker.ToString();
+            if (ui.speakerTMP)
+                ui.speakerTMP.text = step.speaker.ToString();
+
+            if (ui.dialogueText)
+                ui.dialogueText.text = step.dialogue;
+            if (ui.dialogueTMP)
+                ui.dialogueTMP.text = step.dialogue;
+
+            if (step.playerActionRequired && !string.IsNullOrEmpty(step.playerPrompt))
             {
-                ui.playerPromptText.gameObject.SetActive(step.playerActionRequired);
-                ui.playerPromptText.text = step.playerPrompt;
+                if (ui.playerPromptText)
+                {
+                    ui.playerPromptText.gameObject.SetActive(true);
+                    ui.playerPromptText.text = step.playerPrompt;
+                }
+                if (ui.playerPromptTMP)
+                {
+                    ui.playerPromptTMP.gameObject.SetActive(true);
+                    ui.playerPromptTMP.text = step.playerPrompt;
+                }
+            }
+            else
+            {
+                if (ui.playerPromptText)
+                {
+                    ui.playerPromptText.gameObject.SetActive(false);
+                    ui.playerPromptText.text = string.Empty;
+                }
+                if (ui.playerPromptTMP)
+                {
+                    ui.playerPromptTMP.gameObject.SetActive(false);
+                    ui.playerPromptTMP.text = string.Empty;
+                }
             }
         }
 
@@ -149,6 +259,23 @@ public class ScenarioController : MonoBehaviour
         if (step.quiz != null && !string.IsNullOrEmpty(step.quiz.question))
         {
             ShowQuiz(step.quiz);
+            return;
+        }
+
+        if (forceAutoAdvanceAll)
+        {
+            if (keepPlayerActionStepsManual && step.playerActionRequired)
+                return;
+            if (keepNurseStepsManual && step.speaker == ScenarioSpeaker.Nurse)
+                return;
+
+            float delay = forcedAutoAdvanceDelay > 0f ? forcedAutoAdvanceDelay : defaultSubtitleDuration;
+            if (ensureSubtitleDurationBeforeAdvance && step.subtitle != null)
+                delay = Mathf.Max(delay, step.subtitle.duration);
+            if (delay > 0f)
+                StartCoroutine(AutoAdvance(delay));
+            else
+                Next();
             return;
         }
 
@@ -170,11 +297,29 @@ public class ScenarioController : MonoBehaviour
     void ShowSubtitle(string text, float duration)
     {
         if (ui == null) return;
-        if (ui.subtitleRoot) ui.subtitleRoot.SetActive(true);
-        if (ui.subtitleText) ui.subtitleText.text = text;
+        if (ui.subtitleRoot)
+            ui.subtitleRoot.SetActive(true);
+        if (ui.subtitleText)
+        {
+            ui.subtitleText.text = text;
+            if (!ui.subtitleRoot)
+                ui.subtitleText.gameObject.SetActive(true);
+        }
+        if (ui.subtitleTMP)
+        {
+            ui.subtitleTMP.text = text;
+            if (!ui.subtitleRoot)
+                ui.subtitleTMP.gameObject.SetActive(true);
+        }
+        _lastSubtitleText = text;
+        _lastSubtitleShownAt = Time.time;
 
-        if (_subtitleRoutine != null) StopCoroutine(_subtitleRoutine);
-        if (duration > 0f) _subtitleRoutine = StartCoroutine(HideSubtitleLater(duration));
+        if (_subtitleRoutine != null)
+            StopCoroutine(_subtitleRoutine);
+
+        float hideAfter = duration > 0f ? duration : defaultSubtitleDuration;
+        if (hideAfter > 0f)
+            _subtitleRoutine = StartCoroutine(HideSubtitleLater(hideAfter));
     }
 
     IEnumerator HideSubtitleLater(float delay)
@@ -186,61 +331,124 @@ public class ScenarioController : MonoBehaviour
     void HideSubtitle()
     {
         if (ui == null) return;
-        if (_subtitleRoutine != null) { StopCoroutine(_subtitleRoutine); _subtitleRoutine = null; }
-        if (ui.subtitleRoot) ui.subtitleRoot.SetActive(false);
+        if (_subtitleRoutine != null)
+        {
+            StopCoroutine(_subtitleRoutine);
+            _subtitleRoutine = null;
+        }
+        if (ui.subtitleRoot)
+            ui.subtitleRoot.SetActive(false);
+        if (ui.subtitleText)
+        {
+            ui.subtitleText.text = string.Empty;
+            if (!ui.subtitleRoot)
+                ui.subtitleText.gameObject.SetActive(false);
+        }
+        if (ui.subtitleTMP)
+        {
+            ui.subtitleTMP.text = string.Empty;
+            if (!ui.subtitleRoot)
+                ui.subtitleTMP.gameObject.SetActive(false);
+        }
     }
 
     void ShowQuiz(ScenarioQuiz quiz)
     {
         _activeQuiz = quiz;
-        if (ui == null || ui.quiz == null) return;
+        if (ui == null) return;
 
-        if (ui.quiz.root) ui.quiz.root.SetActive(true);
-        if (ui.quiz.questionText) ui.quiz.questionText.text = quiz.question;
-        if (ui.quiz.explanationText) ui.quiz.explanationText.text = string.Empty;
+        var quizUi = ResolveQuizUi();
+        _activeQuizUi = quizUi;
+        if (quizUi == null) return;
 
-        for (int i = 0; i < ui.quiz.options.Length; i++)
+        if (quizUi.root)
+            quizUi.root.SetActive(true);
+        AlignQuizUi(quizUi.root);
+        MoveRigToQuizSpawn();
+        if (quizUi.questionText)
+            quizUi.questionText.text = quiz.question;
+        if (quizUi.explanationText)
+            quizUi.explanationText.text = string.Empty;
+
+        for (int i = 0; i < quizUi.options.Length; i++)
         {
-            var option = ui.quiz.options[i];
+            var option = quizUi.options[i];
             bool valid = quiz.options != null && i < quiz.options.Length && !string.IsNullOrEmpty(quiz.options[i]);
-
-            if (option != null && option.button != null)
+            if (option != null)
             {
                 option.button.gameObject.SetActive(valid);
                 option.button.onClick.RemoveAllListeners();
-                if (valid)
-                {
-                    option.label.text = quiz.options[i];
-                    int captured = i;
-                    option.button.onClick.AddListener(() => OnQuizOptionSelected(captured));
-                }
             }
+            if (!valid) continue;
+
+            string label = quiz.options[i];
+            option.label.text = label;
+            int captured = i;
+            option.button.onClick.AddListener(() => OnQuizOptionSelected(captured));
         }
     }
 
     void HideQuiz()
     {
         _activeQuiz = null;
-        if (ui == null || ui.quiz == null) return;
-        if (ui.quiz.root) ui.quiz.root.SetActive(false);
+        if (ui == null) return;
+        var quizUi = _activeQuizUi != null ? _activeQuizUi : ui.quiz;
+        if (quizUi == null) return;
+        if (quizUi.root)
+            quizUi.root.SetActive(false);
+        foreach (var opt in quizUi.options)
+        {
+            if (opt?.button != null)
+                opt.button.onClick.RemoveAllListeners();
+        }
+        _activeQuizUi = null;
+    }
+
+    QuizUi ResolveQuizUi()
+    {
+        if (ui.quizPanels != null && ui.quizPanels.Length > 0)
+        {
+            var index = Mathf.Clamp(_quizShownCount, 0, ui.quizPanels.Length - 1);
+            _quizShownCount++;
+            return ui.quizPanels[index];
+        }
+        return ui.quiz;
+    }
+
+    void AlignQuizUi(GameObject root)
+    {
+        if (root == null) return;
+        if (quizUiAnchor == null) return;
+        var rootTransform = root.transform;
+        rootTransform.position = quizUiAnchor.position;
+        rootTransform.rotation = quizUiAnchor.rotation;
+        rootTransform.localScale = quizUiAnchor.localScale;
+    }
+
+    void MoveRigToQuizSpawn()
+    {
+        if (xrRigRoot == null || quizXrSpawn == null) return;
+        xrRigRoot.position = quizXrSpawn.position;
+        var yaw = quizXrSpawn.rotation.eulerAngles.y;
+        xrRigRoot.rotation = Quaternion.Euler(0f, yaw, 0f);
     }
 
     void OnQuizOptionSelected(int index)
     {
-        SelectChoice(index);
-    }
-
-    public void SelectChoice(int index)
-    {
-        if (_activeQuiz == null) return;
+        if (_activeQuiz == null)
+            return;
 
         bool correct = index == _activeQuiz.correctIndex;
         quizAnswered?.Invoke(_activeQuiz, index, correct);
+        if (suppressGateAfterQuiz)
+            _gateSuppressedUntil = Time.time + Mathf.Max(0f, gateSuppressSeconds);
         if (!correct)
         {
-            if (!string.IsNullOrEmpty(_activeQuiz.explanation) && ui?.quiz?.explanationText)
-                ui.quiz.explanationText.text = _activeQuiz.explanation;
-            if (_activeQuiz.requireCorrectToProceed) return;
+            var quizUi = _activeQuizUi != null ? _activeQuizUi : ui?.quiz;
+            if (!string.IsNullOrEmpty(_activeQuiz.explanation) && quizUi?.explanationText)
+                quizUi.explanationText.text = _activeQuiz.explanation;
+            if (_activeQuiz.requireCorrectToProceed)
+                return;
         }
 
         HideQuiz();
@@ -249,44 +457,76 @@ public class ScenarioController : MonoBehaviour
 
     void HandleEmotionChanged(EmotionSnapshot snapshot)
     {
-        if (!_waitingForCalm || _currentStep == null) return;
+        if (!_waitingForCalm || _currentStep == null)
+            return;
 
         var gate = _currentStep.emotionGate;
-        if (gate != null && snapshot.stage <= gate.calmStageRequirement)
+        if (gate == null)
         {
             _waitingForCalm = false;
+            return;
+        }
+
+        int calmRequirement = globalEmotionGate ? globalCalmStageRequirement : gate.calmStageRequirement;
+        if (snapshot.stage <= calmRequirement)
+        {
+            _waitingForCalm = false;
+            if (ui?.subtitleText)
+                ui.subtitleText.text = string.Empty;
+            if (ui?.subtitleTMP)
+                ui.subtitleTMP.text = string.Empty;
         }
     }
 
-    // --- 資料結構定義 ---
-
-    [Serializable]
-    public class ScenarioUiBinding
+    void ClearUiText()
     {
-        public TMP_Text speakerText;    // 改為 TMP_Text
-        public TMP_Text dialogueText;   // 改為 TMP_Text
-        public TMP_Text playerPromptText; // 改為 TMP_Text
-        public GameObject subtitleRoot;
-        public TMP_Text subtitleText;   // 改為 TMP_Text
-        public QuizUi quiz;
+        if (ui == null) return;
+        if (ui.speakerText) ui.speakerText.text = string.Empty;
+        if (ui.speakerTMP) ui.speakerTMP.text = string.Empty;
+        if (ui.dialogueText) ui.dialogueText.text = string.Empty;
+        if (ui.dialogueTMP) ui.dialogueTMP.text = string.Empty;
+        if (ui.playerPromptText) { ui.playerPromptText.text = string.Empty; ui.playerPromptText.gameObject.SetActive(false); }
+        if (ui.playerPromptTMP) { ui.playerPromptTMP.text = string.Empty; ui.playerPromptTMP.gameObject.SetActive(false); }
+        if (ui.subtitleText) ui.subtitleText.text = string.Empty;
+        if (ui.subtitleTMP) ui.subtitleTMP.text = string.Empty;
+        if (ui.subtitleRoot) ui.subtitleRoot.SetActive(false);
     }
 
-    [Serializable]
+    [System.Serializable]
+    public class ScenarioUiBinding
+    {
+        public Text speakerText;
+        public Text dialogueText;
+        public Text playerPromptText;
+        public GameObject subtitleRoot;
+        public Text subtitleText;
+        public TMP_Text speakerTMP;
+        public TMP_Text dialogueTMP;
+        public TMP_Text playerPromptTMP;
+        public TMP_Text subtitleTMP;
+        public QuizUi quiz;
+        public QuizUi[] quizPanels;
+    }
+
+    [System.Serializable]
     public class QuizUi
     {
         public GameObject root;
-        public TMP_Text questionText;    // 改為 TMP_Text
-        public TMP_Text explanationText; // 改為 TMP_Text
+        public Text questionText;
+        public Text explanationText;
         public QuizOption[] options;
     }
 
-    [Serializable]
+    [System.Serializable]
     public class QuizOption
     {
-        public UnityEngine.UI.Button button; // 強制指定路徑
-        public TMP_Text label;               // 改為 TMP_Text
+        public Button button;
+        public Text label;
     }
 
-    [Serializable] public class StringEvent : UnityEvent<string> { }
-    [Serializable] public class QuizAnswerEvent : UnityEvent<ScenarioQuiz, int, bool> { }
+    [System.Serializable]
+    public class StringEvent : UnityEvent<string> { }
+
+    [System.Serializable]
+    public class QuizAnswerEvent : UnityEvent<ScenarioQuiz, int, bool> { }
 }

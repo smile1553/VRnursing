@@ -46,6 +46,7 @@ public class EmotionLlmInfo
 {
     public string intent;
     public string sentiment;
+    public string actionTag;
     public float toxicity;
     public float coercion;
     public float confidence;
@@ -154,8 +155,10 @@ public class EmotionStateManager : MonoBehaviour
                 snapshot.rawText = string.IsNullOrEmpty(data.raw_text) ? data.rawText : data.raw_text;
                 snapshot.kidEmotionState = data.kidEmotionState;
                 snapshot.previousKidEmotionState = data.previousKidEmotionState;
-                snapshot.sourceScenarioStepId = string.IsNullOrEmpty(data.scenarioStepId) ? data.sourceScenarioStepId : data.scenarioStepId;
-                snapshot.sourceScenarioStepIndex = data.scenarioStepIndex >= 0 ? data.scenarioStepIndex : data.sourceScenarioStepIndex;
+                string camelStepId = string.IsNullOrEmpty(data.scenarioStepId) ? data.sourceScenarioStepId : data.scenarioStepId;
+                snapshot.sourceScenarioStepId = string.IsNullOrEmpty(camelStepId) ? data.source_step_id : camelStepId;
+                int camelStepIndex = data.scenarioStepIndex >= 0 ? data.scenarioStepIndex : data.sourceScenarioStepIndex;
+                snapshot.sourceScenarioStepIndex = camelStepIndex >= 0 ? camelStepIndex : data.source_step_index;
                 var llmSource = data.llm;
                 if (llmSource != null)
                 {
@@ -163,6 +166,7 @@ public class EmotionStateManager : MonoBehaviour
                     {
                         intent = llmSource.intent,
                         sentiment = llmSource.sentiment,
+                        actionTag = string.IsNullOrEmpty(llmSource.actionTag) ? llmSource.action_tag : llmSource.actionTag,
                         toxicity = llmSource.toxicity,
                         coercion = llmSource.coercion,
                         confidence = llmSource.confidence
@@ -214,6 +218,8 @@ public class EmotionStateManager : MonoBehaviour
         public int scenarioStepIndex = -1;
         public string sourceScenarioStepId;
         public int sourceScenarioStepIndex = -1;
+        public string source_step_id;
+        public int source_step_index = -1;
         public LlmPayload llm;
     }
 
@@ -222,6 +228,8 @@ public class EmotionStateManager : MonoBehaviour
     {
         public string intent;
         public string sentiment;
+        public string actionTag;
+        public string action_tag;
         public float toxicity;
         public float coercion;
         public float confidence;
