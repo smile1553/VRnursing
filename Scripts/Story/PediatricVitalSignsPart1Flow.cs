@@ -14,7 +14,12 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     [SerializeField] private MomAnimationPlayer momAnimation;
     [SerializeField] private YayaAnimationPlayer yayaAnimation;
 
-    [Header("Dialogue Text")]
+    [Header("Dialogue Manager")]
+    [SerializeField] private NewDialogueManager dialogueManager;
+    [SerializeField] private int momOkLineIndex = 0;
+    [SerializeField] private int yayaRefuseLineIndex = 1;
+
+    [Header("Dialogue Text Fallback")]
     [SerializeField] private TMP_Text speakerText;
     [SerializeField] private TMP_Text dialogueText;
 
@@ -41,40 +46,32 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     private int dialogueIndex = -1;
     private Coroutine dialogueRoutine;
 
-    private readonly string[] speakers =
+    private static readonly string[] FallbackSpeakers =
     {
-        "媽媽",
-        "芽芽"
+        "\u5abd\u5abd",
+        "\u82bd\u82bd"
     };
 
-    private readonly string[] dialogues =
+    private static readonly string[] FallbackDialogues =
     {
-        "好！",
-        "我不要打針！我不要！"
+        "\u597d\u7684\u9ebb\u7169\u59b3\u4e86",
+        "\u6211\u4e0d\u8981\uff01\u6211\u4e0d\u8981\u6253\u91dd\uff01"
     };
 
-    private const string Question =
-        "考題1：請問護生要先測量哪一樣生命徵象，比較不會加重芽芽的害怕？\n\n" +
-        "A. 測量血壓\n" +
-        "B. 聽診心尖脈\n" +
-        "C. 測量耳溫\n" +
-        "D. 觀察呼吸次數";
+    private const string CorrectFeedback = "\u7b54\u5c0d\u4e86\uff01";
+    private const string WrongFeedback = "\u518d\u60f3\u4e00\u4e0b\uff0c\u54ea\u4e00\u9805\u6bd4\u8f03\u4e0d\u6703\u52a0\u91cd\u82bd\u82bd\u7684\u5bb3\u6015\uff1f";
 
     private void Awake()
     {
-        if (dialoguePanel != null)
-            dialoguePanel.SetActive(false);
-
-        if (quizPanel != null)
-            quizPanel.SetActive(false);
-
+        ResolveDialogueManager();
+        SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
+        SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
         ClearFeedback();
     }
 
     public void SkipVoiceAndStartDialogue()
     {
-        if (instructionPanel != null)
-            instructionPanel.SetActive(false);
+        HideInstructionUI();
 
         dialogueIndex = 0;
         ShowDialogue();
@@ -85,7 +82,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         StopDialogueRoutine();
         dialogueIndex++;
 
-        if (dialogueIndex >= dialogues.Length)
+        if (dialogueIndex >= FallbackDialogues.Length)
         {
             ShowQuiz();
             return;
@@ -116,17 +113,21 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
     private void ShowDialogue()
     {
-        if (dialoguePanel != null)
-            dialoguePanel.SetActive(true);
+        ResolveDialogueManager();
+        SetPanelVisible(dialoguePanel, true, "Dialogue_Panel");
+        SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
 
-        if (quizPanel != null)
-            quizPanel.SetActive(false);
+        int lineIndex = dialogueIndex == 0 ? momOkLineIndex : yayaRefuseLineIndex;
 
-        if (speakerText != null)
-            speakerText.text = speakers[dialogueIndex];
-
-        if (dialogueText != null)
-            dialogueText.text = dialogues[dialogueIndex];
+        if (dialogueManager != null)
+        {
+            dialogueManager.StopPlayback();
+            dialogueManager.ShowLine(lineIndex);
+        }
+        else
+        {
+            ShowFallbackDialogue();
+        }
 
         PlayDialogueAnimation(dialogueIndex);
         AudioClip clip = PlayDialogueAudio(dialogueIndex);
@@ -139,6 +140,15 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         }
     }
 
+    private void ShowFallbackDialogue()
+    {
+        if (speakerText != null)
+            speakerText.text = FallbackSpeakers[dialogueIndex];
+
+        if (dialogueText != null)
+            dialogueText.text = FallbackDialogues[dialogueIndex];
+    }
+
     private void PlayDialogueAnimation(int index)
     {
         if (index == 0)
@@ -148,11 +158,8 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
             return;
         }
 
-        if (index == 1)
-        {
-            momAnimation?.PlayStandingIdle();
-            yayaAnimation?.PlaySittingDisbelief();
-        }
+        momAnimation?.PlayStandingIdle();
+        yayaAnimation?.PlaySittingDisbelief();
     }
 
     private AudioClip PlayDialogueAudio(int index)
@@ -160,13 +167,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         if (dialogueAudioSource == null)
             return null;
 
-        AudioClip clip = index switch
-        {
-            0 => momOkClip,
-            1 => yayaNoInjectionClip,
-            _ => null
-        };
-
+        AudioClip clip = index == 0 ? momOkClip : yayaNoInjectionClip;
         dialogueAudioSource.Stop();
 
         if (clip != null)
@@ -186,17 +187,11 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     private void ShowQuiz()
     {
         StopDialogueRoutine();
-
-        if (dialoguePanel != null)
-            dialoguePanel.SetActive(false);
-
-        if (quizPanel != null)
-            quizPanel.SetActive(true);
-
-        if (quizQuestionText != null)
-            quizQuestionText.text = Question;
+        SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
+        SetPanelVisible(quizPanel, true, "Quiz_Panel_1");
 
         momAnimation?.PlayStandingIdle();
+        yayaAnimation?.PlaySittingDisbelief();
         ClearFeedback();
     }
 
@@ -205,14 +200,12 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         bool correct = index == 3;
 
         if (feedbackText != null)
-            feedbackText.text = correct
-                ? "答對了！先觀察呼吸次數，比較不會加重芽芽的害怕。"
-                : "再想想看。現在芽芽很害怕，先不要碰觸身體會比較合適。";
+            feedbackText.text = correct ? CorrectFeedback : WrongFeedback;
 
         if (correct)
         {
-            if (hideQuizAfterCorrect && quizPanel != null)
-                quizPanel.SetActive(false);
+            if (hideQuizAfterCorrect)
+                SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
 
             onCorrectAnswer?.Invoke();
         }
@@ -242,5 +235,80 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
         StopCoroutine(dialogueRoutine);
         dialogueRoutine = null;
+    }
+
+    private void ResolveDialogueManager()
+    {
+        if (dialogueManager != null)
+            return;
+
+        if (dialoguePanel != null)
+            dialogueManager = dialoguePanel.GetComponentInChildren<NewDialogueManager>(true);
+    }
+
+    private void HideInstructionUI()
+    {
+        if (instructionPanel == null)
+            return;
+
+        if (!instructionPanel.activeSelf)
+            return;
+
+        Canvas canvas = instructionPanel.GetComponent<Canvas>();
+        if (canvas == null)
+        {
+            instructionPanel.SetActive(false);
+            return;
+        }
+
+        SetChildVisible(instructionPanel.transform, "TopHint_Panel", false);
+        SetChildVisible(instructionPanel.transform, "SkipVoice_Button", false);
+    }
+
+    private static void SetChildVisible(Transform parent, string childName, bool visible)
+    {
+        Transform child = FindDeepChild(parent, childName);
+        if (child != null)
+            child.gameObject.SetActive(visible);
+    }
+
+    private static void SetPanelVisible(GameObject target, bool visible, string preferredChildName)
+    {
+        if (target == null)
+            return;
+
+        if (visible && !target.activeSelf)
+            target.SetActive(true);
+
+        Canvas canvas = target.GetComponent<Canvas>();
+        if (canvas != null)
+        {
+            Transform child = FindDeepChild(target.transform, preferredChildName);
+            if (child != null)
+            {
+                child.gameObject.SetActive(visible);
+                return;
+            }
+        }
+
+        target.SetActive(visible);
+    }
+
+    private static Transform FindDeepChild(Transform parent, string childName)
+    {
+        if (parent == null || string.IsNullOrWhiteSpace(childName))
+            return null;
+
+        foreach (Transform child in parent)
+        {
+            if (child.name == childName)
+                return child;
+
+            Transform result = FindDeepChild(child, childName);
+            if (result != null)
+                return result;
+        }
+
+        return null;
     }
 }
