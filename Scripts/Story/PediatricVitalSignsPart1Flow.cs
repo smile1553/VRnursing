@@ -18,6 +18,13 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     [SerializeField] private TMP_Text speakerText;
     [SerializeField] private TMP_Text dialogueText;
 
+    [Header("Dialogue Audio")]
+    [SerializeField] private AudioSource dialogueAudioSource;
+    [SerializeField] private AudioClip momOkClip;
+    [SerializeField] private AudioClip yayaNoInjectionClip;
+    [SerializeField] private bool useAudioLengthForDialogueDelay = true;
+    [SerializeField] private float extraDelayAfterAudio = 0.4f;
+
     [Header("Quiz Text")]
     [SerializeField] private TMP_Text quizQuestionText;
     [SerializeField] private TMP_Text feedbackText;
@@ -122,12 +129,13 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
             dialogueText.text = dialogues[dialogueIndex];
 
         PlayDialogueAnimation(dialogueIndex);
+        AudioClip clip = PlayDialogueAudio(dialogueIndex);
         ClearFeedback();
 
         if (autoAdvanceDialogue)
         {
             StopDialogueRoutine();
-            dialogueRoutine = StartCoroutine(AdvanceDialogueAfterDelay());
+            dialogueRoutine = StartCoroutine(AdvanceDialogueAfterDelay(GetDialogueDelay(clip)));
         }
     }
 
@@ -145,6 +153,34 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
             momAnimation?.PlayStandingIdle();
             yayaAnimation?.PlaySittingDisbelief();
         }
+    }
+
+    private AudioClip PlayDialogueAudio(int index)
+    {
+        if (dialogueAudioSource == null)
+            return null;
+
+        AudioClip clip = index switch
+        {
+            0 => momOkClip,
+            1 => yayaNoInjectionClip,
+            _ => null
+        };
+
+        dialogueAudioSource.Stop();
+
+        if (clip != null)
+            dialogueAudioSource.PlayOneShot(clip);
+
+        return clip;
+    }
+
+    private float GetDialogueDelay(AudioClip clip)
+    {
+        if (useAudioLengthForDialogueDelay && clip != null)
+            return Mathf.Max(0.1f, clip.length + extraDelayAfterAudio);
+
+        return Mathf.Max(0.1f, dialogueAdvanceDelay);
     }
 
     private void ShowQuiz()
@@ -169,7 +205,9 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         bool correct = index == 3;
 
         if (feedbackText != null)
-            feedbackText.text = correct ? "答對了！先觀察呼吸次數，比較不會增加孩子害怕。" : "再想想看。先選擇不碰觸孩子身體的測量方式比較合適。";
+            feedbackText.text = correct
+                ? "答對了！先觀察呼吸次數，比較不會加重芽芽的害怕。"
+                : "再想想看。現在芽芽很害怕，先不要碰觸身體會比較合適。";
 
         if (correct)
         {
@@ -190,9 +228,9 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
             feedbackText.text = string.Empty;
     }
 
-    private IEnumerator AdvanceDialogueAfterDelay()
+    private IEnumerator AdvanceDialogueAfterDelay(float delay)
     {
-        yield return new WaitForSeconds(Mathf.Max(0.1f, dialogueAdvanceDelay));
+        yield return new WaitForSeconds(delay);
         dialogueRoutine = null;
         NextDialogue();
     }
