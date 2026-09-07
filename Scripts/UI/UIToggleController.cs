@@ -7,8 +7,29 @@ public class UIToggleController : MonoBehaviour
     [SerializeField] private GameObject dialogueUI;
     [SerializeField] private GameObject quizUI;
 
+    private void Awake()
+    {
+        ResolveMedicalRecordUi();
+    }
+
+    private void ResolveMedicalRecordUi()
+    {
+        if (medicalRecordUI != null)
+            return;
+
+        var byName = GameObject.Find("MedicalRecordPanel");
+        if (byName == null)
+            byName = GameObject.Find("MedicalRecord_HUD_Canvas");
+        if (byName == null)
+            byName = GameObject.Find("MedicalRecordCanvas");
+
+        medicalRecordUI = byName;
+    }
+
     public void ToggleMedicalRecord()
     {
+        ResolveMedicalRecordUi();
+
         if (medicalRecordUI == null)
         {
             RuntimeLog.Warning("[UIToggleController] ToggleMedicalRecord skipped: medicalRecordUI is not assigned.");
@@ -23,6 +44,8 @@ public class UIToggleController : MonoBehaviour
 
     public void ShowMedicalRecord()
     {
+        ResolveMedicalRecordUi();
+
         if (medicalRecordUI == null)
         {
             RuntimeLog.Warning("[UIToggleController] ShowMedicalRecord skipped: medicalRecordUI is not assigned.");

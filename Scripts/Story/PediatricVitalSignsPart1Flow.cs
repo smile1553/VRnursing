@@ -1,3 +1,4 @@
+﻿using System;
 using System.Collections;
 using TMPro;
 using UnityEngine;
@@ -19,6 +20,14 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     [SerializeField] private int momOkLineIndex = 0;
     [SerializeField] private int yayaRefuseLineIndex = 1;
 
+    [Header("Backend Voice Gate")]
+    [SerializeField] private RunAI_Network network;
+    [SerializeField] private bool startDialogueFromBackendJson = true;
+    [SerializeField] private string greetingKeywords = "";
+    [SerializeField] private string measurementKeywords = "";
+    [SerializeField] private float staleBackendIgnoreSeconds = 1.5f;
+    [SerializeField] private bool ignoreFirstBackendJson = true;
+
     [Header("Dialogue Text Fallback")]
     [SerializeField] private TMP_Text speakerText;
     [SerializeField] private TMP_Text dialogueText;
@@ -33,11 +42,14 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     [Header("Quiz Text")]
     [SerializeField] private TMP_Text quizQuestionText;
     [SerializeField] private TMP_Text feedbackText;
+    [SerializeField] private GameObject correctPopup;
+    [SerializeField] private GameObject wrongPopup;
 
     [Header("Options")]
     [SerializeField] private bool autoAdvanceDialogue = true;
     [SerializeField] private float dialogueAdvanceDelay = 4f;
     [SerializeField] private bool hideQuizAfterCorrect = false;
+    [SerializeField] private float correctAnswerDelay = 1.2f;
 
     [Header("Events")]
     [SerializeField] private UnityEvent onCorrectAnswer;
@@ -45,6 +57,11 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
     private int dialogueIndex = -1;
     private Coroutine dialogueRoutine;
+    private Coroutine correctRoutine;
+    private bool hasSkippedInitialBackendJson;
+    private string initialBackendSpeechToIgnore;
+    private float backendListenStartedAt;
+    private string lastProcessedBackendJson;
 
     private static readonly string[] FallbackSpeakers =
     {
@@ -60,13 +77,72 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
     private const string CorrectFeedback = "\u7b54\u5c0d\u4e86\uff01";
     private const string WrongFeedback = "\u518d\u60f3\u4e00\u4e0b\uff0c\u54ea\u4e00\u9805\u6bd4\u8f03\u4e0d\u6703\u52a0\u91cd\u82bd\u82bd\u7684\u5bb3\u6015\uff1f";
+    private static readonly string[] Part1GreetingKeywords =
+    {
+        "\u5abd\u5abd",
+        "\u82bd\u82bd",
+        "\u4f60\u5011\u597d",
+        "\u4f60\u597d"
+    };
+
+    private static readonly string[] Part1MeasurementKeywords =
+    {
+        "\u91cf\u9ad4\u6eab",
+        "\u9ad4\u6eab",
+        "\u547c\u5438",
+        "\u5fc3\u8df3",
+        "\u8840\u58d3",
+        "\u751f\u547d\u5fb5\u8c61",
+        "\u6e2c\u91cf\u9805\u76ee"
+    };
 
     private void Awake()
     {
+        if (network == null)
+            network = FindObjectOfType<RunAI_Network>();
+
         ResolveDialogueManager();
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
         SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
+        SetPanelVisible(correctPopup, false, "Correct_Popup");
+        SetPanelVisible(wrongPopup, false, "Wrong_Popup");
         ClearFeedback();
+    }
+
+    private void OnEnable()
+    {
+        backendListenStartedAt = Time.time;
+        hasSkippedInitialBackendJson = false;
+        initialBackendSpeechToIgnore = null;
+        lastProcessedBackendJson = null;
+
+        if (network == null)
+            network = FindObjectOfType<RunAI_Network>();
+
+        if (network != null)
+        {
+            if (ignoreFirstBackendJson && !string.IsNullOrWhiteSpace(network.LastJson))
+            {
+                lastProcessedBackendJson = network.LastJson;
+                initialBackendSpeechToIgnore = ExtractBackendSpeechText(network.LastJson);
+                hasSkippedInitialBackendJson = true;
+                Debug.Log("[Part1] Cached backend speech will be ignored: " + initialBackendSpeechToIgnore, this);
+            }
+        }
+    }
+
+    private void Update()
+    {
+        if (!startDialogueFromBackendJson || dialogueIndex >= 0)
+            return;
+
+        if (network == null)
+            network = FindObjectOfType<RunAI_Network>();
+
+        if (network == null || string.IsNullOrWhiteSpace(network.LastJson))
+            return;
+
+        HandleBackendJson(network.LastJson);
     }
 
     public void SkipVoiceAndStartDialogue()
@@ -75,6 +151,36 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
         dialogueIndex = 0;
         ShowDialogue();
+    }
+
+    private void HandleBackendJson(string json)
+    {
+        if (!startDialogueFromBackendJson || dialogueIndex >= 0 || string.IsNullOrWhiteSpace(json))
+            return;
+
+        if (string.Equals(json, lastProcessedBackendJson, StringComparison.Ordinal))
+            return;
+
+        lastProcessedBackendJson = json;
+        string speechText = ExtractBackendSpeechText(json);
+        if (string.IsNullOrWhiteSpace(speechText))
+            return;
+
+        Debug.Log("[Part1] Backend speech text: " + speechText, this);
+
+        if (!hasSkippedInitialBackendJson)
+            hasSkippedInitialBackendJson = true;
+
+        bool hasGreeting = ContainsAnyKeyword(speechText, Part1GreetingKeywords) || ContainsAnyKeyword(speechText, greetingKeywords);
+        bool hasMeasurement = ContainsAnyKeyword(speechText, Part1MeasurementKeywords) || ContainsAnyKeyword(speechText, measurementKeywords);
+        if (hasGreeting && hasMeasurement)
+        {
+            SkipVoiceAndStartDialogue();
+        }
+        else
+        {
+            Debug.Log("[Part1] Speech received, but prompt keywords not matched. text=" + speechText, this);
+        }
     }
 
     public void NextDialogue()
@@ -204,13 +310,19 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
         if (correct)
         {
+            StopCorrectRoutine();
+            SetPanelVisible(wrongPopup, false, "Wrong_Popup");
+            SetPanelVisible(correctPopup, true, "Correct_Popup");
+
             if (hideQuizAfterCorrect)
                 SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
 
-            onCorrectAnswer?.Invoke();
+            correctRoutine = StartCoroutine(InvokeCorrectAfterDelay());
         }
         else
         {
+            SetPanelVisible(correctPopup, false, "Correct_Popup");
+            SetPanelVisible(wrongPopup, true, "Wrong_Popup");
             onWrongAnswer?.Invoke();
         }
     }
@@ -228,6 +340,14 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         NextDialogue();
     }
 
+    private IEnumerator InvokeCorrectAfterDelay()
+    {
+        yield return new WaitForSeconds(Mathf.Max(0f, correctAnswerDelay));
+        correctRoutine = null;
+        SetPanelVisible(correctPopup, false, "Correct_Popup");
+        onCorrectAnswer?.Invoke();
+    }
+
     private void StopDialogueRoutine()
     {
         if (dialogueRoutine == null)
@@ -235,6 +355,15 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
         StopCoroutine(dialogueRoutine);
         dialogueRoutine = null;
+    }
+
+    private void StopCorrectRoutine()
+    {
+        if (correctRoutine == null)
+            return;
+
+        StopCoroutine(correctRoutine);
+        correctRoutine = null;
     }
 
     private void ResolveDialogueManager()
@@ -311,4 +440,79 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
         return null;
     }
+
+    private static string ExtractBackendSpeechText(string json)
+    {
+        try
+        {
+            BackendSpeechResponse response = JsonUtility.FromJson<BackendSpeechResponse>(json);
+            if (response != null)
+            {
+                string combinedText = string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(response.llm_window_text))
+                    combinedText += response.llm_window_text + " ";
+
+                if (!string.IsNullOrWhiteSpace(response.text))
+                    combinedText += response.text + " ";
+
+                if (!string.IsNullOrWhiteSpace(response.raw_text))
+                    combinedText += response.raw_text;
+
+                return combinedText.Trim();
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[Part1] Failed to parse backend json: " + e.Message);
+        }
+
+        return string.Empty;
+    }
+
+    private static bool ContainsAnyKeyword(string text, string[] keywords)
+    {
+        if (string.IsNullOrEmpty(text) || keywords == null)
+            return false;
+
+        foreach (string keyword in keywords)
+        {
+            if (string.IsNullOrWhiteSpace(keyword))
+                continue;
+
+            if (text.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return false;
+    }
+    private static bool ContainsAnyKeyword(string text, string keywords)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keywords))
+            return false;
+
+        string[] parts = keywords.Split('|');
+        foreach (string part in parts)
+        {
+            string keyword = part.Trim();
+            if (keyword.Length == 0)
+                continue;
+
+            if (text.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return false;
+    }
+    [Serializable]
+    private class BackendSpeechResponse
+    {
+        public string text;
+        public string raw_text;
+        public string llm_window_text;
+    }
 }
+
+
+
+

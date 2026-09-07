@@ -45,6 +45,29 @@ public class HUDManager : MonoBehaviour
     {
         if (hmdCamera == null && Camera.main != null)
             hmdCamera = Camera.main.transform;
+
+        ResolveCanvasReferences();
+    }
+
+    private void ResolveCanvasReferences()
+    {
+        if (quizCanvas == null)
+        {
+            var quizByName = GameObject.Find("NewQuizCanvas");
+            if (quizByName == null)
+                quizByName = GameObject.Find("QuizCanvas");
+            quizCanvas = quizByName;
+        }
+
+        if (medicalPanelCanvas == null)
+        {
+            var panelByName = GameObject.Find("MedicalRecord_HUD_Canvas");
+            if (panelByName == null)
+                panelByName = GameObject.Find("MedicalRecordCanvas");
+            if (panelByName == null)
+                panelByName = GameObject.Find("MedicalRecordPanel");
+            medicalPanelCanvas = panelByName;
+        }
     }
 
     private void LateUpdate()
@@ -128,7 +151,10 @@ public class HUDManager : MonoBehaviour
 
     static void SetActiveIfChanged(GameObject target, bool visible)
     {
-        if (target != null && target.activeSelf != visible)
+        if (target == null)
+            return;
+
+        if (target.activeSelf != visible)
             target.SetActive(visible);
     }
 }

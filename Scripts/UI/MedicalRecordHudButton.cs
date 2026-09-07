@@ -25,8 +25,24 @@ public class MedicalRecordHudButton : MonoBehaviour
         if (head == null && Camera.main != null)
             head = Camera.main.transform;
 
+        ResolveMedicalRecordPanel();
+
         if (hidePanelOnStart && medicalRecordPanel != null)
             medicalRecordPanel.SetActive(false);
+    }
+
+    void ResolveMedicalRecordPanel()
+    {
+        if (medicalRecordPanel != null)
+            return;
+
+        var byName = GameObject.Find("MedicalRecordPanel");
+        if (byName == null)
+            byName = GameObject.Find("MedicalRecord_HUD_Canvas");
+        if (byName == null)
+            byName = GameObject.Find("MedicalRecordCanvas");
+
+        medicalRecordPanel = byName;
     }
 
     void LateUpdate()
@@ -51,6 +67,7 @@ public class MedicalRecordHudButton : MonoBehaviour
 
     public void ToggleMedicalRecord()
     {
+        ResolveMedicalRecordPanel();
         if (medicalRecordPanel == null)
             return;
 
@@ -62,6 +79,7 @@ public class MedicalRecordHudButton : MonoBehaviour
 
     public void ShowMedicalRecord()
     {
+        ResolveMedicalRecordPanel();
         if (medicalRecordPanel == null)
             return;
 
