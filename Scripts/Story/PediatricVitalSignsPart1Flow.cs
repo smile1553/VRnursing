@@ -28,6 +28,11 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     [SerializeField] private float staleBackendIgnoreSeconds = 1.5f;
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
+    [Header("Startup Gate")]
+    [SerializeField] private GameObject waitUntilPanelHidden;
+    [SerializeField] private string autoFindBlockingPanelNames = "VitalSigns_Intro_Panel|MedicalRecord_Panel 1|Login_Panel";
+    [SerializeField] private float delayAfterBlockingPanelHidden = 0.5f;
+
     [Header("Dialogue Text Fallback")]
     [SerializeField] private TMP_Text speakerText;
     [SerializeField] private TMP_Text dialogueText;
@@ -48,12 +53,18 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     [Header("Options")]
     [SerializeField] private bool autoAdvanceDialogue = true;
     [SerializeField] private float dialogueAdvanceDelay = 4f;
+    [SerializeField] private float maxDialogueAutoAdvanceDelay = 8f;
     [SerializeField] private bool hideQuizAfterCorrect = false;
     [SerializeField] private float correctAnswerDelay = 1.2f;
 
     [Header("Events")]
     [SerializeField] private UnityEvent onCorrectAnswer;
     [SerializeField] private UnityEvent onWrongAnswer;
+
+    [Header("Flow Link")]
+    [SerializeField] private PediatricVitalSignsPart2Flow nextPartFlow;
+    [SerializeField] private bool startNextPartAfterCorrect = true;
+    [SerializeField] private bool hidePart1UiWhenStartingNextPart = true;
 
     private int dialogueIndex = -1;
     private Coroutine dialogueRoutine;
@@ -62,6 +73,8 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     private string initialBackendSpeechToIgnore;
     private float backendListenStartedAt;
     private string lastProcessedBackendJson;
+    private bool startupGateReleased;
+    private float startupGateReleaseAt;
 
     private static readonly string[] FallbackSpeakers =
     {
@@ -101,6 +114,11 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         if (network == null)
             network = FindObjectOfType<RunAI_Network>();
 
+        if (nextPartFlow == null)
+            nextPartFlow = FindObjectOfType<PediatricVitalSignsPart2Flow>(true);
+
+        ResolveStartupGatePanel();
+
         ResolveDialogueManager();
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
         SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
@@ -115,25 +133,22 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         hasSkippedInitialBackendJson = false;
         initialBackendSpeechToIgnore = null;
         lastProcessedBackendJson = null;
+        startupGateReleased = false;
+        startupGateReleaseAt = 0f;
 
         if (network == null)
             network = FindObjectOfType<RunAI_Network>();
 
-        if (network != null)
-        {
-            if (ignoreFirstBackendJson && !string.IsNullOrWhiteSpace(network.LastJson))
-            {
-                lastProcessedBackendJson = network.LastJson;
-                initialBackendSpeechToIgnore = ExtractBackendSpeechText(network.LastJson);
-                hasSkippedInitialBackendJson = true;
-                Debug.Log("[Part1] Cached backend speech will be ignored: " + initialBackendSpeechToIgnore, this);
-            }
-        }
+        ResolveStartupGatePanel();
+        TryReleaseStartupGate();
     }
 
     private void Update()
     {
         if (!startDialogueFromBackendJson || dialogueIndex >= 0)
+            return;
+
+        if (!TryReleaseStartupGate())
             return;
 
         if (network == null)
@@ -143,6 +158,13 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
             return;
 
         HandleBackendJson(network.LastJson);
+    }
+
+    public void EnablePart1VoiceGate()
+    {
+        startupGateReleased = true;
+        startupGateReleaseAt = Time.time + Mathf.Max(0f, delayAfterBlockingPanelHidden);
+        MarkCurrentBackendJsonAsSeen("Manual Part1 voice gate release");
     }
 
     public void SkipVoiceAndStartDialogue()
@@ -165,6 +187,14 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         string speechText = ExtractBackendSpeechText(json);
         if (string.IsNullOrWhiteSpace(speechText))
             return;
+
+        if (ignoreFirstBackendJson && !hasSkippedInitialBackendJson)
+        {
+            hasSkippedInitialBackendJson = true;
+            initialBackendSpeechToIgnore = speechText;
+            Debug.Log("[Part1] First backend speech ignored after startup: " + initialBackendSpeechToIgnore, this);
+            return;
+        }
 
         Debug.Log("[Part1] Backend speech text: " + speechText, this);
 
@@ -224,6 +254,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
 
         int lineIndex = dialogueIndex == 0 ? momOkLineIndex : yayaRefuseLineIndex;
+        Debug.Log($"[Part1] Show dialogue index={dialogueIndex}, line={lineIndex}", this);
 
         if (dialogueManager != null)
         {
@@ -242,7 +273,9 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         if (autoAdvanceDialogue)
         {
             StopDialogueRoutine();
-            dialogueRoutine = StartCoroutine(AdvanceDialogueAfterDelay(GetDialogueDelay(clip)));
+            float delay = GetDialogueDelay(clip);
+            Debug.Log($"[Part1] Auto advance in {delay:0.00}s", this);
+            dialogueRoutine = StartCoroutine(AdvanceDialogueAfterDelay(delay));
         }
     }
 
@@ -284,14 +317,19 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
     private float GetDialogueDelay(AudioClip clip)
     {
+        float delay = dialogueAdvanceDelay;
         if (useAudioLengthForDialogueDelay && clip != null)
-            return Mathf.Max(0.1f, clip.length + extraDelayAfterAudio);
+            delay = clip.length + extraDelayAfterAudio;
 
-        return Mathf.Max(0.1f, dialogueAdvanceDelay);
+        if (maxDialogueAutoAdvanceDelay > 0f)
+            delay = Mathf.Min(delay, maxDialogueAutoAdvanceDelay);
+
+        return Mathf.Max(0.1f, delay);
     }
 
     private void ShowQuiz()
     {
+        Debug.Log("[Part1] Show quiz 1", this);
         StopDialogueRoutine();
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
         SetPanelVisible(quizPanel, true, "Quiz_Panel_1");
@@ -345,7 +383,32 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         yield return new WaitForSeconds(Mathf.Max(0f, correctAnswerDelay));
         correctRoutine = null;
         SetPanelVisible(correctPopup, false, "Correct_Popup");
+
+        if (hidePart1UiWhenStartingNextPart)
+        {
+            SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
+            SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
+        }
+
+        StartNextPartFlow();
         onCorrectAnswer?.Invoke();
+    }
+
+    private void StartNextPartFlow()
+    {
+        if (!startNextPartAfterCorrect)
+            return;
+
+        if (nextPartFlow == null)
+            nextPartFlow = FindObjectOfType<PediatricVitalSignsPart2Flow>(true);
+
+        if (nextPartFlow == null)
+        {
+            Debug.LogWarning("[Part1] Part2 flow was not found. Please add PediatricVitalSignsPart2Flow to the scene.", this);
+            return;
+        }
+
+        nextPartFlow.StartPart2();
     }
 
     private void StopDialogueRoutine()
@@ -373,6 +436,58 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
         if (dialoguePanel != null)
             dialogueManager = dialoguePanel.GetComponentInChildren<NewDialogueManager>(true);
+    }
+
+    private void ResolveStartupGatePanel()
+    {
+        if (waitUntilPanelHidden != null)
+            return;
+
+        string[] names = autoFindBlockingPanelNames.Split('|');
+        foreach (string rawName in names)
+        {
+            string panelName = rawName.Trim();
+            if (panelName.Length == 0)
+                continue;
+
+            GameObject found = GameObject.Find(panelName);
+            if (found != null)
+            {
+                waitUntilPanelHidden = found;
+                Debug.Log("[Part1] Voice gate waits for panel to hide: " + panelName, this);
+                return;
+            }
+        }
+    }
+
+    private bool TryReleaseStartupGate()
+    {
+        if (startupGateReleased)
+            return Time.time >= startupGateReleaseAt;
+
+        ResolveStartupGatePanel();
+        if (waitUntilPanelHidden != null && waitUntilPanelHidden.activeInHierarchy)
+            return false;
+
+        startupGateReleased = true;
+        startupGateReleaseAt = Time.time + Mathf.Max(0f, delayAfterBlockingPanelHidden);
+        MarkCurrentBackendJsonAsSeen("Startup panel hidden");
+        Debug.Log("[Part1] Voice gate released after startup panels.", this);
+        return Time.time >= startupGateReleaseAt;
+    }
+
+    private void MarkCurrentBackendJsonAsSeen(string reason)
+    {
+        if (network == null)
+            network = FindObjectOfType<RunAI_Network>();
+
+        if (network == null || string.IsNullOrWhiteSpace(network.LastJson))
+            return;
+
+        lastProcessedBackendJson = network.LastJson;
+        initialBackendSpeechToIgnore = ExtractBackendSpeechText(network.LastJson);
+        hasSkippedInitialBackendJson = true;
+        Debug.Log("[Part1] Cached backend speech ignored on gate release (" + reason + "): " + initialBackendSpeechToIgnore, this);
     }
 
     private void HideInstructionUI()

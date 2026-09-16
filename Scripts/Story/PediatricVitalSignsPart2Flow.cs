@@ -17,6 +17,9 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     [SerializeField] private GameObject nursePromptPanel;
     [SerializeField] private GameObject dialoguePanel;
     [SerializeField] private GameObject quizPanel;
+    [SerializeField] private bool clonePromptPanelWhenMissing = true;
+    [SerializeField] private string promptTemplatePanelNames = "Part2_NursePrompt_Panel|Instruction_Canvas|TopHint_Panel";
+    [SerializeField] private string promptTextChildNames = "Prompt_Text|Instruction_Text|NursePromptText|Text (TMP)|Text";
 
     [Header("Dialogue")]
     [SerializeField] private NewDialogueManager dialogueManager;
@@ -37,6 +40,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     [SerializeField] private bool advanceFromBackendJson = true;
     [SerializeField] private string respirationKeywords = "\u5148\u4e0d\u78b0|\u8eba\u4e0b|\u89c0\u5bdf|\u547c\u5438";
     [SerializeField] private string heartbeatKeywords = "\u5fc3\u8df3|\u807d\u8a3a\u5668|\u4e0d\u6703\u75db|\u6478";
+    [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Audio")]
     [SerializeField] private AudioSource dialogueAudioSource;
@@ -51,6 +55,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     [Header("Options")]
     [SerializeField] private float observationDelay = 3f;
     [SerializeField] private bool hideQuizAfterCorrect = false;
+    [SerializeField] private bool keepYayaDisbeliefUntilCorrectAnswer = true;
 
     [Header("Events")]
     [SerializeField] private UnityEvent onCorrectAnswer;
@@ -58,6 +63,8 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
     private Coroutine routine;
     private WaitingForNurseAction waitingForNurseAction = WaitingForNurseAction.None;
+    private string lastProcessedBackendJson;
+    private string initialBackendSpeechToIgnore;
 
     private const string RespirationPrompt =
         "\u8acb\u5411\u5abd\u5abd\u8aaa\u660e\uff1a\u5148\u4e0d\u78b0\u82bd\u82bd\u7684\u8eab\u9ad4\uff0c\u8acb\u5abd\u5abd\u8b93\u82bd\u82bd\u8eba\u4e0b\uff0c\u4e26\u89c0\u5bdf\u80f8\u8179\u8d77\u4f0f\u4f86\u8a08\u7b97\u547c\u5438\u6b21\u6578\u3002";
@@ -80,6 +87,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             network = FindObjectOfType<RunAI_Network>();
 
         ResolveDialogueManager();
+        ResolveNursePromptPanel();
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
         SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
@@ -87,19 +95,35 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
     private void OnEnable()
     {
-        if (network != null)
-            network.EmotionJsonReceived += HandleBackendJson;
+        ResetBackendGate();
     }
 
-    private void OnDisable()
+    private void Update()
     {
-        if (network != null)
-            network.EmotionJsonReceived -= HandleBackendJson;
+        if (!advanceFromBackendJson || waitingForNurseAction == WaitingForNurseAction.None)
+            return;
+
+        if (network == null)
+            network = FindObjectOfType<RunAI_Network>();
+
+        if (network == null || string.IsNullOrWhiteSpace(network.LastJson))
+            return;
+
+        HandleBackendJson(network.LastJson);
     }
 
     public void StartPart2()
     {
+        if (!gameObject.activeSelf)
+            gameObject.SetActive(true);
+
+        enabled = true;
+
+        if (routine != null)
+            return;
+
         StopRoutine();
+        ResetBackendGate();
         waitingForNurseAction = WaitingForNurseAction.None;
         routine = StartCoroutine(Part2Routine());
     }
@@ -124,18 +148,29 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
     private void HandleBackendJson(string json)
     {
-        if (!advanceFromBackendJson || waitingForNurseAction == WaitingForNurseAction.None)
+        if (!advanceFromBackendJson || waitingForNurseAction == WaitingForNurseAction.None || string.IsNullOrWhiteSpace(json))
+            return;
+
+        if (string.Equals(json, lastProcessedBackendJson, StringComparison.Ordinal))
+            return;
+
+        lastProcessedBackendJson = json;
+        string speechText = ExtractBackendSpeechText(json);
+        if (string.IsNullOrWhiteSpace(speechText))
             return;
 
         string keywords = waitingForNurseAction == WaitingForNurseAction.RespirationExplanation
             ? respirationKeywords
             : heartbeatKeywords;
 
-        if (ContainsAnyKeyword(json, keywords))
+        if (ContainsAnyKeyword(speechText, keywords))
         {
-            Debug.Log($"[Part2] Backend matched {waitingForNurseAction}. Continue flow.", this);
+            Debug.Log($"[Part2] Backend matched {waitingForNurseAction}. text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
+            return;
         }
+
+        Debug.Log($"[Part2] Waiting for {waitingForNurseAction}, speech did not match. text={speechText}", this);
     }
 
     public void SelectA()
@@ -165,17 +200,17 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         ShowDialogueLine(momLayDownLineIndex, momLayDownClip);
         momAnimation?.PlayTalking();
-        yayaAnimation?.PlayLayingDown();
+        PlayYayaFearfulOrLayingDown();
         yield return WaitForDialogue(momLayDownClip);
 
         ShowDialogueLine(momBesideLineIndex, momBesideClip);
         momAnimation?.PlayTalking();
-        yayaAnimation?.PlayLayingSleeping();
+        PlayYayaFearfulOrSleeping();
         yield return WaitForDialogue(momBesideClip);
 
         ShowNursePrompt(ObservationPrompt, WaitingForNurseAction.None);
         momAnimation?.PlayStandingIdle();
-        yayaAnimation?.PlayLayingSleeping();
+        PlayYayaFearfulOrSleeping();
         yield return new WaitForSeconds(Mathf.Max(0.1f, observationDelay));
 
         ShowNursePrompt(HeartbeatPrompt, WaitingForNurseAction.HeartbeatExplanation);
@@ -193,6 +228,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     private void ShowDialogueLine(int lineIndex, AudioClip clip)
     {
         ResolveDialogueManager();
+        ResolveNursePromptPanel();
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
         SetPanelVisible(dialoguePanel, true, "Dialogue_Panel");
         SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
@@ -208,6 +244,8 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
     private void ShowNursePrompt(string prompt, WaitingForNurseAction waitingAction)
     {
+        ResolveNursePromptPanel();
+
         if (dialogueManager != null)
             dialogueManager.StopPlayback();
 
@@ -217,6 +255,8 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         if (nursePromptText != null)
             nursePromptText.text = prompt;
+        else
+            Debug.LogWarning("[Part2] Nurse prompt text is missing.", this);
 
         if (dialogueAudioSource != null)
             dialogueAudioSource.Stop();
@@ -250,6 +290,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
     private void ShowQuiz()
     {
+        ResolveNursePromptPanel();
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
         SetPanelVisible(quizPanel, true, "Quiz_Panel_2");
@@ -266,6 +307,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             if (hideQuizAfterCorrect)
                 SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
 
+            yayaAnimation?.PlaySittingIdle();
             onCorrectAnswer?.Invoke();
             return;
         }
@@ -288,6 +330,38 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             dialogueManager.StopPlayback();
     }
 
+    private void ResetBackendGate()
+    {
+        lastProcessedBackendJson = null;
+        initialBackendSpeechToIgnore = null;
+
+        if (network == null)
+            network = FindObjectOfType<RunAI_Network>();
+
+        if (network != null && ignoreFirstBackendJson && !string.IsNullOrWhiteSpace(network.LastJson))
+        {
+            lastProcessedBackendJson = network.LastJson;
+            initialBackendSpeechToIgnore = ExtractBackendSpeechText(network.LastJson);
+            Debug.Log("[Part2] Cached backend speech will be ignored: " + initialBackendSpeechToIgnore, this);
+        }
+    }
+
+    private void PlayYayaFearfulOrLayingDown()
+    {
+        if (keepYayaDisbeliefUntilCorrectAnswer)
+            yayaAnimation?.PlaySittingDisbelief();
+        else
+            yayaAnimation?.PlayLayingDown();
+    }
+
+    private void PlayYayaFearfulOrSleeping()
+    {
+        if (keepYayaDisbeliefUntilCorrectAnswer)
+            yayaAnimation?.PlaySittingDisbelief();
+        else
+            yayaAnimation?.PlayLayingSleeping();
+    }
+
     private void ResolveDialogueManager()
     {
         if (dialogueManager != null)
@@ -295,6 +369,84 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         if (dialoguePanel != null)
             dialogueManager = dialoguePanel.GetComponentInChildren<NewDialogueManager>(true);
+    }
+
+    private void ResolveNursePromptPanel()
+    {
+        if (nursePromptPanel == null)
+            nursePromptPanel = FindSceneObjectByName("Part2_NursePrompt_Panel");
+
+        if (nursePromptPanel == null && clonePromptPanelWhenMissing)
+        {
+            GameObject template = FindPromptTemplate();
+            if (template != null)
+            {
+                nursePromptPanel = Instantiate(template, template.transform.parent);
+                nursePromptPanel.name = "Part2_NursePrompt_Panel";
+                nursePromptPanel.SetActive(false);
+                Debug.Log("[Part2] Created private nurse prompt panel from template: " + template.name, this);
+            }
+        }
+
+        ResolveNursePromptText();
+    }
+
+    private GameObject FindPromptTemplate()
+    {
+        string[] names = promptTemplatePanelNames.Split('|');
+        foreach (string rawName in names)
+        {
+            string panelName = rawName.Trim();
+            if (panelName.Length == 0 || panelName == "Part2_NursePrompt_Panel")
+                continue;
+
+            GameObject found = FindSceneObjectByName(panelName);
+            if (found != null)
+                return found;
+        }
+
+        return null;
+    }
+
+    private void ResolveNursePromptText()
+    {
+        if (nursePromptPanel == null)
+            return;
+
+        if (nursePromptText != null && nursePromptText.transform.IsChildOf(nursePromptPanel.transform))
+            return;
+
+        string[] names = promptTextChildNames.Split('|');
+        foreach (string rawName in names)
+        {
+            string textName = rawName.Trim();
+            if (textName.Length == 0)
+                continue;
+
+            Transform child = FindDeepChild(nursePromptPanel.transform, textName);
+            if (child == null)
+                continue;
+
+            TMP_Text text = child.GetComponent<TMP_Text>();
+            if (text != null)
+            {
+                nursePromptText = text;
+                return;
+            }
+        }
+
+        TMP_Text[] texts = nursePromptPanel.GetComponentsInChildren<TMP_Text>(true);
+        foreach (TMP_Text text in texts)
+        {
+            if (text == null)
+                continue;
+
+            if (text.name.IndexOf("Skip", StringComparison.OrdinalIgnoreCase) >= 0)
+                continue;
+
+            nursePromptText = text;
+            return;
+        }
     }
 
     private static bool ContainsAnyKeyword(string text, string keywords)
@@ -314,6 +466,43 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         }
 
         return false;
+    }
+
+    private static string ExtractBackendSpeechText(string json)
+    {
+        try
+        {
+            BackendSpeechResponse response = JsonUtility.FromJson<BackendSpeechResponse>(json);
+            if (response != null)
+            {
+                string combinedText = string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(response.llm_window_text))
+                    combinedText += response.llm_window_text + " ";
+
+                if (!string.IsNullOrWhiteSpace(response.text))
+                    combinedText += response.text + " ";
+
+                if (!string.IsNullOrWhiteSpace(response.raw_text))
+                    combinedText += response.raw_text;
+
+                return combinedText.Trim();
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[Part2] Failed to parse backend json: " + e.Message);
+        }
+
+        return string.Empty;
+    }
+
+    [Serializable]
+    private class BackendSpeechResponse
+    {
+        public string text;
+        public string raw_text;
+        public string llm_window_text;
     }
 
     private static void SetPanelVisible(GameObject target, bool visible, string preferredChildName)
@@ -351,6 +540,30 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             Transform result = FindDeepChild(child, childName);
             if (result != null)
                 return result;
+        }
+
+        return null;
+    }
+
+    private static GameObject FindSceneObjectByName(string objectName)
+    {
+        if (string.IsNullOrWhiteSpace(objectName))
+            return null;
+
+        GameObject active = GameObject.Find(objectName);
+        if (active != null)
+            return active;
+
+        GameObject[] allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+        foreach (GameObject candidate in allObjects)
+        {
+            if (candidate == null || candidate.name != objectName)
+                continue;
+
+            if (!candidate.scene.IsValid())
+                continue;
+
+            return candidate;
         }
 
         return null;
