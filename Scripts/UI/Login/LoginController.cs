@@ -11,8 +11,33 @@ public class LoginController : MonoBehaviour
     [SerializeField] private GameObject loginUIRoot;
     [SerializeField] private MonoBehaviour signalBus;
 
+    [Header("Ward Entry Flow")]
+    [SerializeField] private ScenarioController scenarioController;
+    [SerializeField] private bool requireGreetingBeforeWardEntry = true;
+    [SerializeField] private string greetingStepId = "intro_nurse";
+
+    private bool loginCompleted;
+    private bool wardEntered;
+    private bool listeningForScenarioCompletion;
+
+    private void Awake()
+    {
+        ResolveScenarioController();
+    }
+
+    private void OnEnable()
+    {
+        SubscribeToScenario();
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeFromScenario();
+    }
+
     private void Start()
     {
+        SubscribeToScenario();
         RuntimeLog.Info("[LoginController] Start()");
         StartCoroutine(AlignOnStart());
     }
@@ -21,11 +46,20 @@ public class LoginController : MonoBehaviour
     {
         RuntimeLog.Info("LOGIN CLICKED");
         RuntimeLog.Info("[LoginController] OnLoginClicked");
-        if (wardSpawn != null)
+
+        loginCompleted = true;
+        wardEntered = false;
+
+        Transform loginDestination = requireGreetingBeforeWardEntry ? entranceSpawn : wardSpawn;
+        if (loginDestination != null)
         {
-            RuntimeLog.Info($"[LoginController] Target spawn={wardSpawn.name} pos={FormatVec(wardSpawn.position)} yaw={wardSpawn.rotation.eulerAngles.y:0.###}");
+            RuntimeLog.Info($"[LoginController] Target spawn={loginDestination.name} pos={FormatVec(loginDestination.position)} yaw={loginDestination.rotation.eulerAngles.y:0.###}");
         }
-        MoveRigTo(wardSpawn);
+        else if (requireGreetingBeforeWardEntry)
+        {
+            RuntimeLog.Warning("[LoginController] entranceSpawn is not assigned. The player cannot wait outside the ward before greeting.");
+        }
+        MoveRigTo(loginDestination);
 
         if (loginUIRoot != null)
         {
@@ -33,6 +67,61 @@ public class LoginController : MonoBehaviour
         }
 
         EmitSignal("LoginCompleted", null);
+
+        ResolveScenarioController();
+        SubscribeToScenario();
+        if (requireGreetingBeforeWardEntry && scenarioController != null)
+        {
+            // Restart at the greeting step after login so speech captured on the
+            // login screen cannot unlock the ward entrance.
+            scenarioController.StartScenario();
+        }
+        else if (requireGreetingBeforeWardEntry)
+        {
+            RuntimeLog.Warning("[LoginController] ScenarioController not found. Greeting completion cannot open the ward flow.");
+        }
+    }
+
+    private void ResolveScenarioController()
+    {
+        if (scenarioController == null)
+            scenarioController = FindObjectOfType<ScenarioController>();
+    }
+
+    private void SubscribeToScenario()
+    {
+        if (listeningForScenarioCompletion)
+            return;
+
+        ResolveScenarioController();
+        if (scenarioController == null || scenarioController.stepCompleted == null)
+            return;
+
+        scenarioController.stepCompleted.AddListener(OnScenarioStepCompleted);
+        listeningForScenarioCompletion = true;
+    }
+
+    private void UnsubscribeFromScenario()
+    {
+        if (!listeningForScenarioCompletion)
+            return;
+
+        if (scenarioController != null && scenarioController.stepCompleted != null)
+            scenarioController.stepCompleted.RemoveListener(OnScenarioStepCompleted);
+        listeningForScenarioCompletion = false;
+    }
+
+    private void OnScenarioStepCompleted(string stepId)
+    {
+        if (!requireGreetingBeforeWardEntry || !loginCompleted || wardEntered)
+            return;
+        if (!string.Equals(stepId, greetingStepId, System.StringComparison.OrdinalIgnoreCase))
+            return;
+
+        wardEntered = true;
+        RuntimeLog.Info($"[LoginController] Greeting step completed ({stepId}). Entering ward.");
+        MoveRigTo(wardSpawn);
+        EmitSignal("WardEntered", null);
     }
 
     private void MoveRigTo(Transform spawn)

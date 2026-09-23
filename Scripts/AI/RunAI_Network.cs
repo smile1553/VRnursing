@@ -182,10 +182,17 @@ public class RunAI_Network : MonoBehaviour
             }
 
 #if UNITY_2020_2_OR_NEWER
-            return request.result == UnityWebRequest.Result.Success;
+            bool success = request.result == UnityWebRequest.Result.Success;
 #else
-            return !request.isNetworkError && !request.isHttpError;
+            bool success = !request.isNetworkError && !request.isHttpError;
 #endif
+            if (!success)
+            {
+                Debug.LogWarning(
+                    $"[DISCOVERY] health check failed url={normalized}/last " +
+                    $"status={request.responseCode} error={request.error}");
+            }
+            return success;
         }
     }
 

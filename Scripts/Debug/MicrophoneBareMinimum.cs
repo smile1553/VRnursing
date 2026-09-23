@@ -22,8 +22,19 @@ public class MicrophoneBareMinimum : MonoBehaviour
 
     void Start()
     {
-        if (autoRunOnStart)
-            StartCoroutine(RunOnce());
+        if (!autoRunOnStart)
+            return;
+
+        // This diagnostic calls Microphone.Start/End directly. Running it next
+        // to AudioUploader can stop or replace the production recording.
+        if (FindObjectOfType<AudioUploader>() != null)
+        {
+            status = "Auto-run skipped: AudioUploader owns microphone";
+            Debug.LogWarning("[MicBare] Auto-run skipped because AudioUploader is active. Run this diagnostic only after stopping the uploader.");
+            return;
+        }
+
+        StartCoroutine(RunOnce());
     }
 
     [ContextMenu("Run Once")]

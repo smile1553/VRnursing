@@ -192,30 +192,17 @@ public class AudioUploader : MonoBehaviour
 
         if (microphoneDeviceIndex < 0)
         {
-            micDevice = PickPreferredMicrophone(devices);
-            Debug.Log($"[AudioUploader] Auto-selected microphone = {(string.IsNullOrEmpty(micDevice) ? "<OS default>" : micDevice)}");
+            // Unity uses null for the operating system's current default input.
+            // Do not force devices[0]: its order is not stable between Editor,
+            // Quest Link, and standalone Android builds.
+            micDevice = null;
+            Debug.Log("[AudioUploader] Using OS default microphone (device=null).");
             return;
         }
 
         int idx = Mathf.Clamp(microphoneDeviceIndex, 0, devices.Length - 1);
         micDevice = devices[idx];
         Debug.Log($"[AudioUploader] Using microphone[{idx}]={micDevice}");
-    }
-
-    string PickPreferredMicrophone(string[] devices)
-    {
-        if (devices == null || devices.Length == 0)
-            return null;
-
-        for (int i = 0; i < devices.Length; i++)
-        {
-            string d = devices[i] ?? string.Empty;
-            string lower = d.ToLowerInvariant();
-            if (lower.Contains("macbook") || d.Contains("內建") || d.Contains("麥克風"))
-                return d;
-        }
-
-        return devices[0];
     }
 
     void ResolveRecordingSampleRate()
