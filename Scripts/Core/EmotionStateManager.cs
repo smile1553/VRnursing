@@ -114,6 +114,12 @@ public class EmotionStateManager : MonoBehaviour
         IsManualOverrideActive = false;
     }
 
+    public void ResetForStudent()
+    {
+        Current = null;
+        IsManualOverrideActive = false;
+    }
+
     public void ApplyManualState(float tension, int stage, string emotion = null, EmotionLlmInfo llm = null)
     {
         if (!allowManualOverride)

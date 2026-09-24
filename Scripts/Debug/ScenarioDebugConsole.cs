@@ -1,15 +1,21 @@
 using UnityEngine;
-using TMPro;
+using System.Collections.Generic;
 
 public class ScenarioDebugConsole : MonoBehaviour
 {
     public ScenarioController controller;
     public EmotionStateManager emotionState;
+    public EmotionStateSimulator emotionSimulator;
     public bool showWindow = true;
-    public Rect windowRect = new Rect(20, 20, 360, 260);
+    public Rect windowRect = new Rect(20, 20, 520, 360);
+    public bool showLogConsole = true;
+    public int maxLogEntries = 80;
+    public Rect logWindowRect = new Rect(560, 20, 700, 360);
 
     string _jumpStepId = "";
     Vector2 _scroll;
+    Vector2 _logScroll;
+    readonly Queue<string> _logEntries = new Queue<string>();
 
     void Awake()
     {
@@ -17,12 +23,26 @@ public class ScenarioDebugConsole : MonoBehaviour
             controller = FindObjectOfType<ScenarioController>();
         if (!emotionState)
             emotionState = FindObjectOfType<EmotionStateManager>();
+        if (!emotionSimulator)
+            emotionSimulator = FindObjectOfType<EmotionStateSimulator>();
+    }
+
+    void OnEnable()
+    {
+        Application.logMessageReceived += HandleLogMessage;
+    }
+
+    void OnDisable()
+    {
+        Application.logMessageReceived -= HandleLogMessage;
     }
 
     void OnGUI()
     {
         if (!showWindow) return;
         windowRect = GUILayout.Window(GetInstanceID(), windowRect, DrawWindow, "Scenario Debug");
+        if (showLogConsole)
+            logWindowRect = GUILayout.Window(GetInstanceID() + 1, logWindowRect, DrawLogWindow, "Runtime Console");
     }
 
     void DrawWindow(int id)
@@ -41,6 +61,13 @@ public class ScenarioDebugConsole : MonoBehaviour
         GUILayout.EndHorizontal();
 
         GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Stage 0")) SetStage(0);
+        if (GUILayout.Button("Stage 1")) SetStage(1);
+        if (GUILayout.Button("Stage 2")) SetStage(2);
+        if (GUILayout.Button("ApplyManual")) emotionSimulator?.ApplyManual();
+        GUILayout.EndHorizontal();
+
+        GUILayout.BeginHorizontal();
         GUILayout.Label("Jump Id", GUILayout.Width(60));
         _jumpStepId = GUILayout.TextField(_jumpStepId);
         if (GUILayout.Button("Go", GUILayout.Width(50))) controller?.JumpToStepId(_jumpStepId);
@@ -56,7 +83,7 @@ public class ScenarioDebugConsole : MonoBehaviour
                 GUILayout.BeginHorizontal();
                 GUILayout.Label(i.ToString(), GUILayout.Width(30));
                 GUILayout.Label(step.id, GUILayout.Width(120));
-                //if (GUILayout.Button("Jump", GUILayout.Width(60))) controller.JumpToIndex(i);
+                if (GUILayout.Button("Jump", GUILayout.Width(60))) controller.JumpToIndex(i);
                 GUILayout.EndHorizontal();
             }
             GUILayout.EndScrollView();
@@ -64,5 +91,48 @@ public class ScenarioDebugConsole : MonoBehaviour
 
         if (GUILayout.Button("Close")) showWindow = false;
         GUI.DragWindow(new Rect(0, 0, 10000, 20));
+    }
+
+    void DrawLogWindow(int id)
+    {
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Clear", GUILayout.Width(80)))
+            _logEntries.Clear();
+        if (GUILayout.Button("Hide", GUILayout.Width(80)))
+            showLogConsole = false;
+        GUILayout.Label($"Entries: {_logEntries.Count}");
+        GUILayout.EndHorizontal();
+
+        _logScroll = GUILayout.BeginScrollView(_logScroll);
+        foreach (var entry in _logEntries)
+            GUILayout.Label(entry);
+        GUILayout.EndScrollView();
+
+        GUI.DragWindow(new Rect(0, 0, 10000, 20));
+    }
+
+    void HandleLogMessage(string condition, string stackTrace, LogType type)
+    {
+        string prefix = type switch
+        {
+            LogType.Error => "[Error]",
+            LogType.Assert => "[Assert]",
+            LogType.Warning => "[Warn]",
+            LogType.Exception => "[Exception]",
+            _ => "[Log]"
+        };
+
+        string line = $"{prefix} {condition}";
+        _logEntries.Enqueue(line);
+        while (_logEntries.Count > Mathf.Max(10, maxLogEntries))
+            _logEntries.Dequeue();
+
+        _logScroll.y = float.MaxValue;
+    }
+
+    void SetStage(int stage)
+    {
+        if (emotionSimulator == null) return;
+        emotionSimulator.stage = stage;
     }
 }

@@ -127,7 +127,6 @@ public class AudioUploader : MonoBehaviour
             useContinuousAtRuntime = false;
         }
 
-        EnsureUploadWorker();
         loopRoutine = StartCoroutine(CaptureLoop());
     }
 
@@ -154,6 +153,13 @@ public class AudioUploader : MonoBehaviour
             uploadWorkerRoutine = null;
         }
         pendingUploads.Clear();
+    }
+
+    public void ResetForStudent()
+    {
+        StopLoop();
+        noiseCalibrated = false;
+        currentVadState = "Idle";
     }
 
     bool CanRecord()
@@ -193,30 +199,17 @@ public class AudioUploader : MonoBehaviour
 
         if (microphoneDeviceIndex < 0)
         {
-            micDevice = PickPreferredMicrophone(devices);
-            Debug.Log($"[AudioUploader] Auto-selected microphone = {(string.IsNullOrEmpty(micDevice) ? "<OS default>" : micDevice)}");
+            // Unity uses null for the operating system's current default input.
+            // Do not force devices[0]: its order is not stable between Editor,
+            // Quest Link, and standalone Android builds.
+            micDevice = null;
+            Debug.Log("[AudioUploader] Using OS default microphone (device=null).");
             return;
         }
 
         int idx = Mathf.Clamp(microphoneDeviceIndex, 0, devices.Length - 1);
         micDevice = devices[idx];
         Debug.Log($"[AudioUploader] Using microphone[{idx}]={micDevice}");
-    }
-
-    string PickPreferredMicrophone(string[] devices)
-    {
-        if (devices == null || devices.Length == 0)
-            return null;
-
-        for (int i = 0; i < devices.Length; i++)
-        {
-            string d = devices[i] ?? string.Empty;
-            string lower = d.ToLowerInvariant();
-            if (lower.Contains("macbook") || d.Contains("內建") || d.Contains("麥克風"))
-                return d;
-        }
-
-        return devices[0];
     }
 
     void ResolveRecordingSampleRate()
@@ -438,7 +431,10 @@ public class AudioUploader : MonoBehaviour
     void EnsureUploadWorker()
     {
         if (uploadWorkerRoutine == null)
+        {
+            Debug.Log("[AudioUploader] EnsureUploadWorker -> start worker");
             uploadWorkerRoutine = StartCoroutine(UploadWorker());
+        }
     }
 
     void EnqueueUpload(byte[] bytes)
@@ -460,11 +456,13 @@ public class AudioUploader : MonoBehaviour
         }
 
         pendingUploads.Enqueue(bytes);
+        Debug.Log($"[AudioUploader] enqueue wav bytes={bytes.Length} queue={pendingUploads.Count}");
         EnsureUploadWorker();
     }
 
     IEnumerator UploadWorker()
     {
+        Debug.Log("[AudioUploader] UploadWorker started");
         while (true)
         {
             if (pendingUploads.Count == 0)
@@ -476,10 +474,13 @@ public class AudioUploader : MonoBehaviour
                 continue;
             }
 
+            Debug.Log($"[AudioUploader] UploadWorker dequeue queue_before={pendingUploads.Count}");
             byte[] payload = pendingUploads.Dequeue();
+            Debug.Log($"[AudioUploader] UploadWorker sending payload bytes={payload.Length} queue_after={pendingUploads.Count}");
             yield return Upload(payload);
         }
 
+        Debug.Log("[AudioUploader] UploadWorker stopped");
         uploadWorkerRoutine = null;
     }
 
@@ -775,12 +776,16 @@ public class AudioUploader : MonoBehaviour
 
     IEnumerator Upload(byte[] bytes)
     {
+        Debug.Log($"[AudioUploader] Upload begin url={serverUrl} bytes={bytes?.Length ?? 0}");
         using (UnityWebRequest req = new UnityWebRequest(serverUrl, "POST"))
         {
             req.uploadHandler = new UploadHandlerRaw(bytes);
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "audio/wav");
+            req.timeout = 5;
+            Debug.Log("[AudioUploader] SendWebRequest start");
             yield return req.SendWebRequest();
+            Debug.Log("[AudioUploader] SendWebRequest finished");
 
 #if UNITY_2020_2_OR_NEWER
             if (req.result == UnityWebRequest.Result.Success)

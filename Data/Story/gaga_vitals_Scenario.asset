@@ -20,15 +20,19 @@ MonoBehaviour:
     autoAdvanceDelay: 1.2
     waitForClick: 0
     playerActionRequired: 1
-    playerPrompt: "\u5411\u82BD\u82BD\u8207\u5ABD\u5ABD\u554F\u597D\uFF0C\u8AAA\u660E\u5C07\u5354\u52A9\u91CF\u9AD4\u6EAB\u3001\u547C\u5438\u3001\u5FC3\u8DF3\u8207\u8840\u58D3\u3002"
-    expectedKeywords: []
+    playerPrompt: "\u9032\u5165\u75C5\u623F\u524D\uFF0C\u5148\u5728\u9580\u53E3\u5411\u82BD\u82BD\u8207\u5ABD\u5ABD\u554F\u597D\uFF0C\u4E26\u8AAA\u660E\u5C07\u5354\u52A9\u91CF\u9AD4\u6EAB\u3001\u547C\u5438\u3001\u5FC3\u8DF3\u8207\u8840\u58D3\u3002"
+    expectedKeywords:
+    - "\u4F60\u597D"
+    - "\u60A8\u597D"
+    - "\u5927\u5BB6\u597D"
+    - "\u54C8\u56C9"
+    - "\u54C8\u5570"
+    - "\u55E8"
+    - "\u65E9\u5B89"
+    - "\u5348\u5B89"
     allowLlmAssist: 1
     expectedIntents:
-    - reassure
-    - explain
-    - praise
-    - command
-    - distract
+    - introduce_bp_exam
     minLlmConfidence: 0.55
     hints: []
     subtitle:

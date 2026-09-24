@@ -6,15 +6,20 @@
       "dialogue": "",
       "cursorTargetId": "nurse",
       "playerActionRequired": true,
-      "playerPrompt": "向芽芽與媽媽問好，說明將協助量體溫、呼吸、心跳與血壓。",
-      "expectedKeywords": [],
+      "playerPrompt": "進入病房前，先在門口向芽芽與媽媽問好，並說明將協助量體溫、呼吸、心跳與血壓。",
+      "expectedKeywords": [
+        "你好",
+        "您好",
+        "大家好",
+        "哈囉",
+        "哈啰",
+        "嗨",
+        "早安",
+        "午安"
+      ],
       "allowLlmAssist": true,
       "expectedIntents": [
-        "reassure",
-        "explain",
-        "praise",
-        "command",
-        "distract"
+        "introduce_bp_exam"
       ],
       "minLlmConfidence": 0.55
     },
