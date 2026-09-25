@@ -7,6 +7,8 @@ using UnityEngine.Networking;
 
 public class AudioUploader : MonoBehaviour
 {
+    const int UploadSampleRate = 16000;
+
     [Header("Server")]
     [HideInInspector] public string serverUrl;  // ← 不寫死，由外部指定，例如 http://IP:8000/audio
 
@@ -15,7 +17,7 @@ public class AudioUploader : MonoBehaviour
     public int recordSeconds = 3;
     [Range(0f, 0.05f)] public float minUploadRms = 0.003f;
     [Range(1f, 8f)] public float uploadGain = 3f;
-    public bool saveDebugWav = true;
+    public bool saveDebugWav = false;
 
     [Header("Auto Loop")]
     public float loopInterval = 0f; // 追加延遲；0 代表接力錄
@@ -26,6 +28,13 @@ public class AudioUploader : MonoBehaviour
     [Header("Upload Queue")]
     [Min(1)] public int maxUploadQueue = 4;
     public bool dropOldestOnQueueFull = true;
+    [Min(1)] public int uploadTimeoutSeconds = 30;
+    [Tooltip("0 retries transient /audio failures until the same request succeeds.")]
+    public int maxUploadRetries = 0;
+    [Min(0.1f)] public float uploadRetryDelaySeconds = 2f;
+
+    [Header("Complete Utterance")]
+    [Min(3f)] public float maxUtteranceSeconds = 20f;
 
     [Header("Voice Activity Detection (VAD)")]
     public bool enableVad = true;
@@ -57,13 +66,32 @@ public class AudioUploader : MonoBehaviour
     Coroutine loopRoutine;
     AudioClip liveClip;
     int liveReadPos;
+    AudioClip pushToTalkClip;
+    bool pushToTalkRecording;
+    float pushToTalkStartedAt;
     Coroutine startRetryRoutine;
     Coroutine uploadWorkerRoutine;
-    readonly Queue<byte[]> pendingUploads = new Queue<byte[]>();
+    readonly Queue<AudioUploadWorkItem> pendingUploads = new Queue<AudioUploadWorkItem>();
+    readonly HashSet<string> deliveredRequestIds = new HashSet<string>(StringComparer.Ordinal);
     bool useContinuousAtRuntime;
+    bool captureEnabled;
+    bool uploadInProgress;
+    bool blockingUploadFailure;
+    int outstandingRequestCount;
+    string lastUploadError;
     bool noiseCalibrated;
     float calibratedNoiseFloorDb = -55f;
     string currentVadState = "Idle";
+
+    public event Action<AudioAnalysisResponse, string> AudioResponseAccepted;
+    public event Action AudioProcessingStateChanged;
+
+    public bool IsAudioProcessingIdle => outstandingRequestCount == 0 &&
+        pendingUploads.Count == 0 && !uploadInProgress;
+    public bool HasBlockingAudioFailure => blockingUploadFailure;
+    public int OutstandingRequestCount => outstandingRequestCount;
+    public string LastUploadError => lastUploadError;
+    public bool IsPushToTalkRecording => pushToTalkRecording;
 
     [Header("Startup Retry")]
     public float startRetryInterval = 1f;
@@ -83,19 +111,12 @@ public class AudioUploader : MonoBehaviour
     // 給 UI 按鈕綁這個
     public void StartRecordAndUpload()
     {
-        if (string.IsNullOrEmpty(serverUrl))
-        {
-            Debug.LogWarning("serverUrl not set yet.");
-            return;
-        }
-        if (Microphone.devices == null || Microphone.devices.Length == 0) return;
-        StartCoroutine(CaptureAndSendOnce());
+        Debug.LogWarning("[AudioUploader] StartRecordAndUpload is legacy. Use StartPushToTalk/StopPushToTalkAndUpload.");
+        StartPushToTalk();
     }
 
     public void StartLoop()
     {
-        if (loopRoutine != null) return;
-
         if (!Application.HasUserAuthorization(UserAuthorization.Microphone))
         {
             Debug.LogWarning("[AudioUploader] Microphone permission not granted.");
@@ -115,23 +136,116 @@ public class AudioUploader : MonoBehaviour
             return;
         }
 
-        useContinuousAtRuntime = continuousMicInLoop && !forceSegmentedLoop;
+        // Formal recording is Push-to-Talk. StartLoop is retained for the
+        // existing login flow, but now only prepares the microphone.
+        useContinuousAtRuntime = false;
+        captureEnabled = false;
         noiseCalibrated = false;
         currentVadState = "Idle";
-        if (continuousMicInLoop && forceSegmentedLoop)
-            Debug.LogWarning("[AudioUploader] forceSegmentedLoop=true, skip continuous mic mode.");
+        Debug.Log("[AudioUploader] Push-to-Talk ready. Recording starts only on button press.");
+    }
 
-        if (useContinuousAtRuntime && !StartContinuousMic())
+    public void StartPushToTalk()
+    {
+        if (pushToTalkRecording)
+            return;
+
+        StudentRunContext context = StudentRunContext.Current;
+        if (!context.HasStudentRun || !context.StudentRunAccepted || context.ScenarioCompleted)
         {
-            Debug.LogWarning("[AudioUploader] Continuous mic start failed, fallback to segmented recording.");
-            useContinuousAtRuntime = false;
+            Debug.LogWarning("[AudioUploader] Push-to-Talk requires an active accepted Student Run.");
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(serverUrl))
+        {
+            Debug.LogWarning("[AudioUploader] Push-to-Talk start ignored: server is not connected.");
+            return;
         }
 
-        loopRoutine = StartCoroutine(CaptureLoop());
+        ConfigureMicrophoneDevice();
+        ResolveRecordingSampleRate();
+        if (!CanRecord())
+        {
+            Debug.LogWarning("[AudioUploader] Push-to-Talk start ignored: server or microphone is not ready.");
+            return;
+        }
+
+        int maximumSeconds = Mathf.Max(1, Mathf.CeilToInt(maxUtteranceSeconds));
+        pushToTalkClip = Microphone.Start(micDevice, false, maximumSeconds, activeSampleRate);
+        if (pushToTalkClip == null)
+        {
+            Debug.LogError("[AudioUploader] Push-to-Talk could not start the microphone.");
+            return;
+        }
+
+        pushToTalkStartedAt = Time.realtimeSinceStartup;
+        pushToTalkRecording = true;
+        Debug.Log($"[AudioUploader] Push-to-Talk started; maximum={maximumSeconds}s sampleRate={activeSampleRate}.");
+    }
+
+    public void StopPushToTalkAndUpload()
+    {
+        if (!pushToTalkRecording || pushToTalkClip == null)
+            return;
+
+        AudioClip clip = pushToTalkClip;
+        int recordedSamples = Microphone.GetPosition(micDevice);
+        float elapsed = Time.realtimeSinceStartup - pushToTalkStartedAt;
+
+        // A non-looping microphone returns to position zero after reaching its
+        // maximum length. In that case the complete safety buffer is valid.
+        if (recordedSamples <= 0 && elapsed >= Mathf.Max(1f, maxUtteranceSeconds) - 0.1f)
+            recordedSamples = clip.samples;
+
+        Microphone.End(micDevice);
+        pushToTalkClip = null;
+        pushToTalkRecording = false;
+        pushToTalkStartedAt = 0f;
+
+        recordedSamples = Mathf.Clamp(recordedSamples, 0, clip.samples);
+        int recordingSampleRate = clip.frequency > 0 ? clip.frequency : activeSampleRate;
+        int minimumSamples = Mathf.Max(1,
+            Mathf.RoundToInt(vadMinSpeechMs * 0.001f * recordingSampleRate));
+        if (recordedSamples < minimumSamples)
+        {
+            Debug.Log($"[AudioUploader] Push-to-Talk discarded: {recordedSamples} samples is shorter than {minimumSamples}.");
+            Destroy(clip);
+            return;
+        }
+
+        float[] interleavedSamples = new float[recordedSamples * clip.channels];
+        clip.GetData(interleavedSamples, 0);
+        float[] samples = ConvertToMonoAndResample(
+            interleavedSamples, Mathf.Max(1, clip.channels), recordingSampleRate, UploadSampleRate);
+        Destroy(clip);
+        activeSampleRate = UploadSampleRate;
+
+        // VAD is applied only after release, for silence trim and speech
+        // validation. It no longer starts or ends an utterance.
+        StartCoroutine(ProcessAndUploadChunk(samples));
     }
 
     public void StopLoop()
     {
+        CancelPushToTalkRecording();
+
+        if (uploadWorkerRoutine != null)
+        {
+            StopCoroutine(uploadWorkerRoutine);
+            uploadWorkerRoutine = null;
+        }
+        pendingUploads.Clear();
+        outstandingRequestCount = 0;
+        uploadInProgress = false;
+        NotifyProcessingStateChanged();
+    }
+
+    public void StopCaptureAndFlush()
+    {
+        if (pushToTalkRecording)
+            StopPushToTalkAndUpload();
+
+        captureEnabled = false;
         if (loopRoutine != null)
         {
             StopCoroutine(loopRoutine);
@@ -147,12 +261,19 @@ public class AudioUploader : MonoBehaviour
         StopContinuousMic();
         useContinuousAtRuntime = false;
         currentVadState = "Idle";
-        if (uploadWorkerRoutine != null)
-        {
-            StopCoroutine(uploadWorkerRoutine);
-            uploadWorkerRoutine = null;
-        }
-        pendingUploads.Clear();
+    }
+
+    void CancelPushToTalkRecording()
+    {
+        if (!pushToTalkRecording && pushToTalkClip == null)
+            return;
+
+        Microphone.End(micDevice);
+        if (pushToTalkClip != null)
+            Destroy(pushToTalkClip);
+        pushToTalkClip = null;
+        pushToTalkRecording = false;
+        pushToTalkStartedAt = 0f;
     }
 
     public void ResetForStudent()
@@ -160,6 +281,9 @@ public class AudioUploader : MonoBehaviour
         StopLoop();
         noiseCalibrated = false;
         currentVadState = "Idle";
+        blockingUploadFailure = false;
+        lastUploadError = string.Empty;
+        deliveredRequestIds.Clear();
     }
 
     bool CanRecord()
@@ -290,35 +414,99 @@ public class AudioUploader : MonoBehaviour
 
     IEnumerator CaptureLoopContinuous()
     {
-        int targetSamples = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(0.1f, recordSeconds) * activeSampleRate));
-        List<float> pending = new List<float>(targetSamples * 2);
-        int maxPendingSamples = targetSamples * Mathf.Max(1, maxQueuedChunks);
+        int frameSamples = Mathf.Max(1, Mathf.RoundToInt(vadFrameMs * 0.001f * activeSampleRate));
+        int preRollSamples = Mathf.Max(0, Mathf.RoundToInt(vadPreRollMs * 0.001f * activeSampleRate));
+        int minimumSpeechSamples = Mathf.Max(1, Mathf.RoundToInt(vadMinSpeechMs * 0.001f * activeSampleRate));
+        int maximumUtteranceSamples = Mathf.Max(minimumSpeechSamples,
+            Mathf.RoundToInt(Mathf.Max(3f, maxUtteranceSeconds) * activeSampleRate));
+        float endSilenceSeconds = Mathf.Max(0.05f, maxSilenceMs * 0.001f);
 
-        while (true)
+        var pending = new List<float>(frameSamples * 4);
+        var preBuffer = new Queue<float>(Mathf.Max(1, preRollSamples + frameSamples));
+        var utterance = new List<float>(Mathf.Min(maximumUtteranceSamples, activeSampleRate * 8));
+        bool speechStarted = false;
+        float silenceSeconds = 0f;
+
+        while (captureEnabled)
         {
             float[] incoming = ReadNewMicSamples();
             if (incoming != null && incoming.Length > 0)
                 pending.AddRange(incoming);
 
-            // Drop oldest backlog when server is slower than capture speed.
-            if (pending.Count > maxPendingSamples)
+            while (pending.Count >= frameSamples && captureEnabled)
             {
-                int drop = pending.Count - maxPendingSamples;
-                pending.RemoveRange(0, drop);
-                Debug.LogWarning($"[AudioUploader] backlog drop {drop} samples (~{drop / (float)activeSampleRate:F2}s)");
-            }
+                float[] frame = pending.GetRange(0, frameSamples).ToArray();
+                pending.RemoveRange(0, frameSamples);
 
-            while (pending.Count >= targetSamples)
-            {
-                float[] chunk = pending.GetRange(0, targetSamples).ToArray();
-                pending.RemoveRange(0, targetSamples);
-                yield return ProcessAndUploadChunk(chunk);
+                float db = LinearToDb(ComputeRms(frame));
+                GetRuntimeVadThresholds(out float runtimeStartDb, out float runtimeEndDb);
 
+                if (!speechStarted)
+                {
+                    currentVadState = "Idle";
+                    UpdateAdaptiveNoiseFloor(db);
+                    GetRuntimeVadThresholds(out runtimeStartDb, out runtimeEndDb);
+                    AppendRing(preBuffer, frame, preRollSamples);
+
+                    bool started = useDbVad ? db >= runtimeStartDb : ComputeRms(frame) >= vadThreshold;
+                    if (started)
+                    {
+                        speechStarted = true;
+                        silenceSeconds = 0f;
+                        utterance.Clear();
+                        if (preBuffer.Count > 0)
+                            utterance.AddRange(preBuffer);
+                        else
+                            utterance.AddRange(frame);
+                        currentVadState = "Speaking";
+                    }
+                    continue;
+                }
+
+                utterance.AddRange(frame);
+                bool stillSpeaking = useDbVad ? db >= runtimeEndDb : ComputeRms(frame) >= vadThreshold;
+                if (stillSpeaking)
+                {
+                    silenceSeconds = 0f;
+                    currentVadState = "Speaking";
+                }
+                else
+                {
+                    silenceSeconds += frameSamples / (float)activeSampleRate;
+                    currentVadState = "SilenceCounting";
+                }
+
+                bool endedBySilence = silenceSeconds >= endSilenceSeconds;
+                bool endedByLimit = utterance.Count >= maximumUtteranceSamples;
+                if (!endedBySilence && !endedByLimit)
+                    continue;
+
+                float[] completeUtterance = utterance.ToArray();
+                speechStarted = false;
+                silenceSeconds = 0f;
+                utterance.Clear();
+                preBuffer.Clear();
+                currentVadState = "Idle";
+
+                if (completeUtterance.Length >= minimumSpeechSamples)
+                    yield return ProcessAndUploadChunk(completeUtterance);
                 if (loopInterval > 0f)
                     yield return new WaitForSeconds(loopInterval);
             }
 
             yield return null;
+        }
+    }
+
+    static void AppendRing(Queue<float> target, float[] samples, int capacity)
+    {
+        if (target == null || samples == null || capacity <= 0)
+            return;
+        for (int i = 0; i < samples.Length; i++)
+        {
+            while (target.Count >= capacity)
+                target.Dequeue();
+            target.Enqueue(samples[i]);
         }
     }
 
@@ -328,7 +516,10 @@ public class AudioUploader : MonoBehaviour
 
         float[] samples = null;
 
-        if (enableVad)
+        // Continuous mode has already applied the adaptive dB VAD and complete-
+        // utterance boundary. Running the legacy linear VAD again can reject a
+        // quiet sentence that the adaptive detector correctly accepted.
+        if (enableVad && !useContinuousAtRuntime)
         {
             yield return CaptureUsingVad(result => samples = result);
             if (samples == null || samples.Length == 0)
@@ -383,7 +574,7 @@ public class AudioUploader : MonoBehaviour
         float peak = ComputePeak(uploadSamples);
         Debug.Log($"[AudioUploader] upload chunk samples={uploadSamples.Length} rms={rms:F5} peak={peak:F5} vad={enableVad}");
 
-        if (saveDebugWav)
+        if (saveDebugWav && Debug.isDebugBuild)
             SaveDebugWav(uploadSamples);
 
         if (rms < minUploadRms)
@@ -393,7 +584,7 @@ public class AudioUploader : MonoBehaviour
         }
 
         byte[] wav = WavUtility.FromAudioFloat(uploadSamples, 1, activeSampleRate);
-        EnqueueUpload(wav);
+        EnqueueUpload(CreateWorkItem(wav));
         yield break;
     }
 
@@ -437,9 +628,40 @@ public class AudioUploader : MonoBehaviour
         }
     }
 
-    void EnqueueUpload(byte[] bytes)
+    AudioUploadWorkItem CreateWorkItem(byte[] bytes)
     {
-        if (bytes == null || bytes.Length == 0)
+        StudentRunContext context = StudentRunContext.Current;
+        if (!context.HasStudentRun || !context.StudentRunAccepted)
+        {
+            Debug.LogWarning("[AudioUploader] Speech was captured without an accepted Student Run; upload skipped.");
+            return null;
+        }
+
+        ScenarioController scenario = FindObjectOfType<ScenarioController>();
+        string scenarioStepId = scenario != null && scenario.CurrentStep != null
+            ? scenario.CurrentStep.id ?? string.Empty
+            : string.Empty;
+        if (string.IsNullOrWhiteSpace(scenarioStepId))
+        {
+            blockingUploadFailure = true;
+            lastUploadError = "Cannot upload /audio because Scenario CurrentStep.id is empty.";
+            Debug.LogError("[AudioUploader] " + lastUploadError);
+            NotifyProcessingStateChanged();
+            return null;
+        }
+
+        return new AudioUploadWorkItem
+        {
+            wav = bytes,
+            requestId = Guid.NewGuid().ToString(),
+            scenarioStepId = scenarioStepId,
+            studentRunId = context.ResultId
+        };
+    }
+
+    void EnqueueUpload(AudioUploadWorkItem item)
+    {
+        if (item == null || item.wav == null || item.wav.Length == 0)
             return;
 
         int limit = Mathf.Max(1, maxUploadQueue);
@@ -451,12 +673,15 @@ public class AudioUploader : MonoBehaviour
                 return;
             }
 
-            pendingUploads.Dequeue();
+            AudioUploadWorkItem dropped = pendingUploads.Dequeue();
+            CompleteRequest(dropped, "Upload queue full; oldest utterance was dropped.", true);
             Debug.LogWarning($"[AudioUploader] upload queue full ({limit}), drop oldest chunk.");
         }
 
-        pendingUploads.Enqueue(bytes);
-        Debug.Log($"[AudioUploader] enqueue wav bytes={bytes.Length} queue={pendingUploads.Count}");
+        pendingUploads.Enqueue(item);
+        outstandingRequestCount++;
+        Debug.Log($"[AudioUploader] enqueue requestId={item.requestId} wavBytes={item.wav.Length} queue={pendingUploads.Count}");
+        NotifyProcessingStateChanged();
         EnsureUploadWorker();
     }
 
@@ -475,9 +700,13 @@ public class AudioUploader : MonoBehaviour
             }
 
             Debug.Log($"[AudioUploader] UploadWorker dequeue queue_before={pendingUploads.Count}");
-            byte[] payload = pendingUploads.Dequeue();
-            Debug.Log($"[AudioUploader] UploadWorker sending payload bytes={payload.Length} queue_after={pendingUploads.Count}");
-            yield return Upload(payload);
+            AudioUploadWorkItem item = pendingUploads.Dequeue();
+            Debug.Log($"[AudioUploader] UploadWorker sending requestId={item.requestId} bytes={item.wav.Length} queue_after={pendingUploads.Count}");
+            uploadInProgress = true;
+            NotifyProcessingStateChanged();
+            yield return Upload(item);
+            uploadInProgress = false;
+            NotifyProcessingStateChanged();
         }
 
         Debug.Log("[AudioUploader] UploadWorker stopped");
@@ -774,28 +1003,142 @@ public class AudioUploader : MonoBehaviour
         calibratedNoiseFloorDb = Mathf.Lerp(calibratedNoiseFloorDb, frameDb, alpha);
     }
 
-    IEnumerator Upload(byte[] bytes)
+    IEnumerator Upload(AudioUploadWorkItem item)
     {
-        Debug.Log($"[AudioUploader] Upload begin url={serverUrl} bytes={bytes?.Length ?? 0}");
+        if (item == null)
+            yield break;
+
+        if (!IsCurrentStudentRun(item))
+        {
+            CompleteRequest(item, "Student Run changed before /audio upload completed.", false);
+            yield break;
+        }
+
+        Debug.Log($"[AudioUploader] Upload begin requestId={item.requestId} url={serverUrl} bytes={item.wav?.Length ?? 0}");
         using (UnityWebRequest req = new UnityWebRequest(serverUrl, "POST"))
         {
-            req.uploadHandler = new UploadHandlerRaw(bytes);
+            req.uploadHandler = new UploadHandlerRaw(item.wav);
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "audio/wav");
-            req.timeout = 5;
+            req.SetRequestHeader("X-Request-Id", item.requestId);
+            req.SetRequestHeader("X-Scenario-Step-Id", item.scenarioStepId ?? string.Empty);
+            req.SetRequestHeader("X-Student-Run-Id", item.studentRunId ?? string.Empty);
+            req.timeout = Mathf.Max(1, uploadTimeoutSeconds);
             Debug.Log("[AudioUploader] SendWebRequest start");
             yield return req.SendWebRequest();
             Debug.Log("[AudioUploader] SendWebRequest finished");
 
 #if UNITY_2020_2_OR_NEWER
-            if (req.result == UnityWebRequest.Result.Success)
+            bool transportSuccess = req.result == UnityWebRequest.Result.Success;
 #else
-            if (!req.isNetworkError && !req.isHttpError)
+            bool transportSuccess = !req.isNetworkError && !req.isHttpError;
 #endif
-                Debug.Log("Upload OK: " + req.downloadHandler.text);
+            if (!transportSuccess)
+            {
+                string failure = $"HTTP {req.responseCode} {req.error}";
+                if (IsTransientFailure(req.responseCode))
+                {
+                    yield return RetrySameRequest(item, failure);
+                    yield break;
+                }
+
+                CompleteRequest(item, failure, true);
+                yield break;
+            }
+
+            if (!IsCurrentStudentRun(item))
+            {
+                CompleteRequest(item, "Student Run changed while /audio was in flight.", false);
+                yield break;
+            }
+
+            string json = req.downloadHandler != null ? req.downloadHandler.text : string.Empty;
+            AudioAnalysisResponse response;
+            string validationError;
+            if (!AudioAnalysisResponseContract.TryParseAndValidate(
+                json, item.requestId, item.scenarioStepId, item.studentRunId,
+                out response, out validationError))
+            {
+                CompleteRequest(item, validationError, true);
+                yield break;
+            }
+
+            bool firstDelivery = RememberDeliveredRequestId(response.requestId);
+            if (response.ignored)
+            {
+                Debug.Log($"[AudioUploader] ignored requestId={response.requestId}; no emotion or ToneScore update.");
+            }
+            else if (firstDelivery)
+            {
+                AudioResponseAccepted?.Invoke(response, json);
+                Debug.Log($"[AudioUploader] accepted requestId={response.requestId} duplicate={response.duplicate} state={response.ResolvedKidEmotionState}");
+            }
             else
-                Debug.LogError("Upload Error: " + req.error);
+            {
+                Debug.Log($"[AudioUploader] duplicate delivery suppressed requestId={response.requestId}");
+            }
+
+            CompleteRequest(item, string.Empty, false);
         }
+    }
+
+    IEnumerator RetrySameRequest(AudioUploadWorkItem item, string failure)
+    {
+        item.retryCount++;
+        bool retryAllowed = maxUploadRetries <= 0 || item.retryCount <= maxUploadRetries;
+        if (!retryAllowed)
+        {
+            CompleteRequest(item, failure + "; automatic retry limit reached.", true);
+            yield break;
+        }
+
+        lastUploadError = failure;
+        Debug.LogWarning($"[AudioUploader] transient /audio failure requestId={item.requestId}; retry={item.retryCount} with the same requestId. {failure}");
+        NotifyProcessingStateChanged();
+        yield return new WaitForSecondsRealtime(Mathf.Max(0.1f, uploadRetryDelaySeconds));
+
+        if (!IsCurrentStudentRun(item))
+        {
+            CompleteRequest(item, "Student Run changed before /audio retry.", false);
+            yield break;
+        }
+
+        pendingUploads.Enqueue(item);
+    }
+
+    static bool IsTransientFailure(long responseCode)
+    {
+        return responseCode == 0 || responseCode == 408 || responseCode == 429 || responseCode >= 500;
+    }
+
+    static bool IsCurrentStudentRun(AudioUploadWorkItem item)
+    {
+        StudentRunContext context = StudentRunContext.Current;
+        return item != null && context.HasStudentRun && context.StudentRunAccepted &&
+            string.Equals(context.ResultId, item.studentRunId, StringComparison.Ordinal);
+    }
+
+    bool RememberDeliveredRequestId(string requestId)
+    {
+        return !string.IsNullOrEmpty(requestId) && deliveredRequestIds.Add(requestId);
+    }
+
+    void CompleteRequest(AudioUploadWorkItem item, string error, bool blocking)
+    {
+        outstandingRequestCount = Mathf.Max(0, outstandingRequestCount - 1);
+        if (!string.IsNullOrEmpty(error))
+        {
+            lastUploadError = error;
+            if (blocking)
+                blockingUploadFailure = true;
+            Debug.LogError($"[AudioUploader] requestId={item?.requestId} failed: {error}");
+        }
+        NotifyProcessingStateChanged();
+    }
+
+    void NotifyProcessingStateChanged()
+    {
+        AudioProcessingStateChanged?.Invoke();
     }
 
     float[] ApplyVadTrim(float[] source, int sr)
@@ -853,6 +1196,46 @@ public class AudioUploader : MonoBehaviour
         return trimmed;
     }
 
+    static float[] ConvertToMonoAndResample(
+        float[] interleaved, int channels, int sourceRate, int targetRate)
+    {
+        if (interleaved == null || interleaved.Length == 0)
+            return Array.Empty<float>();
+
+        channels = Mathf.Max(1, channels);
+        sourceRate = Mathf.Max(1, sourceRate);
+        targetRate = Mathf.Max(1, targetRate);
+        int sourceFrames = interleaved.Length / channels;
+        if (sourceFrames <= 0)
+            return Array.Empty<float>();
+
+        var mono = new float[sourceFrames];
+        for (int frame = 0; frame < sourceFrames; frame++)
+        {
+            float sum = 0f;
+            int offset = frame * channels;
+            for (int channel = 0; channel < channels; channel++)
+                sum += interleaved[offset + channel];
+            mono[frame] = sum / channels;
+        }
+
+        if (sourceRate == targetRate || sourceFrames == 1)
+            return mono;
+
+        int targetFrames = Mathf.Max(1,
+            Mathf.RoundToInt(sourceFrames * (targetRate / (float)sourceRate)));
+        var result = new float[targetFrames];
+        float scale = (sourceFrames - 1f) / Mathf.Max(1, targetFrames - 1);
+        for (int frame = 0; frame < targetFrames; frame++)
+        {
+            float sourcePosition = frame * scale;
+            int left = Mathf.FloorToInt(sourcePosition);
+            int right = Mathf.Min(left + 1, sourceFrames - 1);
+            result[frame] = Mathf.Lerp(mono[left], mono[right], sourcePosition - left);
+        }
+        return result;
+    }
+
     float LinearToDb(float rms)
     {
         return 20f * Mathf.Log10(Mathf.Max(1e-6f, rms));
@@ -907,4 +1290,14 @@ public class AudioUploader : MonoBehaviour
 
         return peak;
     }
+}
+
+[Serializable]
+sealed class AudioUploadWorkItem
+{
+    public byte[] wav;
+    public string requestId;
+    public string scenarioStepId;
+    public string studentRunId;
+    public int retryCount;
 }

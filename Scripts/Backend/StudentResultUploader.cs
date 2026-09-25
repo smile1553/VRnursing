@@ -16,6 +16,7 @@ public class StudentResultUploader : MonoBehaviour
     public ScenarioController scenarioController;
     public PerformanceScoreManager scoreManager;
     public ExperimentSessionClient sessionClient;
+    public AudioUploader audioUploader;
 
     [Header("Tone score")]
     [Tooltip("Product definition: PerformanceScoreManager.ToneScore is the formal 0..20 score. ExplicitFinalToneScore remains available only for tests or a future override.")]
@@ -39,18 +40,23 @@ public class StudentResultUploader : MonoBehaviour
         if (!scenarioController) scenarioController = FindObjectOfType<ScenarioController>();
         if (!scoreManager) scoreManager = FindObjectOfType<PerformanceScoreManager>();
         if (!sessionClient) sessionClient = FindObjectOfType<ExperimentSessionClient>();
+        if (!audioUploader) audioUploader = FindObjectOfType<AudioUploader>();
     }
 
     void OnEnable()
     {
         if (scenarioController != null)
             scenarioController.onScenarioCompleted.AddListener(HandleScenarioCompleted);
+        if (audioUploader != null)
+            audioUploader.AudioProcessingStateChanged += HandleAudioProcessingStateChanged;
     }
 
     void OnDisable()
     {
         if (scenarioController != null)
             scenarioController.onScenarioCompleted.RemoveListener(HandleScenarioCompleted);
+        if (audioUploader != null)
+            audioUploader.AudioProcessingStateChanged -= HandleAudioProcessingStateChanged;
         if (retryRoutine != null)
         {
             StopCoroutine(retryRoutine);
@@ -104,8 +110,15 @@ public class StudentResultUploader : MonoBehaviour
 
     void HandleScenarioCompleted()
     {
+        audioUploader?.StopCaptureAndFlush();
         StudentRunContext.Current.ScenarioCompleted = true;
         TryFreezeAndUpload();
+    }
+
+    void HandleAudioProcessingStateChanged()
+    {
+        if (StudentRunContext.Current.ScenarioCompleted)
+            TryFreezeAndUpload();
     }
 
     void TryFreezeAndUpload()
@@ -123,6 +136,18 @@ public class StudentResultUploader : MonoBehaviour
         if (!context.ScenarioCompleted)
         {
             SetStatus("ToneScore is ready; waiting for Scenario completion before freezing the result.", false);
+            return;
+        }
+
+        if (audioUploader != null && audioUploader.HasBlockingAudioFailure)
+        {
+            SetStatus("Final result is blocked because an /audio request failed permanently: " +
+                audioUploader.LastUploadError, true);
+            return;
+        }
+        if (audioUploader != null && !audioUploader.IsAudioProcessingIdle)
+        {
+            SetStatus($"Scenario is complete; waiting for {audioUploader.OutstandingRequestCount} /audio request(s) before freezing ToneScore.", false);
             return;
         }
 
