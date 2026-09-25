@@ -22,7 +22,7 @@ public class AudioUploader : MonoBehaviour
     [Header("Auto Loop")]
     public float loopInterval = 0f; // 追加延遲；0 代表接力錄
     public bool continuousMicInLoop = true; // Loop 模式時持續開啟麥克風（系統麥克風燈會常亮）
-    public bool forceSegmentedLoop = true; // 穩定優先：強制使用分段錄音，避免部分裝置在 continuous 模式無資料
+    public bool forceSegmentedLoop = false; // 僅在特定裝置無法使用持續麥克風時才啟用 fallback
     [Min(2)] public int continuousBufferSeconds = 20; // ring buffer 長度（秒）
     [Min(1)] public int maxQueuedChunks = 2; // server 忙時最多保留幾段，避免延遲後一次噴一堆舊結果
     [Header("Upload Queue")]
@@ -47,7 +47,7 @@ public class AudioUploader : MonoBehaviour
     public bool useDbVad = true;
     public float startThresholdDb = -35f;
     public float endThresholdDb = -45f;
-    public float maxSilenceMs = 600f;
+    public float maxSilenceMs = 500f;
     public float endPaddingMs = 200f;
     public bool autoCalibrateNoise = true;
     public float noiseCalibrateSec = 1f;
@@ -87,7 +87,8 @@ public class AudioUploader : MonoBehaviour
     public event Action AudioProcessingStateChanged;
 
     public bool IsAudioProcessingIdle => outstandingRequestCount == 0 &&
-        pendingUploads.Count == 0 && !uploadInProgress;
+        pendingUploads.Count == 0 && !uploadInProgress &&
+        loopRoutine == null && !pushToTalkRecording;
     public bool HasBlockingAudioFailure => blockingUploadFailure;
     public int OutstandingRequestCount => outstandingRequestCount;
     public string LastUploadError => lastUploadError;
@@ -136,13 +137,26 @@ public class AudioUploader : MonoBehaviour
             return;
         }
 
-        // Formal recording is Push-to-Talk. StartLoop is retained for the
-        // existing login flow, but now only prepares the microphone.
-        useContinuousAtRuntime = false;
-        captureEnabled = false;
+        if (loopRoutine != null)
+            return;
+
+        CancelPushToTalkRecording();
         noiseCalibrated = false;
         currentVadState = "Idle";
-        Debug.Log("[AudioUploader] Push-to-Talk ready. Recording starts only on button press.");
+        captureEnabled = true;
+        useContinuousAtRuntime = continuousMicInLoop && !forceSegmentedLoop;
+
+        if (useContinuousAtRuntime && !StartContinuousMic())
+        {
+            Debug.LogWarning("[AudioUploader] Continuous microphone unavailable; falling back to segmented capture.");
+            useContinuousAtRuntime = false;
+        }
+
+        loopRoutine = StartCoroutine(CaptureLoop());
+        Debug.Log(useContinuousAtRuntime
+            ? "[AudioUploader] Automatic VAD capture started with one continuous microphone session."
+            : "[AudioUploader] Automatic VAD capture started in segmented fallback mode.");
+        NotifyProcessingStateChanged();
     }
 
     public void StartPushToTalk()
@@ -229,6 +243,15 @@ public class AudioUploader : MonoBehaviour
     {
         CancelPushToTalkRecording();
 
+        captureEnabled = false;
+        if (loopRoutine != null)
+        {
+            StopCoroutine(loopRoutine);
+            loopRoutine = null;
+        }
+        StopContinuousMic();
+        useContinuousAtRuntime = false;
+
         if (uploadWorkerRoutine != null)
         {
             StopCoroutine(uploadWorkerRoutine);
@@ -246,7 +269,8 @@ public class AudioUploader : MonoBehaviour
             StopPushToTalkAndUpload();
 
         captureEnabled = false;
-        if (loopRoutine != null)
+        bool finishContinuousUtterance = useContinuousAtRuntime && loopRoutine != null;
+        if (loopRoutine != null && !finishContinuousUtterance)
         {
             StopCoroutine(loopRoutine);
             loopRoutine = null;
@@ -261,6 +285,7 @@ public class AudioUploader : MonoBehaviour
         StopContinuousMic();
         useContinuousAtRuntime = false;
         currentVadState = "Idle";
+        NotifyProcessingStateChanged();
     }
 
     void CancelPushToTalkRecording()
@@ -401,15 +426,20 @@ public class AudioUploader : MonoBehaviour
         if (useContinuousAtRuntime)
         {
             yield return CaptureLoopContinuous();
-            yield break;
+        }
+        else
+        {
+            while (captureEnabled)
+            {
+                yield return CaptureAndSendOnce();
+                if (loopInterval > 0f && captureEnabled)
+                    yield return new WaitForSeconds(loopInterval);
+            }
         }
 
-        while (true)
-        {
-            yield return CaptureAndSendOnce();
-            if (loopInterval > 0f)
-                yield return new WaitForSeconds(loopInterval);
-        }
+        loopRoutine = null;
+        currentVadState = "Idle";
+        NotifyProcessingStateChanged();
     }
 
     IEnumerator CaptureLoopContinuous()
@@ -421,7 +451,9 @@ public class AudioUploader : MonoBehaviour
             Mathf.RoundToInt(Mathf.Max(3f, maxUtteranceSeconds) * activeSampleRate));
         float endSilenceSeconds = Mathf.Max(0.05f, maxSilenceMs * 0.001f);
 
-        var pending = new List<float>(frameSamples * 4);
+        var pending = new List<float>(frameSamples * 8);
+        int pendingOffset = 0;
+        var frame = new float[frameSamples];
         var preBuffer = new Queue<float>(Mathf.Max(1, preRollSamples + frameSamples));
         var utterance = new List<float>(Mathf.Min(maximumUtteranceSamples, activeSampleRate * 8));
         bool speechStarted = false;
@@ -433,12 +465,18 @@ public class AudioUploader : MonoBehaviour
             if (incoming != null && incoming.Length > 0)
                 pending.AddRange(incoming);
 
-            while (pending.Count >= frameSamples && captureEnabled)
+            while (pending.Count - pendingOffset >= frameSamples && captureEnabled)
             {
-                float[] frame = pending.GetRange(0, frameSamples).ToArray();
-                pending.RemoveRange(0, frameSamples);
+                pending.CopyTo(pendingOffset, frame, 0, frameSamples);
+                pendingOffset += frameSamples;
+                if (pendingOffset >= frameSamples * 32)
+                {
+                    pending.RemoveRange(0, pendingOffset);
+                    pendingOffset = 0;
+                }
 
-                float db = LinearToDb(ComputeRms(frame));
+                float frameRms = ComputeRms(frame);
+                float db = LinearToDb(frameRms);
                 GetRuntimeVadThresholds(out float runtimeStartDb, out float runtimeEndDb);
 
                 if (!speechStarted)
@@ -448,7 +486,7 @@ public class AudioUploader : MonoBehaviour
                     GetRuntimeVadThresholds(out runtimeStartDb, out runtimeEndDb);
                     AppendRing(preBuffer, frame, preRollSamples);
 
-                    bool started = useDbVad ? db >= runtimeStartDb : ComputeRms(frame) >= vadThreshold;
+                    bool started = useDbVad ? db >= runtimeStartDb : frameRms >= vadThreshold;
                     if (started)
                     {
                         speechStarted = true;
@@ -464,7 +502,7 @@ public class AudioUploader : MonoBehaviour
                 }
 
                 utterance.AddRange(frame);
-                bool stillSpeaking = useDbVad ? db >= runtimeEndDb : ComputeRms(frame) >= vadThreshold;
+                bool stillSpeaking = useDbVad ? db >= runtimeEndDb : frameRms >= vadThreshold;
                 if (stillSpeaking)
                 {
                     silenceSeconds = 0f;
@@ -481,7 +519,18 @@ public class AudioUploader : MonoBehaviour
                 if (!endedBySilence && !endedByLimit)
                     continue;
 
-                float[] completeUtterance = utterance.ToArray();
+                int completeSampleCount = utterance.Count;
+                if (endedBySilence)
+                {
+                    int detectedSilenceSamples = Mathf.RoundToInt(silenceSeconds * activeSampleRate);
+                    int keepTrailingSamples = Mathf.RoundToInt(
+                        Mathf.Max(0f, endPaddingMs) * 0.001f * activeSampleRate);
+                    completeSampleCount -= Mathf.Max(0, detectedSilenceSamples - keepTrailingSamples);
+                }
+                completeSampleCount = Mathf.Clamp(completeSampleCount, 0, utterance.Count);
+                var completeUtterance = new float[completeSampleCount];
+                if (completeSampleCount > 0)
+                    utterance.CopyTo(0, completeUtterance, 0, completeSampleCount);
                 speechStarted = false;
                 silenceSeconds = 0f;
                 utterance.Clear();
@@ -489,12 +538,23 @@ public class AudioUploader : MonoBehaviour
                 currentVadState = "Idle";
 
                 if (completeUtterance.Length >= minimumSpeechSamples)
-                    yield return ProcessAndUploadChunk(completeUtterance);
+                    yield return ProcessAndUploadChunk(completeUtterance, true);
                 if (loopInterval > 0f)
                     yield return new WaitForSeconds(loopInterval);
             }
 
             yield return null;
+        }
+
+        // Scenario completion may occur while the student is finishing the
+        // final sentence. Flush the speech already captured before allowing
+        // StudentResultUploader to freeze ToneScore.
+        if (speechStarted)
+        {
+            for (int i = pendingOffset; i < pending.Count; i++)
+                utterance.Add(pending[i]);
+            if (utterance.Count >= minimumSpeechSamples)
+                yield return ProcessAndUploadChunk(utterance.ToArray(), true);
         }
     }
 
@@ -552,15 +612,18 @@ public class AudioUploader : MonoBehaviour
         yield return ProcessAndUploadChunk(samples);
     }
 
-    IEnumerator ProcessAndUploadChunk(float[] rawSamples)
+    IEnumerator ProcessAndUploadChunk(float[] rawSamples, bool alreadyVadSegmented = false)
     {
         if (rawSamples == null || rawSamples.Length == 0)
             yield break;
 
-        float[] uploadSamples = rawSamples;
-        if (enableVad)
+        int sourceRate = Mathf.Max(8000, activeSampleRate);
+        float[] uploadSamples = sourceRate == UploadSampleRate
+            ? rawSamples
+            : ConvertToMonoAndResample(rawSamples, 1, sourceRate, UploadSampleRate);
+        if (enableVad && !alreadyVadSegmented)
         {
-            uploadSamples = ApplyVadTrim(rawSamples, activeSampleRate);
+            uploadSamples = ApplyVadTrim(uploadSamples, UploadSampleRate);
             if (!HasSpeech(uploadSamples))
             {
                 Debug.LogWarning("[AudioUploader] VAD 沒偵測到語音，跳過上傳。");
@@ -583,7 +646,7 @@ public class AudioUploader : MonoBehaviour
             yield break;
         }
 
-        byte[] wav = WavUtility.FromAudioFloat(uploadSamples, 1, activeSampleRate);
+        byte[] wav = WavUtility.FromAudioFloat(uploadSamples, 1, UploadSampleRate);
         EnqueueUpload(CreateWorkItem(wav));
         yield break;
     }
@@ -595,7 +658,7 @@ public class AudioUploader : MonoBehaviour
 
         try
         {
-            byte[] wav = WavUtility.FromAudioFloat(samples, 1, activeSampleRate);
+            byte[] wav = WavUtility.FromAudioFloat(samples, 1, UploadSampleRate);
             string path = Path.Combine(Path.GetTempPath(), "unity_mic_debug.wav");
             File.WriteAllBytes(path, wav);
             Debug.Log($"[AudioUploader] debug wav saved -> {path}");
@@ -722,6 +785,7 @@ public class AudioUploader : MonoBehaviour
         liveClip = Microphone.Start(micDevice, true, lengthSec, activeSampleRate);
         if (!liveClip) return false;
 
+        activeSampleRate = liveClip.frequency > 0 ? liveClip.frequency : activeSampleRate;
         liveReadPos = 0;
         return true;
     }
@@ -755,21 +819,34 @@ public class AudioUploader : MonoBehaviour
         if (available < 0) available += clipSamples;
         if (available <= 0) return null;
 
-        float[] result = new float[available];
+        int channels = Mathf.Max(1, liveClip.channels);
         int first = Mathf.Min(available, clipSamples - liveReadPos);
-        float[] head = new float[first];
+        float[] interleaved = new float[available * channels];
+        float[] head = new float[first * channels];
         liveClip.GetData(head, liveReadPos);
-        Array.Copy(head, 0, result, 0, first);
+        Array.Copy(head, 0, interleaved, 0, head.Length);
 
         if (first < available)
         {
-            float[] tail = new float[available - first];
+            float[] tail = new float[(available - first) * channels];
             liveClip.GetData(tail, 0);
-            Array.Copy(tail, 0, result, first, tail.Length);
+            Array.Copy(tail, 0, interleaved, head.Length, tail.Length);
         }
 
         liveReadPos = currentPos;
-        return result;
+        if (channels == 1)
+            return interleaved;
+
+        var mono = new float[available];
+        for (int frame = 0; frame < available; frame++)
+        {
+            float sum = 0f;
+            int offset = frame * channels;
+            for (int channel = 0; channel < channels; channel++)
+                sum += interleaved[offset + channel];
+            mono[frame] = sum / channels;
+        }
+        return mono;
     }
 
     IEnumerator CaptureUsingVad(Action<float[]> onFinished)
