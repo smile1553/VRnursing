@@ -22,7 +22,7 @@ public class NewDialogueManager : MonoBehaviour
     public Outline panelOutline;
 
     [Header("Playback")]
-    public bool playOnEnable = true;
+    public bool playOnEnable = false;
     public float displayDuration = 3.0f;
     public bool hideWhenFinished = true;
 
@@ -35,6 +35,11 @@ public class NewDialogueManager : MonoBehaviour
     public Color yayaPanelColor = new Color(0.89f, 0.95f, 0.99f, 1f);
     public Color yayaTextColor = new Color(0.12f, 0.23f, 0.54f, 1f);
     public Color yayaOutlineColor = new Color(0.89f, 0.95f, 0.99f, 0.6f);
+
+    [Header("Nurse Style")]
+    public Color nursePanelColor = new Color(0.92f, 0.96f, 0.94f, 1f);
+    public Color nurseTextColor = new Color(0.12f, 0.32f, 0.24f, 1f);
+    public Color nurseOutlineColor = new Color(0.92f, 0.96f, 0.94f, 0.6f);
 
     [Header("Dialogue Lines")]
     public List<DialogueLine> dialogueLines = new List<DialogueLine>();
@@ -52,6 +57,8 @@ public class NewDialogueManager : MonoBehaviour
 
         if (playOnEnable)
             PlayFromLine(0);
+        else
+            SetDialoguePanelVisible(false);
     }
 
     private void Reset()
@@ -92,14 +99,27 @@ public class NewDialogueManager : MonoBehaviour
         TryBindReferences();
 
         DialogueLine line = dialogueLines[index];
+        ShowText(line.speakerName, line.content);
+    }
+
+    public void ShowText(string speakerName, string content)
+    {
+        TryBindReferences();
 
         if (speakerText != null)
-            speakerText.text = line.speakerName;
+        {
+            TryAddGlyphs(speakerText, speakerName);
+            speakerText.text = speakerName;
+        }
 
         if (bodyText != null)
-            bodyText.text = line.content;
+        {
+            TryAddGlyphs(bodyText, content);
+            bodyText.text = content;
+        }
 
-        ApplySpeakerStyle(line.speakerName);
+        ApplySpeakerStyle(speakerName);
+        SetDialoguePanelVisible(true);
     }
 
     private void TryBindReferences()
@@ -132,8 +152,6 @@ public class NewDialogueManager : MonoBehaviour
 
         if (panelOutline == null)
             panelOutline = root.GetComponent<Outline>();
-
-        SetDialoguePanelVisible(true);
     }
 
     public void StopPlayback()
@@ -173,7 +191,23 @@ public class NewDialogueManager : MonoBehaviour
             return;
         }
 
+        if (speakerName == "\u8b77\u751f")
+        {
+            ApplyStyle(nursePanelColor, nurseTextColor, nurseOutlineColor);
+            return;
+        }
+
         ApplyStyle(Color.white, Color.gray, Color.gray);
+    }
+
+    private void TryAddGlyphs(TMP_Text text, string value)
+    {
+        if (text == null || text.font == null || string.IsNullOrEmpty(value))
+            return;
+
+        text.font.TryAddCharacters(value, out string missingCharacters);
+        if (!string.IsNullOrEmpty(missingCharacters))
+            Debug.LogWarning("[NewDialogueManager] TMP font is missing glyphs: " + missingCharacters, this);
     }
 
     private void ApplyStyle(Color panelColor, Color textColor, Color outlineColor)

@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.UI;
 
 public class PediatricVitalSignsPart1Flow : MonoBehaviour
 {
@@ -56,6 +58,9 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     [SerializeField] private float maxDialogueAutoAdvanceDelay = 8f;
     [SerializeField] private bool hideQuizAfterCorrect = false;
     [SerializeField] private float correctAnswerDelay = 1.2f;
+    [SerializeField] private bool bindQuizButtonsAutomatically = true;
+    [SerializeField] private int expectedQuizButtonCount = 4;
+    [SerializeField] private int correctAnswerIndex = 3;
 
     [Header("Events")]
     [SerializeField] private UnityEvent onCorrectAnswer;
@@ -66,6 +71,10 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     [SerializeField] private bool startNextPartAfterCorrect = true;
     [SerializeField] private bool hidePart1UiWhenStartingNextPart = true;
 
+    [Header("Hidden Future Demo Objects")]
+    [SerializeField] private string hiddenCombinedKidObjectNames = "Kid_Combined|Kid_Combined 1|Sitting Idle|Sitting Idle test|kidtakingbeartemp";
+    [SerializeField] private bool hideCombinedKidDuringPart1 = true;
+
     private int dialogueIndex = -1;
     private Coroutine dialogueRoutine;
     private Coroutine correctRoutine;
@@ -75,6 +84,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     private string lastProcessedBackendJson;
     private bool startupGateReleased;
     private float startupGateReleaseAt;
+    private bool quizButtonsBound;
 
     private static readonly string[] FallbackSpeakers =
     {
@@ -120,6 +130,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         ResolveStartupGatePanel();
 
         ResolveDialogueManager();
+        SetCombinedKidVisible(false);
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
         SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
         SetPanelVisible(correctPopup, false, "Correct_Popup");
@@ -140,11 +151,17 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
             network = FindObjectOfType<RunAI_Network>();
 
         ResolveStartupGatePanel();
+        SetCombinedKidVisible(false);
+        // Establish the correct opening pose before the first backend/dialogue event arrives.
+        yayaAnimation?.PlaySittingIdle();
         TryReleaseStartupGate();
     }
 
     private void Update()
     {
+        if (hideCombinedKidDuringPart1)
+            SetCombinedKidVisible(false);
+
         if (!startDialogueFromBackendJson || dialogueIndex >= 0)
             return;
 
@@ -187,6 +204,15 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         string speechText = ExtractBackendSpeechText(json);
         if (string.IsNullOrWhiteSpace(speechText))
             return;
+
+        if (!string.IsNullOrEmpty(initialBackendSpeechToIgnore) &&
+            string.Equals(speechText, initialBackendSpeechToIgnore, StringComparison.Ordinal))
+        {
+            Debug.Log("[Part1] Ignored repeated cached backend speech: " + speechText, this);
+            return;
+        }
+
+        initialBackendSpeechToIgnore = null;
 
         if (ignoreFirstBackendJson && !hasSkippedInitialBackendJson)
         {
@@ -245,6 +271,12 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     public void SelectD()
     {
         SelectAnswer(3);
+    }
+
+    private void SelectByButtonIndex(int index)
+    {
+        Debug.Log($"[Part1] Quiz button clicked index={index}", this);
+        SelectAnswer(index);
     }
 
     private void ShowDialogue()
@@ -331,8 +363,11 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     {
         Debug.Log("[Part1] Show quiz 1", this);
         StopDialogueRoutine();
+        HideInstructionUI();
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
+        WorldSpaceUiPlacer.PlaceCanvasInFrontOfCamera(quizPanel);
         SetPanelVisible(quizPanel, true, "Quiz_Panel_1");
+        BindQuizButtonsIfNeeded();
 
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlaySittingDisbelief();
@@ -341,7 +376,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
     private void SelectAnswer(int index)
     {
-        bool correct = index == 3;
+        bool correct = index == correctAnswerIndex;
 
         if (feedbackText != null)
             feedbackText.text = correct ? CorrectFeedback : WrongFeedback;
@@ -427,6 +462,101 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
         StopCoroutine(correctRoutine);
         correctRoutine = null;
+    }
+
+    private void BindQuizButtonsIfNeeded()
+    {
+        if (!bindQuizButtonsAutomatically || quizButtonsBound || quizPanel == null)
+            return;
+
+        Transform root = FindDeepChild(quizPanel.transform, "Quiz_Panel_1") ?? quizPanel.transform;
+        Button[] foundButtons = root.GetComponentsInChildren<Button>(true);
+        List<Button> buttons = new List<Button>();
+
+        foreach (Button button in foundButtons)
+        {
+            if (button == null || ShouldIgnoreQuizButton(button.gameObject.name))
+                continue;
+
+            buttons.Add(button);
+        }
+
+        buttons.Sort(CompareButtonsByScreenOrder);
+        int bindCount = expectedQuizButtonCount > 0 ? Mathf.Min(expectedQuizButtonCount, buttons.Count) : buttons.Count;
+
+        for (int i = 0; i < bindCount; i++)
+        {
+            int parsedIndex = TryGetAnswerIndexFromButtonText(buttons[i], out int textIndex) ? textIndex : i;
+            int capturedIndex = parsedIndex;
+            buttons[i].onClick.AddListener(() => SelectByButtonIndex(capturedIndex));
+        }
+
+        quizButtonsBound = bindCount > 0;
+        Debug.Log($"[Part1] Auto-bound quiz buttons: {bindCount}/{buttons.Count}", this);
+    }
+
+    private static bool TryGetAnswerIndexFromButtonText(Button button, out int index)
+    {
+        index = -1;
+        if (button == null)
+            return false;
+
+        TMP_Text[] texts = button.GetComponentsInChildren<TMP_Text>(true);
+        foreach (TMP_Text text in texts)
+        {
+            if (text == null || string.IsNullOrWhiteSpace(text.text))
+                continue;
+
+            string value = text.text.Trim();
+            if (value.StartsWith("(A)", StringComparison.OrdinalIgnoreCase) || value.StartsWith("A.", StringComparison.OrdinalIgnoreCase))
+            {
+                index = 0;
+                return true;
+            }
+
+            if (value.StartsWith("(B)", StringComparison.OrdinalIgnoreCase) || value.StartsWith("B.", StringComparison.OrdinalIgnoreCase))
+            {
+                index = 1;
+                return true;
+            }
+
+            if (value.StartsWith("(C)", StringComparison.OrdinalIgnoreCase) || value.StartsWith("C.", StringComparison.OrdinalIgnoreCase))
+            {
+                index = 2;
+                return true;
+            }
+
+            if (value.StartsWith("(D)", StringComparison.OrdinalIgnoreCase) || value.StartsWith("D.", StringComparison.OrdinalIgnoreCase))
+            {
+                index = 3;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int CompareButtonsByScreenOrder(Button left, Button right)
+    {
+        Vector3 leftPosition = left.transform.position;
+        Vector3 rightPosition = right.transform.position;
+
+        int yCompare = rightPosition.y.CompareTo(leftPosition.y);
+        if (yCompare != 0)
+            return yCompare;
+
+        return leftPosition.x.CompareTo(rightPosition.x);
+    }
+
+    private static bool ShouldIgnoreQuizButton(string buttonName)
+    {
+        if (string.IsNullOrWhiteSpace(buttonName))
+            return false;
+
+        return buttonName.IndexOf("skip", StringComparison.OrdinalIgnoreCase) >= 0
+            || buttonName.IndexOf("back", StringComparison.OrdinalIgnoreCase) >= 0
+            || buttonName.IndexOf("close", StringComparison.OrdinalIgnoreCase) >= 0
+            || buttonName.IndexOf("ok", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private void ResolveDialogueManager()
@@ -551,6 +681,48 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
             Transform result = FindDeepChild(child, childName);
             if (result != null)
                 return result;
+        }
+
+        return null;
+    }
+
+    private void SetCombinedKidVisible(bool visible)
+    {
+        if (string.IsNullOrWhiteSpace(hiddenCombinedKidObjectNames))
+            return;
+
+        string[] objectNames = hiddenCombinedKidObjectNames.Split('|');
+        foreach (string rawName in objectNames)
+        {
+            string objectName = rawName.Trim();
+            if (string.IsNullOrEmpty(objectName))
+                continue;
+
+            GameObject objectToHide = FindSceneObjectByName(objectName);
+            if (objectToHide != null && objectToHide.activeSelf != visible)
+                objectToHide.SetActive(visible);
+        }
+    }
+
+    private static GameObject FindSceneObjectByName(string objectName)
+    {
+        if (string.IsNullOrWhiteSpace(objectName))
+            return null;
+
+        GameObject active = GameObject.Find(objectName);
+        if (active != null)
+            return active;
+
+        GameObject[] allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+        foreach (GameObject candidate in allObjects)
+        {
+            if (candidate == null || candidate.name != objectName)
+                continue;
+
+            if (!candidate.scene.IsValid())
+                continue;
+
+            return candidate;
         }
 
         return null;
