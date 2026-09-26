@@ -8,7 +8,12 @@ public class MomAnimationPlayer : MonoBehaviour
     [SerializeField] private bool logEvents = true;
 
     [Header("Animator State Names")]
+    [SerializeField] private string angryState = "Angry";
+    [SerializeField] private string clappingState = "Clapping";
+    [SerializeField] private string walkStartState = "Female Start Walking";
     [SerializeField] private string standingIdleState = "MomStanding Idle";
+    [SerializeField] private string pointingState = "Pointing";
+    [SerializeField] private string quickBowState = "Quick Informal Bow";
     [SerializeField] private string talkingState = "Talking";
 
     private void Awake()
@@ -17,9 +22,34 @@ public class MomAnimationPlayer : MonoBehaviour
             animator = GetComponent<Animator>();
     }
 
+    public void PlayAngry()
+    {
+        PlayState(angryState);
+    }
+
+    public void PlayClapping()
+    {
+        PlayState(clappingState);
+    }
+
+    public void PlayWalkStart()
+    {
+        PlayState(walkStartState);
+    }
+
     public void PlayStandingIdle()
     {
         PlayState(standingIdleState);
+    }
+
+    public void PlayPointing()
+    {
+        PlayState(pointingState);
+    }
+
+    public void PlayQuickBow()
+    {
+        PlayState(quickBowState);
     }
 
     public void PlayTalking()

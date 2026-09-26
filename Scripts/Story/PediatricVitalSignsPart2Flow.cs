@@ -1,8 +1,10 @@
-using System;
+﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.UI;
 
 public class PediatricVitalSignsPart2Flow : MonoBehaviour
 {
@@ -38,8 +40,8 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     [Header("Backend")]
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
-    [SerializeField] private string respirationKeywords = "\u5148\u4e0d\u78b0|\u8eba\u4e0b|\u89c0\u5bdf|\u547c\u5438";
-    [SerializeField] private string heartbeatKeywords = "\u5fc3\u8df3|\u807d\u8a3a\u5668|\u4e0d\u6703\u75db|\u6478";
+    [SerializeField] private string respirationKeywords = "\u89c0\u5bdf\u8d77\u4f0f|\u8a08\u7b97\u547c\u5438\u6b21\u6578|\u89c0\u5bdf|\u8d77\u4f0f|\u547c\u5438\u6b21\u6578";
+    [SerializeField] private string heartbeatKeywords = "\u5fc3\u8df3|\u807d\u8a3a\u5668|\u4e0d\u6703\u75db|\u6478\u6478|\u807d\u807d";
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Audio")]
@@ -53,27 +55,41 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     [SerializeField] private float extraDelayAfterAudio = 0.4f;
 
     [Header("Options")]
-    [SerializeField] private float observationDelay = 3f;
+    [SerializeField] private float observationDelay = 60f;
     [SerializeField] private bool hideQuizAfterCorrect = false;
-    [SerializeField] private bool keepYayaDisbeliefUntilCorrectAnswer = true;
+    [SerializeField] private float correctAnswerDelay = 1.2f;
+    [SerializeField] private bool bindQuizButtonsAutomatically = true;
+    [SerializeField] private int expectedQuizButtonCount = 3;
 
     [Header("Events")]
     [SerializeField] private UnityEvent onCorrectAnswer;
     [SerializeField] private UnityEvent onWrongAnswer;
 
+    [Header("Flow Link")]
+    [SerializeField] private PediatricVitalSignsPart3Flow nextPartFlow;
+    [SerializeField] private bool startNextPartAfterCorrect = true;
+
+    [Header("Hidden Future Demo Objects")]
+    [SerializeField] private string hiddenCombinedKidObjectNames = "Kid_Combined|Kid_Combined 1|Sitting Idle|Sitting Idle test|kidtakingbeartemp";
+    [SerializeField] private bool hideCombinedKidDuringPart2 = true;
+
     private Coroutine routine;
     private WaitingForNurseAction waitingForNurseAction = WaitingForNurseAction.None;
     private string lastProcessedBackendJson;
     private string initialBackendSpeechToIgnore;
+    private int lastStartFrame = -1;
+    private bool quizButtonsBound;
+    private bool skipRequested;
+    private Coroutine correctRoutine;
 
     private const string RespirationPrompt =
-        "\u8acb\u5411\u5abd\u5abd\u8aaa\u660e\uff1a\u5148\u4e0d\u78b0\u82bd\u82bd\u7684\u8eab\u9ad4\uff0c\u8acb\u5abd\u5abd\u8b93\u82bd\u82bd\u8eba\u4e0b\uff0c\u4e26\u89c0\u5bdf\u80f8\u8179\u8d77\u4f0f\u4f86\u8a08\u7b97\u547c\u5438\u6b21\u6578\u3002";
+        "\u8acb\u89c0\u5bdf\u82bd\u82bd\u80f8\u8179\u8d77\u4f0f\uff0c\u4e26\u8aaa\u660e\u8981\u8a08\u7b97\u547c\u5438\u6b21\u6578\u3002";
 
     private const string ObservationPrompt =
-        "\u8acb\u89c0\u5bdf\u82bd\u82bd\u7684\u80f8\u8179\u8d77\u4f0f\uff0c\u6e2c\u91cf\u547c\u5438\u4e00\u5206\u9418\u3002";
+        "\u958b\u59cb\u6e2c\u91cf\u547c\u5438\u4e00\u5206\u9418\u3002";
 
     private const string HeartbeatPrompt =
-        "\u8acb\u5b89\u64ab\u82bd\u82bd\uff0c\u4e26\u8aaa\u660e\u8981\u807d\u5fc3\u8df3\uff0c\u8b93\u5979\u6478\u6478\u807d\u8a3a\u5668\uff0c\u544a\u8a34\u5979\u4e0d\u6703\u75db\u3002";
+        "請安撫芽芽，並說明接下來只是聽心跳、不會痛；可以引導芽芽摸摸聽診器，讓她知道一下子就好。";
 
     private const string CorrectFeedback =
         "\u7b54\u5c0d\u4e86\uff01";
@@ -88,6 +104,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         ResolveDialogueManager();
         ResolveNursePromptPanel();
+        SetCombinedKidVisible(false);
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
         SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
@@ -95,11 +112,15 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
     private void OnEnable()
     {
+        SetCombinedKidVisible(false);
         ResetBackendGate();
     }
 
     private void Update()
     {
+        if (hideCombinedKidDuringPart2)
+            SetCombinedKidVisible(false);
+
         if (!advanceFromBackendJson || waitingForNurseAction == WaitingForNurseAction.None)
             return;
 
@@ -119,12 +140,16 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         enabled = true;
 
-        if (routine != null)
+        if (lastStartFrame == Time.frameCount && routine != null)
             return;
 
+        lastStartFrame = Time.frameCount;
         StopRoutine();
         ResetBackendGate();
         waitingForNurseAction = WaitingForNurseAction.None;
+        skipRequested = false;
+        SetCombinedKidVisible(false);
+        Debug.Log("[Part2] StartPart2: starting from mom apology.", this);
         routine = StartCoroutine(Part2Routine());
     }
 
@@ -134,16 +159,16 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             waitingForNurseAction = WaitingForNurseAction.None;
     }
 
-    public void CompleteHeartbeatExplanation()
+    public void DebugSkipCurrentNurseCheck()
     {
-        if (waitingForNurseAction == WaitingForNurseAction.HeartbeatExplanation)
+        skipRequested = true;
+        if (waitingForNurseAction != WaitingForNurseAction.None)
             waitingForNurseAction = WaitingForNurseAction.None;
     }
 
-    public void DebugSkipCurrentNurseCheck()
+    public void SkipVoiceAndStartDialogue()
     {
-        if (waitingForNurseAction != WaitingForNurseAction.None)
-            waitingForNurseAction = WaitingForNurseAction.None;
+        DebugSkipCurrentNurseCheck();
     }
 
     private void HandleBackendJson(string json)
@@ -159,9 +184,9 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         if (string.IsNullOrWhiteSpace(speechText))
             return;
 
-        string keywords = waitingForNurseAction == WaitingForNurseAction.RespirationExplanation
-            ? respirationKeywords
-            : heartbeatKeywords;
+        string keywords = waitingForNurseAction == WaitingForNurseAction.HeartbeatExplanation
+            ? heartbeatKeywords
+            : respirationKeywords;
 
         if (ContainsAnyKeyword(speechText, keywords))
         {
@@ -188,37 +213,45 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         SelectAnswer(2);
     }
 
+    private void SelectByButtonIndex(int index)
+    {
+        Debug.Log($"[Part2] Quiz button clicked index={index}", this);
+        SelectAnswer(index);
+    }
+
     private IEnumerator Part2Routine()
     {
         ShowDialogueLine(momApologyLineIndex, momApologyClip);
-        momAnimation?.PlayTalking();
+        momAnimation?.PlayQuickBow();
         yayaAnimation?.PlaySittingDisbelief();
         yield return WaitForDialogue(momApologyClip);
 
         ShowNursePrompt(RespirationPrompt, WaitingForNurseAction.RespirationExplanation);
         yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        skipRequested = false;
 
         ShowDialogueLine(momLayDownLineIndex, momLayDownClip);
-        momAnimation?.PlayTalking();
-        PlayYayaFearfulOrLayingDown();
+        momAnimation?.PlayPointing();
+        yayaAnimation?.PlayLayingDown();
         yield return WaitForDialogue(momLayDownClip);
 
         ShowDialogueLine(momBesideLineIndex, momBesideClip);
-        momAnimation?.PlayTalking();
-        PlayYayaFearfulOrSleeping();
+        momAnimation?.PlayPointing();
+        yayaAnimation?.PlayLayingSleeping();
         yield return WaitForDialogue(momBesideClip);
 
         ShowNursePrompt(ObservationPrompt, WaitingForNurseAction.None);
         momAnimation?.PlayStandingIdle();
-        PlayYayaFearfulOrSleeping();
-        yield return new WaitForSeconds(Mathf.Max(0.1f, observationDelay));
+        yayaAnimation?.PlayLayingSleeping();
+        yield return WaitForSecondsOrSkip(Mathf.Max(60f, observationDelay));
 
         ShowNursePrompt(HeartbeatPrompt, WaitingForNurseAction.HeartbeatExplanation);
         yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        skipRequested = false;
 
         ShowDialogueLine(yayaRefuseLineIndex, yayaRefuseClip);
         momAnimation?.PlayStandingIdle();
-        yayaAnimation?.PlaySittingDisbelief();
+        yayaAnimation?.PlayKickingOut();
         yield return WaitForDialogue(yayaRefuseClip);
 
         ShowQuiz();
@@ -230,13 +263,19 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         ResolveDialogueManager();
         ResolveNursePromptPanel();
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
+        SetPromptSkipButtonsVisible(false);
         SetPanelVisible(dialoguePanel, true, "Dialogue_Panel");
         SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
 
         if (dialogueManager != null)
         {
+            dialogueManager.gameObject.SetActive(true);
             dialogueManager.StopPlayback();
             dialogueManager.ShowLine(lineIndex);
+        }
+        else
+        {
+            Debug.LogWarning("[Part2] Dialogue manager is missing.", this);
         }
 
         PlayAudio(clip);
@@ -252,6 +291,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
         SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
         SetPanelVisible(nursePromptPanel, true, "TopHint_Panel");
+        SetPromptSkipButtonsVisible(true);
 
         if (nursePromptText != null)
             nursePromptText.text = prompt;
@@ -267,6 +307,16 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     private IEnumerator WaitForDialogue(AudioClip clip)
     {
         yield return new WaitForSeconds(GetDialogueDelay(clip));
+    }
+
+    private IEnumerator WaitForSecondsOrSkip(float seconds)
+    {
+        skipRequested = false;
+        float endTime = Time.time + Mathf.Max(0.1f, seconds);
+        while (Time.time < endTime && !skipRequested)
+            yield return null;
+
+        skipRequested = false;
     }
 
     private void PlayAudio(AudioClip clip)
@@ -292,8 +342,12 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     {
         ResolveNursePromptPanel();
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
+        SetPromptSkipButtonsVisible(false);
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
+        WorldSpaceUiPlacer.PlaceCanvasInFrontOfCamera(quizPanel);
+        WorldSpaceUiPlacer.MatchQuizPanelToQuizOne(quizPanel, "Quiz_Panel_2");
         SetPanelVisible(quizPanel, true, "Quiz_Panel_2");
+        BindQuizButtonsIfNeeded();
         momAnimation?.PlayStandingIdle();
     }
 
@@ -307,12 +361,29 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             if (hideQuizAfterCorrect)
                 SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
 
-            yayaAnimation?.PlaySittingIdle();
-            onCorrectAnswer?.Invoke();
+            StopCorrectRoutine();
+            correctRoutine = StartCoroutine(InvokeCorrectAfterDelay());
             return;
         }
 
         onWrongAnswer?.Invoke();
+    }
+
+    private void StartNextPartFlow()
+    {
+        if (!startNextPartAfterCorrect)
+            return;
+
+        if (nextPartFlow == null)
+            nextPartFlow = FindObjectOfType<PediatricVitalSignsPart3Flow>(true);
+
+        if (nextPartFlow == null)
+        {
+            Debug.LogWarning("[Part2] Part3 flow was not found. Please add PediatricVitalSignsPart3Flow to the scene.", this);
+            return;
+        }
+
+        nextPartFlow.StartPart3();
     }
 
     private void StopRoutine()
@@ -328,6 +399,124 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         if (dialogueManager != null)
             dialogueManager.StopPlayback();
+
+        StopCorrectRoutine();
+    }
+
+    private IEnumerator InvokeCorrectAfterDelay()
+    {
+        yield return new WaitForSeconds(Mathf.Max(0f, correctAnswerDelay));
+        correctRoutine = null;
+        StartNextPartFlow();
+        onCorrectAnswer?.Invoke();
+    }
+
+    private void StopCorrectRoutine()
+    {
+        if (correctRoutine == null)
+            return;
+
+        StopCoroutine(correctRoutine);
+        correctRoutine = null;
+    }
+
+    private void BindQuizButtonsIfNeeded()
+    {
+        if (!bindQuizButtonsAutomatically || quizButtonsBound || quizPanel == null)
+            return;
+
+        Transform root = FindDeepChild(quizPanel.transform, "Quiz_Panel_2") ?? quizPanel.transform;
+        Button[] foundButtons = root.GetComponentsInChildren<Button>(true);
+        List<Button> buttons = new List<Button>();
+
+        foreach (Button button in foundButtons)
+        {
+            if (button == null || ShouldIgnoreQuizButton(button.gameObject.name))
+                continue;
+
+            buttons.Add(button);
+        }
+
+        buttons.Sort(CompareButtonsByScreenOrder);
+        int bindCount = expectedQuizButtonCount > 0 ? Mathf.Min(expectedQuizButtonCount, buttons.Count) : buttons.Count;
+
+        for (int i = 0; i < bindCount; i++)
+        {
+            Button button = buttons[i];
+            int capturedIndex = GetAnswerIndexFromButton(button, i);
+            button.onClick.AddListener(() => SelectByButtonIndex(capturedIndex));
+        }
+
+        quizButtonsBound = bindCount > 0;
+        Debug.Log($"[Part2] Auto-bound quiz buttons: {bindCount}/{buttons.Count}", this);
+    }
+    private static int GetAnswerIndexFromButton(Button button, int fallbackIndex)
+    {
+        if (button == null)
+            return fallbackIndex;
+
+        string buttonName = button.gameObject.name.ToUpperInvariant();
+        if (buttonName.Contains("BTN_A") || buttonName.EndsWith("_A") || buttonName == "A")
+            return 0;
+        if (buttonName.Contains("BTN_B") || buttonName.EndsWith("_B") || buttonName == "B")
+            return 1;
+        if (buttonName.Contains("BTN_C") || buttonName.EndsWith("_C") || buttonName == "C")
+            return 2;
+        if (buttonName.Contains("BTN_D") || buttonName.EndsWith("_D") || buttonName == "D")
+            return 3;
+
+        TMP_Text[] texts = button.GetComponentsInChildren<TMP_Text>(true);
+        foreach (TMP_Text text in texts)
+        {
+            if (text == null || string.IsNullOrWhiteSpace(text.text))
+                continue;
+
+            string value = text.text.Trim().ToUpperInvariant();
+            if (value.Contains("(A)") || value.Contains("（A）") || value.StartsWith("A.") || value.StartsWith("A ") || value.StartsWith("A、"))
+                return 0;
+            if (value.Contains("(B)") || value.Contains("（B）") || value.StartsWith("B.") || value.StartsWith("B ") || value.StartsWith("B、"))
+                return 1;
+            if (value.Contains("(C)") || value.Contains("（C）") || value.StartsWith("C.") || value.StartsWith("C ") || value.StartsWith("C、"))
+                return 2;
+            if (value.Contains("(D)") || value.Contains("（D）") || value.StartsWith("D.") || value.StartsWith("D ") || value.StartsWith("D、"))
+                return 3;
+        }
+
+        return fallbackIndex;
+    }
+    private static int CompareButtonsByScreenOrder(Button left, Button right)
+    {
+        Vector3 leftPosition = left.transform.position;
+        Vector3 rightPosition = right.transform.position;
+
+        int yCompare = rightPosition.y.CompareTo(leftPosition.y);
+        if (yCompare != 0)
+            return yCompare;
+
+        return leftPosition.x.CompareTo(rightPosition.x);
+    }
+
+    private static int CompareTextsByScreenOrder(TMP_Text left, TMP_Text right)
+    {
+        Vector3 leftPosition = left.transform.position;
+        Vector3 rightPosition = right.transform.position;
+
+        int yCompare = rightPosition.y.CompareTo(leftPosition.y);
+        if (yCompare != 0)
+            return yCompare;
+
+        return leftPosition.x.CompareTo(rightPosition.x);
+    }
+
+    private static bool ShouldIgnoreQuizButton(string buttonName)
+    {
+        if (string.IsNullOrWhiteSpace(buttonName))
+            return false;
+
+        return buttonName.IndexOf("skip", StringComparison.OrdinalIgnoreCase) >= 0
+            || buttonName.IndexOf("back", StringComparison.OrdinalIgnoreCase) >= 0
+            || buttonName.IndexOf("close", StringComparison.OrdinalIgnoreCase) >= 0
+            || buttonName.IndexOf("ok", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private void ResetBackendGate()
@@ -344,22 +533,6 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             initialBackendSpeechToIgnore = ExtractBackendSpeechText(network.LastJson);
             Debug.Log("[Part2] Cached backend speech will be ignored: " + initialBackendSpeechToIgnore, this);
         }
-    }
-
-    private void PlayYayaFearfulOrLayingDown()
-    {
-        if (keepYayaDisbeliefUntilCorrectAnswer)
-            yayaAnimation?.PlaySittingDisbelief();
-        else
-            yayaAnimation?.PlayLayingDown();
-    }
-
-    private void PlayYayaFearfulOrSleeping()
-    {
-        if (keepYayaDisbeliefUntilCorrectAnswer)
-            yayaAnimation?.PlaySittingDisbelief();
-        else
-            yayaAnimation?.PlayLayingSleeping();
     }
 
     private void ResolveDialogueManager()
@@ -497,6 +670,28 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         return string.Empty;
     }
 
+    private void SetPromptSkipButtonsVisible(bool visible)
+    {
+        if (nursePromptPanel == null)
+            return;
+
+        SetNamedChildrenVisible(nursePromptPanel.transform, "SkipVoice_Button", visible);
+    }
+
+    private static void SetNamedChildrenVisible(Transform parent, string childName, bool visible)
+    {
+        if (parent == null || string.IsNullOrWhiteSpace(childName))
+            return;
+
+        foreach (Transform child in parent)
+        {
+            if (child.name == childName)
+                child.gameObject.SetActive(visible);
+
+            SetNamedChildrenVisible(child, childName, visible);
+        }
+    }
+
     [Serializable]
     private class BackendSpeechResponse
     {
@@ -567,5 +762,23 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         }
 
         return null;
+    }
+
+    private void SetCombinedKidVisible(bool visible)
+    {
+        if (string.IsNullOrWhiteSpace(hiddenCombinedKidObjectNames))
+            return;
+
+        string[] objectNames = hiddenCombinedKidObjectNames.Split('|');
+        foreach (string rawName in objectNames)
+        {
+            string objectName = rawName.Trim();
+            if (string.IsNullOrEmpty(objectName))
+                continue;
+
+            GameObject objectToHide = FindSceneObjectByName(objectName);
+            if (objectToHide != null && objectToHide.activeSelf != visible)
+                objectToHide.SetActive(visible);
+        }
     }
 }
