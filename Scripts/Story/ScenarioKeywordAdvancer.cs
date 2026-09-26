@@ -56,6 +56,14 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
             emotionState.OnEmotionChanged -= HandleEmotionChanged;
     }
 
+    public void ResetForStudent()
+    {
+        _lastSignature = string.Empty;
+        _lastAdvanceTime = float.NegativeInfinity;
+        _attemptsByStep.Clear();
+        _hitKeywords.Clear();
+    }
+
     void HandleEmotionChanged(EmotionSnapshot snapshot)
     {
         if (snapshot == null) return;

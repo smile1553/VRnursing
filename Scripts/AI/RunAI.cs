@@ -56,6 +56,14 @@ public class RunAI : MonoBehaviour
         SetStageImmediate(0);
     }
 
+    public void ResetForStudent()
+    {
+        _acc = 0f;
+        _pendingStage = 0;
+        _pendingCount = 0;
+        SetStageImmediate(0);
+    }
+
     // 被網路層呼叫
     public void ApplyJson(string json)
     {

@@ -16,6 +16,8 @@ public class RunAI_Network : MonoBehaviour
     public bool autoUploadOnConnect = true;
     public bool useWebSocketFeed = true;
     public bool logIncomingJson = false;
+    [Tooltip("Formal flow consumes each /audio response directly. Legacy /ws and /last feeds remain available only when this is disabled.")]
+    public bool directAudioResponseMode = true;
 
     [Header("Components")]
     public RunAI runAi;
@@ -106,6 +108,17 @@ public class RunAI_Network : MonoBehaviour
         if (candidateIsCached)
             candidate = NormalizeBaseUrl(PlayerPrefs.GetString(LastServerUrlKey, ""));
 
+        if (Application.platform == RuntimePlatform.Android && IsLoopbackUrl(candidate))
+        {
+            if (candidateIsCached)
+            {
+                PlayerPrefs.DeleteKey(LastServerUrlKey);
+                PlayerPrefs.Save();
+            }
+            Debug.LogError("[DISCOVERY] Quest cannot use a loopback Backend URL; continuing with LAN discovery.");
+            candidate = string.Empty;
+        }
+
         if (!string.IsNullOrEmpty(candidate))
         {
             Debug.Log(candidateIsCached
@@ -182,10 +195,17 @@ public class RunAI_Network : MonoBehaviour
             }
 
 #if UNITY_2020_2_OR_NEWER
-            return request.result == UnityWebRequest.Result.Success;
+            bool success = request.result == UnityWebRequest.Result.Success;
 #else
-            return !request.isNetworkError && !request.isHttpError;
+            bool success = !request.isNetworkError && !request.isHttpError;
 #endif
+            if (!success)
+            {
+                Debug.LogWarning(
+                    $"[DISCOVERY] health check failed url={normalized}/last " +
+                    $"status={request.responseCode} error={request.error}");
+            }
+            return success;
         }
     }
 
@@ -211,7 +231,14 @@ public class RunAI_Network : MonoBehaviour
             audioUploader.serverUrl = serverBaseUrl + "/audio";
             Debug.Log($"[RunAI_Network] audio url = {audioUploader.serverUrl}");
             Debug.Log($"[RunAI_Network] autoUploadOnConnect = {autoUploadOnConnect}");
-            if (autoUploadOnConnect)
+            if (directAudioResponseMode)
+            {
+                if (StudentRunContext.Current.StudentRunAccepted)
+                    audioUploader.StartLoop();
+                else
+                    Debug.Log("[RunAI_Network] Direct /audio mode is ready; microphone waits for an accepted Student Run.");
+            }
+            else if (autoUploadOnConnect)
             {
                 audioUploader.StartLoop();
                 Debug.Log("[RunAI_Network] StartLoop() called.");
@@ -224,6 +251,13 @@ public class RunAI_Network : MonoBehaviour
         else
         {
             Debug.LogError("[RunAI_Network] audioUploader is null. Please bind it in Inspector.");
+        }
+
+        if (directAudioResponseMode)
+        {
+            feed = null;
+            Debug.Log("[RunAI_Network] Direct /audio response mode enabled; legacy emotion feed is disabled.");
+            return;
         }
 
         feed = useWebSocketFeed ? (IEmotionFeed)new WsEmotionFeed() : new HttpEmotionFeed();
@@ -281,6 +315,16 @@ public class RunAI_Network : MonoBehaviour
         if (runAi != null)
             runAi.ApplyJson(json);
         EmotionJsonReceived?.Invoke(json);
+    }
+
+    public static bool IsLoopbackUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        Uri uri;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out uri)) return false;
+        return string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(uri.Host, "::1", StringComparison.OrdinalIgnoreCase);
     }
 
     public void RescanServer()

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class PerformanceScoreManager : MonoBehaviour
 {
@@ -11,7 +12,8 @@ public class PerformanceScoreManager : MonoBehaviour
     [Header("Score")]
     public int expectedQuizCount = 8;
     public int maxQuizScore = 80;
-    public int maxEmotionScore = 20;
+    [FormerlySerializedAs("maxEmotionScore")]
+    public int maxToneScore = 20;
     public int wrongQuizPenalty = 10;
 
     [Header("Report")]
@@ -25,14 +27,16 @@ public class PerformanceScoreManager : MonoBehaviour
 
     float _startTime;
     int _quizScore;
-    int _emotionScore;
+    int _toneScore;
     int _quizCorrectCount;
     int _quizWrongCount;
     int _emotionPenaltyTotal;
 
     public int QuizScore => _quizScore;
-    public int EmotionScore => _emotionScore;
-    public int TotalScore => _quizScore + _emotionScore;
+    public int ToneScore => _toneScore;
+    [Obsolete("Use ToneScore. EmotionScore is retained only for source compatibility.")]
+    public int EmotionScore => ToneScore;
+    public int TotalScore => _quizScore + _toneScore;
     public int QuizCorrectCount => _quizCorrectCount;
     public int QuizWrongCount => _quizWrongCount;
     public int QuizAnsweredCount => _quizCorrectCount + _quizWrongCount;
@@ -78,7 +82,7 @@ public class PerformanceScoreManager : MonoBehaviour
     {
         _startTime = Time.time;
         _quizScore = maxQuizScore;
-        _emotionScore = maxEmotionScore;
+        _toneScore = maxToneScore;
         _quizCorrectCount = 0;
         _quizWrongCount = 0;
         _emotionPenaltyTotal = 0;
@@ -124,7 +128,7 @@ public class PerformanceScoreManager : MonoBehaviour
             return;
 
         _emotionPenaltyTotal += penalty;
-        _emotionScore = Mathf.Max(0, _emotionScore - penalty);
+        _toneScore = Mathf.Max(0, _toneScore - penalty);
         AddEvent("emotion", key, penalty, $"{snapshot.previousKidEmotionState}->{snapshot.kidEmotionState}", snapshot.text);
         EmitScoreChanged();
     }
@@ -178,13 +182,13 @@ public class PerformanceScoreManager : MonoBehaviour
             reason = reason,
             text = text,
             quizScore = _quizScore,
-            emotionScore = _emotionScore,
+            toneScore = _toneScore,
             totalScore = TotalScore
         };
         _events.Add(evt);
 
         if (logScoreChanges)
-            Debug.Log($"[PerformanceScore] {type} penalty={penalty} total={TotalScore} quiz={_quizScore} emotion={_emotionScore} reason={reason}");
+            Debug.Log($"[PerformanceScore] {type} penalty={penalty} total={TotalScore} quiz={_quizScore} tone={_toneScore} reason={reason}");
     }
 
     void EmitScoreChanged()
@@ -197,7 +201,7 @@ public class PerformanceScoreManager : MonoBehaviour
         return new PerformanceScoreSnapshot
         {
             quizScore = _quizScore,
-            emotionScore = _emotionScore,
+            toneScore = _toneScore,
             totalScore = TotalScore,
             quizCorrectCount = _quizCorrectCount,
             quizWrongCount = _quizWrongCount,
@@ -221,9 +225,9 @@ public class PerformanceScoreManager : MonoBehaviour
             generatedAt = DateTime.UtcNow.ToString("o"),
             expectedQuizCount = expectedQuizCount,
             quizMaxScore = maxQuizScore,
-            emotionMaxScore = maxEmotionScore,
+            toneMaxScore = maxToneScore,
             quizScore = _quizScore,
-            emotionScore = _emotionScore,
+            toneScore = _toneScore,
             totalScore = TotalScore,
             quizCorrectCount = _quizCorrectCount,
             quizWrongCount = _quizWrongCount,
@@ -241,7 +245,8 @@ public class PerformanceScoreManager : MonoBehaviour
 public class PerformanceScoreSnapshot
 {
     public int quizScore;
-    public int emotionScore;
+    [FormerlySerializedAs("emotionScore")]
+    public int toneScore;
     public int totalScore;
     public int quizCorrectCount;
     public int quizWrongCount;
@@ -260,7 +265,8 @@ public class PerformanceScoreEvent
     public string reason;
     public string text;
     public int quizScore;
-    public int emotionScore;
+    [FormerlySerializedAs("emotionScore")]
+    public int toneScore;
     public int totalScore;
 }
 
@@ -270,9 +276,11 @@ public class PerformanceScoreReport
     public string generatedAt;
     public int expectedQuizCount;
     public int quizMaxScore;
-    public int emotionMaxScore;
+    [FormerlySerializedAs("emotionMaxScore")]
+    public int toneMaxScore;
     public int quizScore;
-    public int emotionScore;
+    [FormerlySerializedAs("emotionScore")]
+    public int toneScore;
     public int totalScore;
     public int quizCorrectCount;
     public int quizWrongCount;

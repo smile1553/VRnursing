@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -28,6 +29,7 @@ public class ScenarioController : MonoBehaviour
     public float gateSuppressSeconds = 0.8f;
 
     [Header("Auto Flow")]
+    public bool autoStartOnStart = true;
     public bool forceAutoAdvanceAll = true;
     public float forcedAutoAdvanceDelay = 3f;
     public bool keepPlayerActionStepsManual = true;
@@ -54,6 +56,7 @@ public class ScenarioController : MonoBehaviour
     ScenarioQuiz _activeQuiz;
     QuizUi _activeQuizUi;
     int _quizShownCount;
+    QuizHandler[] _legacyQuizHandlers;
     bool _waitingForCalm;
     float _gateSuppressedUntil;
     string _lastSubtitleText;
@@ -84,7 +87,7 @@ public class ScenarioController : MonoBehaviour
     void Start()
     {
         ClearUiText();
-        if (scenario != null)
+        if (autoStartOnStart && scenario != null)
             StartScenario();
     }
 
@@ -102,9 +105,15 @@ public class ScenarioController : MonoBehaviour
 
     public void StartScenario()
     {
+        StopAllCoroutines();
+        _subtitleRoutine = null;
         _currentIndex = -1;
         _quizShownCount = 0;
         _activeQuizUi = null;
+        _activeQuiz = null;
+        _waitingForCalm = false;
+        _lastSubtitleText = string.Empty;
+        PrepareLegacyQuizPanels();
         ProceedToIndex(0);
     }
 
@@ -359,7 +368,11 @@ public class ScenarioController : MonoBehaviour
 
         var quizUi = ResolveQuizUi();
         _activeQuizUi = quizUi;
-        if (quizUi == null) return;
+        if (!HasUsableQuizUi(quizUi))
+        {
+            ShowLegacyQuiz(quiz);
+            return;
+        }
 
         if (quizUi.root)
             quizUi.root.SetActive(true);
@@ -413,6 +426,66 @@ public class ScenarioController : MonoBehaviour
             return ui.quizPanels[index];
         }
         return ui.quiz;
+    }
+
+    static bool HasUsableQuizUi(QuizUi quizUi)
+    {
+        return quizUi != null && quizUi.root != null && quizUi.options != null && quizUi.options.Length > 0;
+    }
+
+    void PrepareLegacyQuizPanels()
+    {
+        _legacyQuizHandlers = Resources.FindObjectsOfTypeAll<QuizHandler>()
+            .Where(item => item != null && item.gameObject.scene.IsValid() && item.gameObject.scene == gameObject.scene)
+            .OrderBy(item => GetTrailingNumber(item.currentQuizPanel != null ? item.currentQuizPanel.name : item.gameObject.name))
+            .ToArray();
+
+        if (_legacyQuizHandlers.Length != 8)
+            Debug.LogError("[ScenarioController] Expected exactly 8 legacy quiz panels, but found " + _legacyQuizHandlers.Length + ".", this);
+
+        foreach (QuizHandler item in _legacyQuizHandlers)
+        {
+            item.PrepareForScenario(this, -1);
+            if (item.currentQuizPanel != null)
+                item.currentQuizPanel.SetActive(false);
+        }
+    }
+
+    void ShowLegacyQuiz(ScenarioQuiz quiz)
+    {
+        if (_legacyQuizHandlers == null || _legacyQuizHandlers.Length == 0)
+            PrepareLegacyQuizPanels();
+
+        if (_legacyQuizHandlers == null || _legacyQuizHandlers.Length == 0)
+        {
+            Debug.LogError("[ScenarioController] No bound QuizUi or legacy QuizHandler panels were found.", this);
+            return;
+        }
+
+        int index = Mathf.Clamp(_quizShownCount, 0, _legacyQuizHandlers.Length - 1);
+        _quizShownCount++;
+        QuizHandler legacyQuiz = _legacyQuizHandlers[index];
+        int optionCount = quiz.options != null ? quiz.options.Count(value => !string.IsNullOrEmpty(value)) : 0;
+        if (!legacyQuiz.PrepareForScenario(this, quiz.correctIndex, optionCount))
+        {
+            Debug.LogError("[ScenarioController] Quiz button validation failed; the quiz will not open.", legacyQuiz);
+            return;
+        }
+        if (legacyQuiz.currentQuizPanel != null)
+            legacyQuiz.currentQuizPanel.SetActive(true);
+        MoveRigToQuizSpawn();
+    }
+
+    static int GetTrailingNumber(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return int.MaxValue;
+        int end = value.Length - 1;
+        while (end >= 0 && !char.IsDigit(value[end])) end--;
+        if (end < 0) return int.MaxValue;
+        int start = end;
+        while (start > 0 && char.IsDigit(value[start - 1])) start--;
+        int number;
+        return int.TryParse(value.Substring(start, end - start + 1), out number) ? number : int.MaxValue;
     }
 
     void AlignQuizUi(GameObject root)

@@ -5,8 +5,10 @@ using UnityEngine;
 public class EmotionSnapshot
 {
     public string source;
+    public string requestId;
     public string utteranceId;
     public float tension;
+    public float patienceScore;
     public string emotion;
     public string text;
     public string rawText;
@@ -24,8 +26,10 @@ public class EmotionSnapshot
         return new EmotionSnapshot
         {
             source = source,
+            requestId = requestId,
             utteranceId = utteranceId,
             tension = tension,
+            patienceScore = patienceScore,
             emotion = emotion,
             text = text,
             rawText = rawText,
@@ -45,8 +49,8 @@ public class EmotionSnapshot
 public class EmotionLlmInfo
 {
     public string intent;
-    public string sentiment;
     public string actionTag;
+    public string sentiment;
     public float toxicity;
     public float coercion;
     public float confidence;
@@ -62,6 +66,9 @@ public class EmotionStateManager : MonoBehaviour
     [Header("Dependencies")]
     public RunAI_Network network;
     public RunAI runAi;
+    public AudioUploader audioUploader;
+    public KidEmotionResponder kidEmotionResponder;
+    public WorldDirector worldDirector;
 
     [Header("Stage Gates")]
     public int anxiousStage = 1;  // >= 1 代表緊張、不配合
@@ -91,6 +98,9 @@ public class EmotionStateManager : MonoBehaviour
 
         if (!runAi) runAi = GetComponent<RunAI>();
         if (!network) network = GetComponent<RunAI_Network>();
+        if (!audioUploader) audioUploader = GetComponent<AudioUploader>();
+        if (!kidEmotionResponder) kidEmotionResponder = FindObjectOfType<KidEmotionResponder>();
+        if (!worldDirector) worldDirector = FindObjectOfType<WorldDirector>();
     }
 
     void OnEnable()
@@ -99,6 +109,8 @@ public class EmotionStateManager : MonoBehaviour
             network.EmotionJsonReceived += HandleJson;
         if (runAi != null)
             runAi.StageChanged += HandleStageChanged;
+        if (audioUploader != null)
+            audioUploader.AudioResponseAccepted += HandleAudioResponse;
     }
 
     void OnDisable()
@@ -107,10 +119,18 @@ public class EmotionStateManager : MonoBehaviour
             network.EmotionJsonReceived -= HandleJson;
         if (runAi != null)
             runAi.StageChanged -= HandleStageChanged;
+        if (audioUploader != null)
+            audioUploader.AudioResponseAccepted -= HandleAudioResponse;
     }
 
     public void ClearManualOverride()
     {
+        IsManualOverrideActive = false;
+    }
+
+    public void ResetForStudent()
+    {
+        Current = null;
         IsManualOverrideActive = false;
     }
 
@@ -155,18 +175,16 @@ public class EmotionStateManager : MonoBehaviour
                 snapshot.rawText = string.IsNullOrEmpty(data.raw_text) ? data.rawText : data.raw_text;
                 snapshot.kidEmotionState = data.kidEmotionState;
                 snapshot.previousKidEmotionState = data.previousKidEmotionState;
-                string camelStepId = string.IsNullOrEmpty(data.scenarioStepId) ? data.sourceScenarioStepId : data.scenarioStepId;
-                snapshot.sourceScenarioStepId = string.IsNullOrEmpty(camelStepId) ? data.source_step_id : camelStepId;
-                int camelStepIndex = data.scenarioStepIndex >= 0 ? data.scenarioStepIndex : data.sourceScenarioStepIndex;
-                snapshot.sourceScenarioStepIndex = camelStepIndex >= 0 ? camelStepIndex : data.source_step_index;
+                snapshot.sourceScenarioStepId = ResolveStepId(data);
+                snapshot.sourceScenarioStepIndex = ResolveStepIndex(data);
                 var llmSource = data.llm;
                 if (llmSource != null)
                 {
                     snapshot.llm = new EmotionLlmInfo
                     {
                         intent = llmSource.intent,
-                        sentiment = llmSource.sentiment,
                         actionTag = string.IsNullOrEmpty(llmSource.actionTag) ? llmSource.action_tag : llmSource.actionTag,
+                        sentiment = llmSource.sentiment,
                         toxicity = llmSource.toxicity,
                         coercion = llmSource.coercion,
                         confidence = llmSource.confidence
@@ -182,6 +200,75 @@ public class EmotionStateManager : MonoBehaviour
         IsManualOverrideActive = false;
         snapshot.stage = runAi ? runAi.CurrentStage : snapshot.stage;
         SetSnapshot(snapshot);
+    }
+
+    void HandleAudioResponse(AudioAnalysisResponse response, string rawJson)
+    {
+        if (response == null || response.ignored)
+            return;
+
+        string state = response.ResolvedKidEmotionState;
+        var snapshot = new EmotionSnapshot
+        {
+            source = response.source,
+            requestId = response.requestId,
+            utteranceId = response.utteranceId,
+            tension = response.tension,
+            patienceScore = response.patienceScore,
+            emotion = state,
+            text = response.text,
+            kidEmotionState = state,
+            previousKidEmotionState = response.previousKidEmotionState,
+            stage = StageFromEmotionState(state),
+            sourceScenarioStepId = response.scenarioStepId,
+            sourceScenarioStepIndex = -1,
+            rawJson = rawJson,
+            timestampIso = DateTime.UtcNow.ToString("o"),
+            llm = new EmotionLlmInfo
+            {
+                intent = response.intent,
+                actionTag = response.actionTag,
+                confidence = response.confidence,
+                coercion = response.coercion
+            }
+        };
+
+        IsManualOverrideActive = false;
+        SetSnapshot(snapshot);
+        ApplyKidAnimation(state, snapshot);
+    }
+
+    void ApplyKidAnimation(string state, EmotionSnapshot snapshot)
+    {
+        KidEmotionState parsed;
+        if (kidEmotionResponder != null && Enum.TryParse(state, true, out parsed))
+        {
+            kidEmotionResponder.ForceState(parsed);
+            return;
+        }
+
+        if (worldDirector != null)
+        {
+            worldDirector.ReceiveSignal("emotion_score", new SignalPayload
+            {
+                stage = snapshot.stage,
+                tension = snapshot.tension,
+                kidEmotionState = state
+            });
+            return;
+        }
+
+        Debug.LogWarning("[EmotionState] No KidEmotionResponder or WorldDirector is bound; state was saved but no kid animation was played.");
+    }
+
+    static int StageFromEmotionState(string state)
+    {
+        if (string.Equals(state, "Meltdown", StringComparison.OrdinalIgnoreCase)) return 3;
+        if (string.Equals(state, "Crying", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "Cry", StringComparison.OrdinalIgnoreCase)) return 2;
+        if (string.Equals(state, "Uneasy", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "Fear", StringComparison.OrdinalIgnoreCase)) return 1;
+        return 0;
     }
 
     void HandleStageChanged(int stage)
@@ -200,6 +287,20 @@ public class EmotionStateManager : MonoBehaviour
     {
         Current = snapshot;
         OnEmotionChanged?.Invoke(Current);
+    }
+
+    static string ResolveStepId(EmotionPayload data)
+    {
+        if (!string.IsNullOrEmpty(data.scenarioStepId)) return data.scenarioStepId;
+        if (!string.IsNullOrEmpty(data.sourceScenarioStepId)) return data.sourceScenarioStepId;
+        return data.source_step_id;
+    }
+
+    static int ResolveStepIndex(EmotionPayload data)
+    {
+        if (data.scenarioStepIndex >= 0) return data.scenarioStepIndex;
+        if (data.sourceScenarioStepIndex >= 0) return data.sourceScenarioStepIndex;
+        return data.source_step_index;
     }
 
     [Serializable]
@@ -227,9 +328,9 @@ public class EmotionStateManager : MonoBehaviour
     class LlmPayload
     {
         public string intent;
-        public string sentiment;
-        public string actionTag;
         public string action_tag;
+        public string actionTag;
+        public string sentiment;
         public float toxicity;
         public float coercion;
         public float confidence;

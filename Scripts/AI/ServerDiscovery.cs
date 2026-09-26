@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -77,8 +78,8 @@ public sealed class ServerDiscovery : IDisposable
             cancellationRegistration = cancellationToken.Register(CloseClient, client);
 
             byte[] request = Encoding.UTF8.GetBytes(DiscoveryRequest);
-            var broadcastEndpoint = new IPEndPoint(IPAddress.Broadcast, DiscoveryPort);
-            await client.SendAsync(request, request.Length, broadcastEndpoint);
+            if (!await SendBroadcastsAsync(client, request, cancellationToken))
+                return null;
 
             var timer = Stopwatch.StartNew();
             while (timer.ElapsedMilliseconds < timeoutMs)
@@ -111,10 +112,12 @@ public sealed class ServerDiscovery : IDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
         }
-        catch (SocketException)
+        catch (SocketException exception)
         {
             // No active network interface or broadcast route. Treat this attempt
             // as unavailable so the bounded retry policy can continue.
+            UnityEngine.Debug.LogWarning(
+                $"[DISCOVERY] UDP receive failed: {exception.SocketErrorCode} ({exception.Message})");
             return null;
         }
         finally
@@ -128,6 +131,99 @@ public sealed class ServerDiscovery : IDisposable
         }
 
         return null;
+    }
+
+    static async Task<bool> SendBroadcastsAsync(
+        UdpClient client,
+        byte[] request,
+        CancellationToken cancellationToken)
+    {
+        List<IPEndPoint> endpoints = GetBroadcastEndpoints();
+        int sentCount = 0;
+
+        foreach (IPEndPoint endpoint in endpoints)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await client.SendAsync(request, request.Length, endpoint);
+                sentCount++;
+                UnityEngine.Debug.Log($"[DISCOVERY] UDP request sent to {endpoint.Address}:{endpoint.Port}");
+            }
+            catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch (SocketException exception)
+            {
+                // A device can expose inactive VPN/cellular interfaces. Failure
+                // on one route must not prevent broadcasts on the Wi-Fi route.
+                UnityEngine.Debug.LogWarning(
+                    $"[DISCOVERY] UDP send to {endpoint.Address}:{endpoint.Port} failed: {exception.SocketErrorCode}");
+            }
+        }
+
+        return sentCount > 0;
+    }
+
+    static List<IPEndPoint> GetBroadcastEndpoints()
+    {
+        var endpoints = new List<IPEndPoint>();
+        var addresses = new HashSet<string>(StringComparer.Ordinal);
+
+        AddBroadcastEndpoint(IPAddress.Broadcast, addresses, endpoints);
+
+        try
+        {
+            foreach (NetworkInterface networkInterface in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (networkInterface.OperationalStatus != OperationalStatus.Up ||
+                    networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                    networkInterface.NetworkInterfaceType == NetworkInterfaceType.Tunnel)
+                {
+                    continue;
+                }
+
+                foreach (UnicastIPAddressInformation unicast in networkInterface.GetIPProperties().UnicastAddresses)
+                {
+                    if (unicast.Address.AddressFamily != AddressFamily.InterNetwork ||
+                        IPAddress.IsLoopback(unicast.Address) ||
+                        unicast.IPv4Mask == null)
+                    {
+                        continue;
+                    }
+
+                    byte[] addressBytes = unicast.Address.GetAddressBytes();
+                    byte[] maskBytes = unicast.IPv4Mask.GetAddressBytes();
+                    if (addressBytes.Length != maskBytes.Length)
+                        continue;
+
+                    var broadcastBytes = new byte[addressBytes.Length];
+                    for (int i = 0; i < broadcastBytes.Length; i++)
+                        broadcastBytes[i] = (byte)(addressBytes[i] | ~maskBytes[i]);
+
+                    AddBroadcastEndpoint(new IPAddress(broadcastBytes), addresses, endpoints);
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            // The limited broadcast above remains available on platforms that
+            // do not expose interface masks through the Unity API profile.
+            UnityEngine.Debug.LogWarning("[DISCOVERY] Unable to enumerate subnet broadcasts: " + exception.Message);
+        }
+
+        return endpoints;
+    }
+
+    static void AddBroadcastEndpoint(
+        IPAddress address,
+        HashSet<string> addresses,
+        List<IPEndPoint> endpoints)
+    {
+        string key = address.ToString();
+        if (addresses.Add(key))
+            endpoints.Add(new IPEndPoint(address, DiscoveryPort));
     }
 
     static ServerDiscoveryResponse ParseAndValidate(UdpReceiveResult packet)
