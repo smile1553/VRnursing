@@ -1,24 +1,10 @@
 using UnityEngine;
 using UnityEngine.XR;
 
-public enum PushToTalkButton
-{
-    Trigger,
-    PrimaryButton,
-    GripButton
-}
-
 [DisallowMultipleComponent]
 public class RightHandInput : MonoBehaviour
 {
     [SerializeField] private InteractRaycaster raycaster;
-
-    [Header("Push-to-Talk")]
-    [SerializeField] private AudioUploader audioUploader;
-    [SerializeField] private bool enablePushToTalk = true;
-    [SerializeField] private PushToTalkButton pushToTalkButton = PushToTalkButton.GripButton;
-    [SerializeField] private bool usePushToTalkKeyInEditor = true;
-    [SerializeField] private KeyCode pushToTalkKey = KeyCode.Space;
 
     [Header("XR Controller")]
     [SerializeField] private bool useXRController = true;
@@ -37,17 +23,12 @@ public class RightHandInput : MonoBehaviour
     private bool triggerPressedLastFrame;
     private bool primaryPressedLastFrame;
     private bool gripPressedLastFrame;
-    private bool pushToTalkPressedLastFrame;
 
     private void Awake()
     {
         if (raycaster == null)
         {
             raycaster = GetComponentInChildren<InteractRaycaster>();
-        }
-        if (audioUploader == null)
-        {
-            audioUploader = FindObjectOfType<AudioUploader>();
         }
     }
 
@@ -59,8 +40,6 @@ public class RightHandInput : MonoBehaviour
 
     private void Update()
     {
-        PollPushToTalk();
-
         if (raycaster == null)
         {
             return;
@@ -86,70 +65,7 @@ public class RightHandInput : MonoBehaviour
 
     private void OnDisable()
     {
-        if (pushToTalkPressedLastFrame && audioUploader != null)
-            audioUploader.StopPushToTalkAndUpload();
         ResetXRState();
-    }
-
-    private void PollPushToTalk()
-    {
-        if (!enablePushToTalk || audioUploader == null)
-            return;
-
-        bool pressed = false;
-        bool hasXRValue = false;
-        if (useXRController)
-        {
-            if (!xrDevice.isValid)
-                xrDevice = InputDevices.GetDeviceAtXRNode(controllerNode);
-            hasXRValue = TryReadPushToTalkButton(out pressed);
-        }
-
-        if (usePushToTalkKeyInEditor)
-        {
-            if (Input.GetKeyDown(pushToTalkKey))
-                audioUploader.StartPushToTalk();
-            if (Input.GetKeyUp(pushToTalkKey))
-                audioUploader.StopPushToTalkAndUpload();
-        }
-
-        if (!hasXRValue)
-        {
-            if (pushToTalkPressedLastFrame)
-                audioUploader.StopPushToTalkAndUpload();
-            pushToTalkPressedLastFrame = false;
-            return;
-        }
-
-        if (pressed && !pushToTalkPressedLastFrame)
-            audioUploader.StartPushToTalk();
-        else if (!pressed && pushToTalkPressedLastFrame)
-            audioUploader.StopPushToTalkAndUpload();
-
-        pushToTalkPressedLastFrame = pressed;
-    }
-
-    private bool TryReadPushToTalkButton(out bool pressed)
-    {
-        pressed = false;
-        if (!xrDevice.isValid)
-            return false;
-
-        switch (pushToTalkButton)
-        {
-            case PushToTalkButton.Trigger:
-                float triggerValue;
-                if (!xrDevice.TryGetFeatureValue(CommonUsages.trigger, out triggerValue))
-                    return false;
-                pressed = triggerValue >= triggerThreshold;
-                return true;
-
-            case PushToTalkButton.PrimaryButton:
-                return xrDevice.TryGetFeatureValue(CommonUsages.primaryButton, out pressed);
-
-            default:
-                return xrDevice.TryGetFeatureValue(CommonUsages.gripButton, out pressed);
-        }
     }
 
     private bool PollXRClickDown()
@@ -215,6 +131,5 @@ public class RightHandInput : MonoBehaviour
         triggerPressedLastFrame = false;
         primaryPressedLastFrame = false;
         gripPressedLastFrame = false;
-        pushToTalkPressedLastFrame = false;
     }
 }

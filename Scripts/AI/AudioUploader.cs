@@ -113,8 +113,7 @@ public class AudioUploader : MonoBehaviour
     // 給 UI 按鈕綁這個
     public void StartRecordAndUpload()
     {
-        Debug.LogWarning("[AudioUploader] StartRecordAndUpload is legacy. Use StartPushToTalk/StopPushToTalkAndUpload.");
-        StartPushToTalk();
+        Debug.LogWarning("[AudioUploader] Manual recording button is disabled. Login starts automatic VAD capture.");
     }
 
     public void StartLoop()
