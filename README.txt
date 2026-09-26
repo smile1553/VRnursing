@@ -134,6 +134,6 @@ SignalMonitor.cs
 Data/Story：劇本資料
 
 放非程式資料，目前採用單一章節整合檔。
-
+132
 story_main.json
 單一整合章節劇本。包含全部流程節點、台詞、選項、等待互動與 action 定義。
