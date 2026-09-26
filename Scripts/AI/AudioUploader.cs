@@ -8,6 +8,7 @@ using UnityEngine.Networking;
 public class AudioUploader : MonoBehaviour
 {
     const int UploadSampleRate = 16000;
+    const float AutomaticEndSilenceMs = 500f;
 
     [Header("Server")]
     [HideInInspector] public string serverUrl;  // ← 不寫死，由外部指定，例如 http://IP:8000/audio
@@ -141,6 +142,12 @@ public class AudioUploader : MonoBehaviour
             return;
 
         CancelPushToTalkRecording();
+        // Keep the formal automatic-capture policy in code. Older scene files
+        // may still serialize the former segmented-loop settings, and those
+        // values must not silently turn Push-to-Talk/segmented capture back on.
+        continuousMicInLoop = true;
+        forceSegmentedLoop = false;
+        maxSilenceMs = AutomaticEndSilenceMs;
         noiseCalibrated = false;
         currentVadState = "Idle";
         captureEnabled = true;
