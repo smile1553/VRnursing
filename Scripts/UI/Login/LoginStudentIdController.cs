@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using TMPro;
 using UnityEngine;
@@ -19,6 +20,13 @@ public class LoginStudentIdController : MonoBehaviour
     [SerializeField] string nextSceneName;
     [SerializeField] bool logLogin;
 
+    [Header("Initial XR Pose")]
+    [SerializeField] bool alignXrToLoginPanelOnStart = true;
+    [SerializeField] Transform xrRig;
+    [SerializeField] Vector3 initialCameraWorldPosition = new Vector3(5.173f, 1.077f, -1.985f);
+    [SerializeField] float initialAlignDelayFrames = 3f;
+    [SerializeField] int initialAlignAttempts = 6;
+
     [Header("Events")]
     [SerializeField] UnityEvent onLoginSucceeded;
 
@@ -29,6 +37,12 @@ public class LoginStudentIdController : MonoBehaviour
 
         if (loginScreenRoot == null)
             loginScreenRoot = gameObject;
+    }
+
+    void Start()
+    {
+        if (alignXrToLoginPanelOnStart)
+            StartCoroutine(AlignXrToLoginPanel());
     }
 
     void OnEnable()
@@ -100,5 +114,55 @@ public class LoginStudentIdController : MonoBehaviour
             if (field != null && field.FieldType == typeof(string))
                 field.SetValue(exporter, studentId);
         }
+    }
+
+    IEnumerator AlignXrToLoginPanel()
+    {
+        int delayFrames = Mathf.Max(0, Mathf.RoundToInt(initialAlignDelayFrames));
+        for (int i = 0; i < delayFrames; i++)
+            yield return null;
+
+        for (int i = 0; i < Mathf.Max(1, initialAlignAttempts); i++)
+        {
+            yield return null;
+            ResolveXrRig();
+
+            Camera cam = Camera.main;
+            if (xrRig == null || cam == null || loginScreenRoot == null)
+                continue;
+
+            float yaw = GetYawFacing(loginScreenRoot.transform.position - initialCameraWorldPosition);
+            MoveRigToCameraPose(cam.transform, initialCameraWorldPosition, yaw);
+        }
+    }
+
+    void ResolveXrRig()
+    {
+        if (xrRig != null)
+            return;
+
+        GameObject found = GameObject.Find("XR_Origin_Pure");
+        if (found == null)
+            found = GameObject.Find("XR Origin");
+
+        if (found != null)
+            xrRig = found.transform;
+    }
+
+    void MoveRigToCameraPose(Transform cam, Vector3 cameraWorldPosition, float yawDegrees)
+    {
+        xrRig.rotation = Quaternion.Euler(0f, yawDegrees, 0f);
+
+        Vector3 cameraOffset = cam.position - xrRig.position;
+        xrRig.position = cameraWorldPosition - cameraOffset;
+    }
+
+    static float GetYawFacing(Vector3 direction)
+    {
+        direction.y = 0f;
+        if (direction.sqrMagnitude < 0.0001f)
+            return 0f;
+
+        return Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
     }
 }
