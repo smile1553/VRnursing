@@ -9,6 +9,7 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
     [SerializeField] private DoorSlideOpener doorOpener;
     [SerializeField] private TrackPointGuide doorGreetingGuide;
     [SerializeField] private RunAI_Network network;
+    [SerializeField] private AudioUploader audioUploader;
 
     [Header("Backend")]
     [SerializeField] private bool advanceFromBackendJson = true;
@@ -30,10 +31,45 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
         if (network == null)
             network = FindObjectOfType<RunAI_Network>();
 
+        if (audioUploader == null)
+            audioUploader = FindObjectOfType<AudioUploader>();
+
         if (medicalRecordCloseFlow == null)
             medicalRecordCloseFlow = FindObjectOfType<MedicalRecordCloseFlow>(true);
 
         doorGreetingGuide?.Hide();
+    }
+
+    private void OnEnable()
+    {
+        SubscribeToAudioResponse();
+    }
+
+    private void OnDisable()
+    {
+        if (audioUploader != null)
+            audioUploader.AudioResponseAccepted -= HandleAudioResponse;
+    }
+
+    private void SubscribeToAudioResponse()
+    {
+        if (audioUploader == null)
+            audioUploader = FindObjectOfType<AudioUploader>();
+        if (audioUploader == null)
+            return;
+
+        audioUploader.AudioResponseAccepted -= HandleAudioResponse;
+        audioUploader.AudioResponseAccepted += HandleAudioResponse;
+    }
+
+    private void HandleAudioResponse(AudioAnalysisResponse response, string rawJson)
+    {
+        if (!advanceFromBackendJson || !waitingForGreeting || completed ||
+            response == null || response.ignored ||
+            !string.Equals(response.source, "student_speech", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        HandleGreetingText(response.text, true);
     }
 
     private void Update()
@@ -106,10 +142,15 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
 
         lastProcessedBackendJson = json;
         string speechText = ExtractBackendSpeechText(json);
+        HandleGreetingText(speechText, false);
+    }
+
+    private void HandleGreetingText(string speechText, bool isFreshAudioResponse)
+    {
         if (string.IsNullOrWhiteSpace(speechText))
             return;
 
-        if (!string.IsNullOrEmpty(initialBackendSpeechToIgnore) &&
+        if (!isFreshAudioResponse && !string.IsNullOrEmpty(initialBackendSpeechToIgnore) &&
             string.Equals(speechText, initialBackendSpeechToIgnore, StringComparison.Ordinal))
         {
             initialBackendSpeechToIgnore = null;
