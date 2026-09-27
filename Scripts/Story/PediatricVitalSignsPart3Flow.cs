@@ -13,8 +13,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         None,
         AskMomPreference,
         ReassureWithSticker,
-        LetYayaListenMom,
-        TellMomListenYaya
+        LetYayaListenMom
     }
 
     [Header("Panels")]
@@ -32,12 +31,6 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     [SerializeField] private NewDialogueManager dialogueManager;
     [SerializeField] private TMP_Text speakerText;
     [SerializeField] private TMP_Text dialogueText;
-    [SerializeField] private int momStickerLineIndex = 6;
-    [SerializeField] private int momEncourageLineIndex = 7;
-    [SerializeField] private int yayaRefuseLineIndex = 8;
-    [SerializeField] private int momDoctorLineIndex = 9;
-    [SerializeField] private int momHeartbeatLineIndex = 10;
-    [SerializeField] private int yayaEarPainLineIndex = 11;
 
     [Header("Actors")]
     [SerializeField] private MomAnimationPlayer momAnimation;
@@ -55,7 +48,6 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     [SerializeField] private string askMomPreferenceKeywords = "喜歡|貼紙|玩具|故事|卡通";
     [SerializeField] private string reassureWithStickerKeywords = "貼紙|不打針|不會痛|一下子";
     [SerializeField] private string letYayaListenMomKeywords = "媽媽|心跳|聽診器|聽聽";
-    [SerializeField] private string letMomListenYayaKeywords = "媽媽|芽芽|心跳|聽診器|撲通";
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Audio")]
@@ -69,7 +61,6 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     [SerializeField] private AudioClip nurseShowStickerClip;
     [SerializeField] private AudioClip nursePromiseStickerClip;
     [SerializeField] private AudioClip nurseLetYayaListenMomClip;
-    [SerializeField] private AudioClip nurseLetMomListenYayaClip;
     [SerializeField] private bool useAudioLengthForDialogueDelay = true;
     [SerializeField] private float dialogueAdvanceDelay = 4f;
     [SerializeField] private float extraDelayAfterAudio = 0.4f;
@@ -80,6 +71,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     [SerializeField] private int correctAnswerIndex = 1;
     [SerializeField] private bool hideQuizAfterCorrect = true;
     [SerializeField] private float correctAnswerDelay = 1.2f;
+    [SerializeField] private float wrongAnswerDelay = 1.2f;
     [SerializeField] private TMP_Text quizQuestionText;
     [SerializeField] private TMP_Text[] quizOptionTexts;
     [SerializeField] private GameObject correctPopup;
@@ -95,11 +87,12 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     private int lastStartFrame = -1;
     private bool quizButtonsBound;
     private Coroutine correctRoutine;
+    private Coroutine wrongRoutine;
     private const string AskPreferencePrompt =
         "護生如何知道芽芽喜歡什麼東西呢？";
 
     private const string ReassureWithStickerPrompt =
-        "請引導護生說：等一下量完，姊姊再給你這個貼紙喔！";
+        "請引導護生安撫芽芽：先說明不會打針、不會痛，量完後會給貼紙作為獎勵。";
 
     private const string StickerStrategyPrompt =
         "字幕：以貼紙，鼓勵病童的正向行為。";
@@ -108,11 +101,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         "請引導芽芽先聽媽媽的心跳。";
 
     private const string NurseLetYayaListenMomLine =
-        "請引導護生說：好！那你先聽媽媽的心跳，有撲通、撲通的聲音喔！";
-
-    private const string NurseLetMomListenYayaLine =
-        "請引導護生說：那換媽媽聽聽芽芽的心跳聲音，撲通撲通！";
-
+        "請引導護生邀請芽芽先當小醫生，幫媽媽聽心跳，讓芽芽知道聽診器不會痛。";
     private const string MomLikesStickerLine =
         "她喜歡貼紙！";
 
@@ -229,6 +218,11 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         SelectAnswer(2);
     }
 
+    public void SelectD()
+    {
+        SelectAnswer(3);
+    }
+
     private IEnumerator Part3Routine()
     {
         ShowNursePrompt(AskPreferencePrompt, WaitingForNurseAction.AskMomPreference);
@@ -287,17 +281,6 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         yayaAnimation?.PlaySittingDisbelief();
         yield return WaitForDialogue(yayaEarPainClip);
 
-        ShowNursePrompt(NurseLetMomListenYayaLine, WaitingForNurseAction.TellMomListenYaya);
-        PlayAudio(nurseLetMomListenYayaClip);
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
-
-        momAnimation?.PlayTalking();
-        yayaAnimation?.PlaySittingIdle();
-        if (visualDemo != null)
-            yield return visualDemo.MoveStethoscopeForMomListeningYaya();
-        else
-            yield return new WaitForSeconds(2f);
-
         ShowQuiz();
         routine = null;
     }
@@ -333,8 +316,6 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
                 return reassureWithStickerKeywords;
             case WaitingForNurseAction.LetYayaListenMom:
                 return letYayaListenMomKeywords;
-            case WaitingForNurseAction.TellMomListenYaya:
-                return letMomListenYayaKeywords;
             default:
                 return string.Empty;
         }
@@ -460,6 +441,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
 
         if (correct)
         {
+            StopWrongRoutine();
             SetPanelVisible(wrongPopup, false, "Wrong_Popup");
             SetPanelVisible(correctPopup, true, "Correct_Popup");
 
@@ -473,8 +455,11 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         }
 
         StopCorrectRoutine();
+        StopWrongRoutine();
+        SetPanelVisible(quizPanel, true, quizPanelChildName);
         SetPanelVisible(correctPopup, false, "Correct_Popup");
         SetPanelVisible(wrongPopup, true, "Wrong_Popup");
+        wrongRoutine = StartCoroutine(HideWrongAfterDelay());
     }
 
     private IEnumerator WaitForDialogue(AudioClip clip)
@@ -516,6 +501,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
             dialogueManager.StopPlayback();
 
         StopCorrectRoutine();
+        StopWrongRoutine();
         SetPromptSkipButtonsVisible(false);
     }
 
@@ -525,6 +511,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         correctRoutine = null;
         SetPanelVisible(correctPopup, false, "Correct_Popup");
         SetPanelVisible(quizPanel, false, quizPanelChildName);
+        NurseryRhymeMusicController.Stop();
         onCorrectAnswer?.Invoke();
     }
 
@@ -537,6 +524,21 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         correctRoutine = null;
     }
 
+    private IEnumerator HideWrongAfterDelay()
+    {
+        yield return new WaitForSeconds(Mathf.Max(0f, wrongAnswerDelay));
+        wrongRoutine = null;
+        SetPanelVisible(wrongPopup, false, "Wrong_Popup");
+    }
+
+    private void StopWrongRoutine()
+    {
+        if (wrongRoutine == null)
+            return;
+
+        StopCoroutine(wrongRoutine);
+        wrongRoutine = null;
+    }
     private void BindQuizButtonsIfNeeded()
     {
         if (!bindQuizButtonsAutomatically || quizButtonsBound || quizPanel == null)
@@ -884,3 +886,9 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         public string llm_window_text;
     }
 }
+
+
+
+
+
+

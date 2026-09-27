@@ -8,6 +8,7 @@
       "playerActionRequired": true,
       "playerPrompt": "進入病房前，先在門口向芽芽與媽媽問好，並說明將協助量體溫、呼吸、心跳與血壓。",
       "expectedKeywords": [
+        "媽媽好",
         "你好",
         "您好",
         "大家好",

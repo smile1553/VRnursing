@@ -12,6 +12,7 @@ public class AudioUploader : MonoBehaviour
 
     [Header("Server")]
     [HideInInspector] public string serverUrl;  // ← 不寫死，由外部指定，例如 http://IP:8000/audio
+    [SerializeField] string fallbackScenarioStepId = "intro_nurse";
 
     [Header("Record")]
     public int sampleRate = 16000;
@@ -707,15 +708,26 @@ public class AudioUploader : MonoBehaviour
             return null;
         }
 
-        ScenarioController scenario = FindObjectOfType<ScenarioController>();
+        ScenarioController scenario = ResolveActiveScenarioController();
         string scenarioStepId = scenario != null && scenario.CurrentStep != null
             ? scenario.CurrentStep.id ?? string.Empty
             : string.Empty;
+        if (string.IsNullOrWhiteSpace(scenarioStepId) && scenario != null && scenario.EnsureScenarioStarted())
+        {
+            scenarioStepId = scenario.CurrentStep != null ? scenario.CurrentStep.id ?? string.Empty : string.Empty;
+        }
         if (string.IsNullOrWhiteSpace(scenarioStepId))
         {
-            blockingUploadFailure = true;
-            lastUploadError = "Cannot upload /audio because Scenario CurrentStep.id is empty.";
-            Debug.LogError("[AudioUploader] " + lastUploadError);
+            scenarioStepId = fallbackScenarioStepId ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(scenarioStepId))
+            {
+                Debug.LogWarning($"[AudioUploader] Scenario CurrentStep.id is empty; using fallback step id '{scenarioStepId}'.");
+            }
+        }
+        if (string.IsNullOrWhiteSpace(scenarioStepId))
+        {
+            lastUploadError = "Skipped /audio because Scenario CurrentStep.id is empty.";
+            Debug.LogWarning("[AudioUploader] " + lastUploadError);
             NotifyProcessingStateChanged();
             return null;
         }
@@ -729,6 +741,30 @@ public class AudioUploader : MonoBehaviour
         };
     }
 
+    ScenarioController ResolveActiveScenarioController()
+    {
+        ScenarioController[] controllers = FindObjectsOfType<ScenarioController>(true);
+        ScenarioController fallback = null;
+
+        foreach (ScenarioController controller in controllers)
+        {
+            if (controller == null)
+                continue;
+
+            if (fallback == null)
+                fallback = controller;
+
+            if (controller.CurrentStep != null && !string.IsNullOrWhiteSpace(controller.CurrentStep.id))
+                return controller;
+        }
+
+        if (fallback != null)
+        {
+            Debug.LogWarning($"[AudioUploader] No active ScenarioController has a valid CurrentStep.id. Using fallback controller={fallback.name} index={fallback.CurrentStepIndex}.");
+        }
+
+        return fallback;
+    }
     void EnqueueUpload(AudioUploadWorkItem item)
     {
         if (item == null || item.wav == null || item.wav.Length == 0)
@@ -1385,3 +1421,6 @@ sealed class AudioUploadWorkItem
     public string studentRunId;
     public int retryCount;
 }
+
+
+

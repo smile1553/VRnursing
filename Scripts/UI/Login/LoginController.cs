@@ -10,6 +10,7 @@ public class LoginController : MonoBehaviour
     [SerializeField] Transform entranceSpawn;
     [SerializeField] Transform wardSpawn;
     [SerializeField] GameObject loginUIRoot;
+    [SerializeField] GameObject introPanelRoot;
     [SerializeField] MonoBehaviour signalBus;
 
     [Header("Student Run Integration")]
@@ -156,7 +157,11 @@ public class LoginController : MonoBehaviour
             if (success)
                 CompleteLoginAndStartScenario();
             else
+            {
+                if (loginUIRoot != null) loginUIRoot.SetActive(true);
+                if (introPanelRoot != null) introPanelRoot.SetActive(false);
                 RuntimeLog.Warning("[LoginController] Backend did not start the student run. Scenario remains stopped.");
+            }
         });
     }
 
@@ -181,17 +186,19 @@ public class LoginController : MonoBehaviour
         else if (requireGreetingBeforeWardEntry)
             RuntimeLog.Warning("[LoginController] entranceSpawn is not assigned. The player cannot wait outside the ward before greeting.");
 
-        MoveRigTo(loginDestination);
         if (loginUIRoot != null)
             loginUIRoot.SetActive(false);
+        if (introPanelRoot != null)
+            introPanelRoot.SetActive(true);
 
         EmitSignal("LoginCompleted", null);
-        FindObjectOfType<AudioUploader>()?.StartLoop();
         SubscribeToScenario();
         if (scenarioController != null)
-            scenarioController.StartScenario();
+            scenarioController.EnsureScenarioStarted();
         else if (requireGreetingBeforeWardEntry)
             RuntimeLog.Warning("[LoginController] ScenarioController not found. Greeting completion cannot open the ward flow.");
+
+        FindObjectOfType<AudioUploader>()?.StartLoop();
     }
 
     void HandleResultUploadSucceeded()
@@ -202,7 +209,6 @@ public class LoginController : MonoBehaviour
             loginUIRoot.SetActive(true);
         if (studentIdInput != null)
             studentIdInput.text = string.Empty;
-        MoveRigTo(entranceSpawn);
         RuntimeLog.Info("[LoginController] Result saved. Ready for the next student in the same Session.");
     }
 
@@ -237,7 +243,6 @@ public class LoginController : MonoBehaviour
 
         wardEntered = true;
         RuntimeLog.Info($"[LoginController] Greeting step completed ({stepId}). Entering ward.");
-        MoveRigTo(wardSpawn);
         EmitSignal("WardEntered", null);
     }
 
@@ -251,7 +256,10 @@ public class LoginController : MonoBehaviour
         if (sessionClient == null)
             sessionClient = FindObjectOfType<ExperimentSessionClient>();
         if (sessionClient == null)
-            sessionClient = gameObject.AddComponent<ExperimentSessionClient>();
+        {
+            GameObject owner = scenarioController != null ? scenarioController.gameObject : gameObject;
+            sessionClient = owner.AddComponent<ExperimentSessionClient>();
+        }
 
         if (performanceScoreManager == null)
             performanceScoreManager = FindObjectOfType<PerformanceScoreManager>();
@@ -377,3 +385,5 @@ public class LoginController : MonoBehaviour
         return $"({value.x:0.###}, {value.y:0.###}, {value.z:0.###})";
     }
 }
+
+

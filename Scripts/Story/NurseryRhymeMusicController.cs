@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 
 public class NurseryRhymeMusicController : MonoBehaviour
@@ -11,15 +11,25 @@ public class NurseryRhymeMusicController : MonoBehaviour
     [SerializeField] private AudioClip nurseryRhymeClip;
     [SerializeField] private string resourcesClipName = DefaultClipName;
     [SerializeField] private float loopStartTime = 3f;
-    [SerializeField] private float introVolume = 0.38f;
-    [SerializeField] private float ambientVolume = 0.055f;
+    [SerializeField] private float introVolume = 0.14f;
+    [SerializeField] private float ambientVolume = 0.045f;
+    [SerializeField] private float fadeInSeconds = 1.5f;
     [SerializeField] private float fadeToAmbientSeconds = 10f;
+    [SerializeField] private float fadeOutSeconds = 1.5f;
 
     private Coroutine fadeRoutine;
 
     public static void Play()
     {
         GetOrCreateInstance().PlayLoop();
+    }
+
+    public static void Stop()
+    {
+        if (instance == null)
+            instance = FindObjectOfType<NurseryRhymeMusicController>(true);
+
+        instance?.StopLoop();
     }
 
     private static NurseryRhymeMusicController GetOrCreateInstance()
@@ -67,37 +77,103 @@ public class NurseryRhymeMusicController : MonoBehaviour
             return;
         }
 
+        if (fadeRoutine != null)
+        {
+            StopCoroutine(fadeRoutine);
+            fadeRoutine = null;
+        }
+
         float startTime = Mathf.Clamp(loopStartTime, 0f, Mathf.Max(0f, nurseryRhymeClip.length - 0.05f));
         audioSource.clip = nurseryRhymeClip;
         audioSource.loop = true;
-        audioSource.volume = introVolume;
+        audioSource.volume = 0f;
         audioSource.time = startTime;
 
         if (!audioSource.isPlaying)
             audioSource.Play();
 
-        if (fadeRoutine != null)
-            StopCoroutine(fadeRoutine);
-
-        fadeRoutine = StartCoroutine(FadeToAmbientRoutine());
+        fadeRoutine = StartCoroutine(FadeInThenAmbientRoutine());
     }
 
-    private IEnumerator FadeToAmbientRoutine()
+    private void StopLoop()
     {
-        float startVolume = audioSource != null ? audioSource.volume : introVolume;
-        float duration = Mathf.Max(0.01f, fadeToAmbientSeconds);
+        ResolveReferences();
+
+        if (audioSource == null)
+            return;
+
+        if (fadeRoutine != null)
+        {
+            StopCoroutine(fadeRoutine);
+            fadeRoutine = null;
+        }
+
+        if (!audioSource.isPlaying)
+        {
+            audioSource.Stop();
+            audioSource.volume = 0f;
+            return;
+        }
+
+        fadeRoutine = StartCoroutine(FadeOutAndStopRoutine());
+    }
+
+    private IEnumerator FadeInThenAmbientRoutine()
+    {
+        float fadeInDuration = Mathf.Max(0.01f, fadeInSeconds);
+        float elapsed = 0f;
+
+        while (audioSource != null && elapsed < fadeInDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / fadeInDuration);
+            audioSource.volume = Mathf.Lerp(0f, introVolume, t);
+            yield return null;
+        }
+
+        if (audioSource == null)
+        {
+            fadeRoutine = null;
+            yield break;
+        }
+
+        audioSource.volume = introVolume;
+        float fadeAmbientDuration = Mathf.Max(0.01f, fadeToAmbientSeconds);
+        elapsed = 0f;
+
+        while (audioSource != null && elapsed < fadeAmbientDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / fadeAmbientDuration);
+            audioSource.volume = Mathf.Lerp(introVolume, ambientVolume, t);
+            yield return null;
+        }
+
+        if (audioSource != null)
+            audioSource.volume = ambientVolume;
+
+        fadeRoutine = null;
+    }
+
+    private IEnumerator FadeOutAndStopRoutine()
+    {
+        float startVolume = audioSource != null ? audioSource.volume : 0f;
+        float duration = Mathf.Max(0.01f, fadeOutSeconds);
         float elapsed = 0f;
 
         while (audioSource != null && elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / duration);
-            audioSource.volume = Mathf.Lerp(startVolume, ambientVolume, t);
+            audioSource.volume = Mathf.Lerp(startVolume, 0f, t);
             yield return null;
         }
 
         if (audioSource != null)
-            audioSource.volume = ambientVolume;
+        {
+            audioSource.Stop();
+            audioSource.volume = 0f;
+        }
 
         fadeRoutine = null;
     }

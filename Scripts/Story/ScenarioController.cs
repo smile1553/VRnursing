@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Linq;
 using UnityEngine;
@@ -8,23 +8,24 @@ using TMPro;
 
 public class ScenarioController : MonoBehaviour
 {
+    const string DefaultScenarioGuid = "1c60adccd82e6f540ab7a8efcc1676bd";
     [Header("Scenario Data")]
     public ScenarioAsset scenario;
     public EmotionStateManager emotionManager;
 
-    [Header("字幕設定")]
+    [Header("Subtitle Settings")]
     public float defaultSubtitleDuration = 1.5f;
     public bool repeatSubtitleWhileBlocked = true;
     public float repeatSubtitleInterval = 3f;
 
-    [Header("UI 綁定")]
+    [Header("UI Binding")]
     public ScenarioUiBinding ui;
 
     [Header("Quiz Placement (2F)")]
     [SerializeField] private Transform quizUiAnchor;
     [SerializeField] private Transform xrRigRoot;
     [SerializeField] private Transform quizXrSpawn;
-    [Header("情緒全域 Gate")]
+    [Header("Emotion Gate")]
     public bool suppressGateAfterQuiz = true;
     public float gateSuppressSeconds = 0.8f;
 
@@ -40,9 +41,9 @@ public class ScenarioController : MonoBehaviour
     public int globalAnxiousStageThreshold = 1;
     public int globalFallbackStepIndex = -1;
     public int globalCalmStageRequirement = 0;
-    [TextArea] public string globalBlockedSubtitle = "芽芽太緊張，先安撫後再繼續。";
+    [TextArea] public string globalBlockedSubtitle = "Yaya is nervous. Comfort her before continuing.";
 
-    [Header("事件")]
+    [Header("Events")]
     public StringEvent cursorTargetChanged;
     public StringEvent stepStarted;
     public StringEvent stepCompleted;
@@ -68,10 +69,41 @@ public class ScenarioController : MonoBehaviour
 
     void Awake()
     {
+        TryRestoreScenarioReference();
+
         if (!emotionManager)
             emotionManager = FindObjectOfType<EmotionStateManager>();
     }
 
+
+    void TryRestoreScenarioReference()
+    {
+        if (scenario != null)
+            return;
+
+#if UNITY_EDITOR
+        string path = UnityEditor.AssetDatabase.GUIDToAssetPath(DefaultScenarioGuid);
+        if (string.IsNullOrEmpty(path))
+        {
+            string[] matches = UnityEditor.AssetDatabase.FindAssets("gaga_vitals_Scenario t:ScenarioAsset");
+            if (matches != null && matches.Length > 0)
+                path = UnityEditor.AssetDatabase.GUIDToAssetPath(matches[0]);
+        }
+
+        if (!string.IsNullOrEmpty(path))
+        {
+            scenario = UnityEditor.AssetDatabase.LoadAssetAtPath<ScenarioAsset>(path);
+            if (scenario != null)
+                Debug.LogWarning("[ScenarioController] Scenario Data was empty at runtime and was restored from " + path + ".", this);
+            else
+                Debug.LogWarning("[ScenarioController] Scenario Data restore failed. Asset path was found but could not load: " + path, this);
+        }
+        else
+        {
+            Debug.LogWarning("[ScenarioController] Scenario Data restore failed. gaga_vitals_Scenario asset path was not found.", this);
+        }
+#endif
+    }
     void OnEnable()
     {
         if (emotionManager != null)
@@ -117,6 +149,28 @@ public class ScenarioController : MonoBehaviour
         ProceedToIndex(0);
     }
 
+    public bool EnsureScenarioStarted()
+    {
+        if (_currentStep != null && !string.IsNullOrWhiteSpace(_currentStep.id))
+            return true;
+
+        TryRestoreScenarioReference();
+
+        if (scenario == null)
+        {
+            Debug.LogWarning("[ScenarioController] Cannot start scenario because Scenario Data is not assigned.", this);
+            return false;
+        }
+
+        if (scenario.steps == null || scenario.steps.Count == 0)
+        {
+            Debug.LogWarning("[ScenarioController] Cannot start scenario because Scenario Data has no steps.", this);
+            return false;
+        }
+
+        StartScenario();
+        return _currentStep != null && !string.IsNullOrWhiteSpace(_currentStep.id);
+    }
     public void SelectChoice(int index)
     {
         if (_activeQuiz == null) return;
@@ -152,7 +206,7 @@ public class ScenarioController : MonoBehaviour
         if (index >= 0)
             ProceedToIndex(index);
         else
-            Debug.LogWarning($"[Scenario] 找不到 id={stepId} 的步驟");
+            Debug.LogWarning($"[Scenario] Step id not found: {stepId}");
     }
 
     public void JumpToIndex(int index)
@@ -440,8 +494,8 @@ public class ScenarioController : MonoBehaviour
             .OrderBy(item => GetTrailingNumber(item.currentQuizPanel != null ? item.currentQuizPanel.name : item.gameObject.name))
             .ToArray();
 
-        if (_legacyQuizHandlers.Length != 8)
-            Debug.LogError("[ScenarioController] Expected exactly 8 legacy quiz panels, but found " + _legacyQuizHandlers.Length + ".", this);
+        if (_legacyQuizHandlers.Length > 0 && _legacyQuizHandlers.Length != 8)
+            Debug.LogWarning("[ScenarioController] Expected exactly 8 legacy quiz panels, but found " + _legacyQuizHandlers.Length + ".", this);
 
         foreach (QuizHandler item in _legacyQuizHandlers)
         {
@@ -603,3 +657,4 @@ public class ScenarioController : MonoBehaviour
     [System.Serializable]
     public class QuizAnswerEvent : UnityEvent<ScenarioQuiz, int, bool> { }
 }
+

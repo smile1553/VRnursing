@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -32,6 +32,8 @@ public class RunAI_Network : MonoBehaviour
     bool _shuttingDown;
 
     public event Action<string> EmotionJsonReceived;
+    public string LastJson { get; private set; }
+    public float LastJsonReceivedAt { get; private set; }
 
     void Awake()
     {
@@ -57,11 +59,17 @@ public class RunAI_Network : MonoBehaviour
                 Debug.Log("[RunAI_Network] Auto-linked AudioUploader from scene.");
         }
 
-        if (runAi == null)
+        if (audioUploader != null)
+        {
+            audioUploader.AudioResponseAccepted -= HandleDirectAudioResponse;
+            audioUploader.AudioResponseAccepted += HandleDirectAudioResponse;
+        }
+
+        if (!directAudioResponseMode && runAi == null)
         {
             runAi = FindObjectOfType<RunAI>();
             if (runAi == null)
-                Debug.LogWarning("[RunAI_Network] RunAI not found. Feed JSON will not be applied to avatar.");
+                Debug.LogWarning("[RunAI_Network] RunAI not found. Legacy feed JSON will not be applied to avatar.");
         }
     }
 
@@ -273,7 +281,8 @@ public class RunAI_Network : MonoBehaviour
         if (string.IsNullOrEmpty(normalized) ||
             !Uri.TryCreate(normalized, UriKind.Absolute, out Uri uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
-            string.IsNullOrEmpty(uri.Host))
+            string.IsNullOrEmpty(uri.Host) ||
+            IsBroadcastOrMaskHost(uri.Host))
         {
             return string.Empty;
         }
@@ -281,6 +290,16 @@ public class RunAI_Network : MonoBehaviour
         return normalized;
     }
 
+    static bool IsBroadcastOrMaskHost(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return false;
+
+        string trimmed = host.Trim();
+        return trimmed == "255.255.255.255" ||
+            trimmed.StartsWith("255.", StringComparison.Ordinal) ||
+            trimmed.EndsWith(".255", StringComparison.Ordinal);
+    }
     bool IsCurrentInitialization(int version)
     {
         return !_shuttingDown && version == _initializationVersion;
@@ -306,6 +325,9 @@ public class RunAI_Network : MonoBehaviour
 
     void OnJson(string json)
     {
+        LastJson = json;
+        LastJsonReceivedAt = Time.time;
+
         if (logIncomingJson && !string.IsNullOrEmpty(json) && !string.Equals(json, _lastLoggedJson))
         {
             Debug.Log("[EmotionFeed] " + json);
@@ -315,6 +337,16 @@ public class RunAI_Network : MonoBehaviour
         if (runAi != null)
             runAi.ApplyJson(json);
         EmotionJsonReceived?.Invoke(json);
+    }
+
+    void HandleDirectAudioResponse(AudioAnalysisResponse response, string json)
+    {
+        if (!directAudioResponseMode || string.IsNullOrWhiteSpace(json))
+            return;
+
+        // Formal story gates consume RunAI_Network.LastJson. Forward the
+        // accepted /audio response into the same path used by the legacy feed.
+        OnJson(json);
     }
 
     public static bool IsLoopbackUrl(string url)
@@ -361,8 +393,11 @@ public class RunAI_Network : MonoBehaviour
         _shuttingDown = true;
         ++_initializationVersion;
         CancelInitialization();
+        if (audioUploader != null)
+            audioUploader.AudioResponseAccepted -= HandleDirectAudioResponse;
         _serverDiscovery?.Dispose();
         _serverDiscovery = null;
         StopFormalConnections();
     }
 }
+

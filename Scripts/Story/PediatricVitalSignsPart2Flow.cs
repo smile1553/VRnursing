@@ -224,7 +224,9 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         ShowDialogueLine(momApologyLineIndex, momApologyClip);
         momAnimation?.PlayQuickBow();
         yayaAnimation?.PlaySittingDisbelief();
-        yield return WaitForDialogue(momApologyClip);
+        yield return WaitForSecondsOrSkip(1.1f);
+        momAnimation?.PlayTalking();
+        yield return WaitForSecondsOrSkip(Mathf.Max(0.1f, GetDialogueDelay(momApologyClip) - 1.1f));
 
         ShowNursePrompt(RespirationPrompt, WaitingForNurseAction.RespirationExplanation);
         yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
@@ -239,6 +241,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         momAnimation?.PlayPointing();
         yayaAnimation?.PlayLayingSleeping();
         yield return WaitForDialogue(momBesideClip);
+        NurseryRhymeMusicController.Play();
 
         ShowNursePrompt(ObservationPrompt, WaitingForNurseAction.None);
         momAnimation?.PlayStandingIdle();
@@ -782,3 +785,4 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         }
     }
 }
+

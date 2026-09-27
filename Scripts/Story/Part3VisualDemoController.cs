@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 
 public class Part3VisualDemoController : MonoBehaviour
@@ -232,7 +232,9 @@ public class Part3VisualDemoController : MonoBehaviour
             popClip = Resources.Load<AudioClip>("pop") ?? FindAudioClipByName("pop");
 
         if (heartbeatClip == null)
-            heartbeatClip = Resources.Load<AudioClip>("heartbeat-sound")
+            heartbeatClip = Resources.Load<AudioClip>("Heartbeat-sound")
+                ?? Resources.Load<AudioClip>("heartbeat-sound")
+                ?? FindAudioClipByName("Heartbeat-sound")
                 ?? FindAudioClipByName("heartbeat-sound")
                 ?? FindAudioClipByName("heartbeat");
 
@@ -447,3 +449,4 @@ public class Part3VisualDemoController : MonoBehaviour
         return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
     }
 }
+

@@ -35,9 +35,14 @@ public class YayaAnimationPlayer : MonoBehaviour
     private Coroutine anchorMoveRoutine;
     private Transform heldLayingAnchor;
     private Vector3 heldAdditionalPositionOffset;
+    private Vector3 initialSittingPosition;
+    private Quaternion initialSittingRotation;
 
     private void Awake()
     {
+        initialSittingPosition = transform.position;
+        initialSittingRotation = transform.rotation;
+
         if (animator == null)
             animator = GetComponent<Animator>();
 
@@ -57,7 +62,7 @@ public class YayaAnimationPlayer : MonoBehaviour
     {
         heldLayingAnchor = null;
         heldAdditionalPositionOffset = Vector3.zero;
-        SnapToAnchor(sittingAnchor);
+        SnapToSittingPose();
         PlayState(sittingIdleState);
     }
 
@@ -65,7 +70,7 @@ public class YayaAnimationPlayer : MonoBehaviour
     {
         heldLayingAnchor = null;
         heldAdditionalPositionOffset = Vector3.zero;
-        SnapToAnchor(sittingAnchor);
+        SnapToSittingPose();
         PlayState(sittingDisbeliefState);
     }
 
@@ -73,7 +78,7 @@ public class YayaAnimationPlayer : MonoBehaviour
     {
         heldLayingAnchor = null;
         heldAdditionalPositionOffset = Vector3.zero;
-        SnapToAnchor(sittingAnchor);
+        SnapToSittingPose();
         PlayState(sittingRubbingArmState);
     }
 
@@ -129,6 +134,23 @@ public class YayaAnimationPlayer : MonoBehaviour
             Debug.Log($"[YayaAnimationPlayer] Play animation: {stateName}", this);
 
         animator.CrossFadeInFixedTime(stateHash, fadeDuration, layerIndex);
+    }
+
+    private void SnapToSittingPose()
+    {
+        StopAnchorMove();
+
+        if (sittingAnchor != null)
+        {
+            SnapToAnchor(sittingAnchor);
+            return;
+        }
+
+        if (snapPositionToAnchors)
+            transform.position = initialSittingPosition;
+
+        if (snapRotationToAnchors)
+            transform.rotation = initialSittingRotation;
     }
 
     private void SnapToAnchor(Transform anchor)
