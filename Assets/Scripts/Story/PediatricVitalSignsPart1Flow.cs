@@ -368,8 +368,8 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         StopDialogueRoutine();
         HideInstructionUI();
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
-        WorldSpaceUiPlacer.PlaceCanvasInFrontOfCamera(quizPanel);
         SetPanelVisible(quizPanel, true, "Quiz_Panel_1");
+        QuizPanelRuntimeHelper.BeginQuiz(quizPanel, "Quiz_Panel_1");
         BindQuizButtonsIfNeeded();
 
         momAnimation?.PlayStandingIdle();
@@ -391,7 +391,10 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
             SetPanelVisible(correctPopup, true, "Correct_Popup");
 
             if (hideQuizAfterCorrect)
+            {
                 SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
+                QuizPanelRuntimeHelper.EndQuiz();
+            }
 
             correctRoutine = StartCoroutine(InvokeCorrectAfterDelay());
         }
@@ -426,6 +429,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         {
             SetPanelVisible(quizPanel, false, "Quiz_Panel_1");
             SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
+            QuizPanelRuntimeHelper.EndQuiz();
         }
 
         StartNextPartFlow();

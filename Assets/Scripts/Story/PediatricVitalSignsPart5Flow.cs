@@ -30,12 +30,15 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     [SerializeField] private NewDialogueManager dialogueManager;
     [SerializeField] private TMP_Text speakerText;
     [SerializeField] private TMP_Text dialogueText;
-    [SerializeField] private int yayaRefuseToyLineIndex = 16;
-    [SerializeField] private int yayaRefuseAgainLineIndex = 17;
-    [SerializeField] private int yayaComfortToyLineIndex = 18;
-    [SerializeField] private int yayaMomHugLineIndex = 19;
-    [SerializeField] private int momEncourageEarLineIndex = 20;
-    [SerializeField] private int yayaChooseEarLineIndex = 21;
+    [SerializeField] private int yayaRefuseToyLineIndex = 17;
+    [SerializeField] private int yayaRefuseAgainLineIndex = 18;
+    [SerializeField] private int yayaComfortToyLineIndex = 19;
+    [SerializeField] private int yayaComfortToyFeelingLineIndex = 20;
+    [SerializeField] private int yayaMomHugLineIndex = 21;
+    [SerializeField] private int momEncourageEarLineIndex = 22;
+    [SerializeField] private int momEncourageEarSecondLineIndex = 23;
+    [SerializeField] private int momAskWhichEarLineIndex = 24;
+    [SerializeField] private int yayaChooseEarLineIndex = 25;
 
     [Header("Actors")]
     [SerializeField] private MomAnimationPlayer momAnimation;
@@ -59,8 +62,11 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     [SerializeField] private AudioClip yayaRefuseToyClip;
     [SerializeField] private AudioClip yayaRefuseAgainClip;
     [SerializeField] private AudioClip yayaComfortToyClip;
+    [SerializeField] private AudioClip yayaComfortToyFeelingClip;
     [SerializeField] private AudioClip yayaMomHugClip;
     [SerializeField] private AudioClip momEncourageEarClip;
+    [SerializeField] private AudioClip momEncourageEarSecondClip;
+    [SerializeField] private AudioClip momAskWhichEarClip;
     [SerializeField] private AudioClip yayaChooseEarClip;
     [SerializeField] private bool useAudioLengthForDialogueDelay = true;
     [SerializeField] private float dialogueAdvanceDelay = 4f;
@@ -217,47 +223,70 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         ShowNursePrompt(TherapeuticPlaySubtitle, WaitingForNurseAction.StartToyRolePlay);
         yield return WaitForNurseActionOrSkip();
 
-        ShowDialogueText("芽芽", "抱著小熊！我不要量！小熊不要量！", yayaRefuseToyClip);
+        ShowDialogueLine(yayaRefuseToyLineIndex, yayaRefuseToyClip);
         yayaAnimation?.PlaySittingDisbelief();
         momAnimation?.PlayStandingIdle();
         yield return WaitForDialogue(yayaRefuseToyClip);
+
+        ShowDialogueLine(yayaRefuseAgainLineIndex, yayaRefuseAgainClip);
+        yayaAnimation?.PlaySittingDisbelief();
+        momAnimation?.PlayStandingIdle();
+        yield return WaitForDialogue(yayaRefuseAgainClip);
 
         ShowNursePrompt(NurseAskYayaComfortToy, WaitingForNurseAction.AskYayaComfortToy);
         yayaAnimation?.PlaySittingIdle();
         momAnimation?.PlayStandingIdle();
         yield return WaitForNurseActionOrSkip();
 
-        ShowDialogueText("芽芽", "不會痛啦！冰冰的感覺，你不要怕！一下就好了！", yayaComfortToyClip);
+        ShowDialogueLine(yayaComfortToyLineIndex, yayaComfortToyClip);
         yayaAnimation?.PlaySittingIdle();
         momAnimation?.PlayStandingIdle();
         yield return WaitForDialogue(yayaComfortToyClip);
 
-        yayaAnimation?.PlayKidCombine();
+        ShowDialogueLine(yayaComfortToyFeelingLineIndex, yayaComfortToyFeelingClip);
+        yayaAnimation?.PlaySittingIdle();
+        momAnimation?.PlayStandingIdle();
+        yield return WaitForDialogue(yayaComfortToyFeelingClip);
+
+        if (!PrefabPerformanceRuntime.TryPlayBoundsAligned(this, "Kid_Combined|Kid_Combined 1|kidtakingbeartemp", actionDelay, yayaAnimation != null ? yayaAnimation.gameObject : null))
+            yayaAnimation?.PlayKidCombine();
         onToyTemperatureMeasure?.Invoke();
 
         ShowNursePrompt(NurseEncourageYayaTemperature, WaitingForNurseAction.EncourageYayaTemperature);
         momAnimation?.PlayStandingIdle();
         yield return WaitForNurseActionOrSkip();
 
-        ShowDialogueText("芽芽", "媽媽抱抱！", yayaMomHugClip);
+        ShowDialogueLine(yayaMomHugLineIndex, yayaMomHugClip);
         yayaAnimation?.PlaySittingDisbelief();
         momAnimation?.PlayStandingIdle();
         yield return WaitForDialogue(yayaMomHugClip);
 
-        ShowDialogueText("媽媽", "芽芽很勇敢喔！跟小熊一樣，來！姊姊量看看幾度喔！姐姐要量哪一隻耳朵？", momEncourageEarClip);
+        ShowDialogueLine(momEncourageEarLineIndex, momEncourageEarClip);
         momAnimation?.PlayClapping();
         yayaAnimation?.PlaySittingIdle();
         yield return WaitForDialogue(momEncourageEarClip);
+
+        ShowDialogueLine(momEncourageEarSecondLineIndex, momEncourageEarSecondClip);
+        momAnimation?.PlayClapping();
+        yayaAnimation?.PlaySittingIdle();
+        yield return WaitForDialogue(momEncourageEarSecondClip);
         momAnimation?.PlayStandingIdle();
 
         ShowNursePrompt(NurseAskWhichEar, WaitingForNurseAction.AskWhichEar);
         yayaAnimation?.PlaySittingIdle();
         yield return WaitForNurseActionOrSkip();
 
-        ShowDialogueText("芽芽", "這個。", yayaChooseEarClip);
-        yayaAnimation?.PlayKidPointEar();
+        ShowDialogueLine(momAskWhichEarLineIndex, momAskWhichEarClip);
+        momAnimation?.PlayStandingIdle();
+        yayaAnimation?.PlaySittingIdle();
+        yield return WaitForDialogue(momAskWhichEarClip);
+
+        ShowDialogueLine(yayaChooseEarLineIndex, yayaChooseEarClip);
+        float pointEarDelay = GetDialogueDelay(yayaChooseEarClip);
+        if (!PrefabPerformanceRuntime.TryPlay(this, "Kid_PointEar|KidPointEar", pointEarDelay, yayaAnimation != null ? yayaAnimation.gameObject : null))
+            yayaAnimation?.PlayKidPointEar();
         onYayaTemperatureMeasure?.Invoke();
-        yield return WaitForDialogue(yayaChooseEarClip);
+        yield return new WaitForSeconds(pointEarDelay);
 
         ShowQuiz();
         routine = null;
@@ -303,11 +332,21 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     private IEnumerator WaitForNurseActionOrSkip()
     {
         skipRequested = false;
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None || skipRequested);
+        bool allowStickerSelection = waitingForNurseAction == WaitingForNurseAction.EncourageYayaTemperature;
+        if (allowStickerSelection && part3VisualDemo != null)
+        {
+            part3VisualDemo.ResetHudStickerSelection();
+            part3VisualDemo.ShowSticker();
+            part3VisualDemo.HighlightSticker();
+        }
+
+        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None
+            || skipRequested
+            || (allowStickerSelection && part3VisualDemo != null && part3VisualDemo.HudStickerWasSelected));
+
         waitingForNurseAction = WaitingForNurseAction.None;
         skipRequested = false;
     }
-
     private IEnumerator WaitForSecondsOrSkip(float seconds)
     {
         skipRequested = false;
@@ -396,9 +435,7 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         SetPanelVisible(dialoguePanel, false, dialoguePanelChildName);
         part3VisualDemo?.TemporarilyHideStickerForQuiz();
         SetPanelVisible(quizPanel, true, quizPanelChildName);
-        PrepareDesignedQuizPanel(quizPanel, quizPanelChildName);
-        RestoreDesignedQuizText(quizPanel, quizPanelChildName, "考題 5：", "芽芽兩歲半，請問量耳溫時，該如何讓耳溫槍進入耳道？");
-        EnsureQuizHeaderOverlay(GetQuizContentRoot(), "考題 5：", "芽芽兩歲半，請問量耳溫時，該如何讓耳溫槍進入耳道？");
+        QuizPanelRuntimeHelper.BeginQuiz(quizPanel, quizPanelChildName);
         StopQuizCompletionRoutine();
         quizCompletionRoutine = StartCoroutine(WaitForQuizPanelClosedThenRestoreSticker());
     }
@@ -416,6 +453,7 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
             yield return null;
 
         quizCompletionRoutine = null;
+        QuizPanelRuntimeHelper.EndQuiz();
         part3VisualDemo?.RestoreStickerAfterQuiz();
     }
 
@@ -444,52 +482,6 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         Transform child = FindDeepChild(quizPanel.transform, quizPanelChildName);
         return child != null ? child.gameObject : quizPanel;
     }
-    private void ApplyQuizText()
-    {
-        if (quizQuestionText != null)
-            quizQuestionText.text = QuizQuestion;
-
-        if (quizOptionTexts != null)
-        {
-            for (int i = 0; i < quizOptionTexts.Length && i < QuizOptions.Length; i++)
-            {
-                if (quizOptionTexts[i] != null)
-                    quizOptionTexts[i].text = QuizOptions[i];
-            }
-        }
-
-        if (quizQuestionText != null && quizOptionTexts != null && quizOptionTexts.Length >= QuizOptions.Length)
-            return;
-
-        Transform root = quizPanel != null ? FindDeepChild(quizPanel.transform, quizPanelChildName) ?? quizPanel.transform : null;
-        if (root == null)
-            return;
-
-        TMP_Text[] foundTexts = root.GetComponentsInChildren<TMP_Text>(true);
-        List<TMP_Text> visibleTexts = new List<TMP_Text>();
-
-        foreach (TMP_Text text in foundTexts)
-        {
-            if (text == null || ShouldIgnoreQuizButton(text.gameObject.name))
-                continue;
-
-            visibleTexts.Add(text);
-        }
-
-        visibleTexts.Sort(CompareTextsByScreenOrder);
-        if (visibleTexts.Count > 0 && quizQuestionText == null)
-            visibleTexts[0].text = QuizQuestion;
-
-        for (int i = 0; i < QuizOptions.Length; i++)
-        {
-            if (quizOptionTexts != null && i < quizOptionTexts.Length && quizOptionTexts[i] != null)
-                continue;
-
-            int textIndex = i + 1;
-            if (textIndex < visibleTexts.Count)
-                visibleTexts[textIndex].text = QuizOptions[i];
-        }
-    }
 
     private void SelectAnswer(int index)
     {
@@ -499,7 +491,10 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         if (correct)
         {
             if (hideQuizAfterCorrect)
+            {
                 SetPanelVisible(quizPanel, false, quizPanelChildName);
+                QuizPanelRuntimeHelper.EndQuiz();
+            }
 
             part3VisualDemo?.RestoreStickerAfterQuiz();
             onCorrectAnswer?.Invoke();
@@ -825,129 +820,6 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
             || buttonName.IndexOf("ok", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-
-    private static void PrepareDesignedQuizPanel(GameObject target, string preferredChildName)
-    {
-        Transform root = target != null ? FindDeepChild(target.transform, preferredChildName) ?? target.transform : null;
-        if (root == null)
-            return;
-
-        string[] requiredChildren = { "QUIZ", "Question_BG_Plate", "Question_Text", "Divider_Line", "Btn_A", "Btn_B", "Btn_C", "Btn_D" };
-        foreach (string childName in requiredChildren)
-        {
-            Transform child = FindDeepChild(root, childName);
-            if (child != null)
-                child.gameObject.SetActive(true);
-        }
-
-        foreach (CanvasGroup group in root.GetComponentsInChildren<CanvasGroup>(true))
-        {
-            group.alpha = 1f;
-            group.interactable = true;
-            group.blocksRaycasts = true;
-        }
-
-        foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true))
-            graphic.enabled = true;
-
-        foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
-        {
-            text.enabled = true;
-            Color color = text.color;
-            color.a = 1f;
-            text.color = color;
-        }
-    }
-
-
-
-    private static void EnsureQuizHeaderOverlay(Transform root, string title, string question)
-    {
-        if (root == null)
-            return;
-
-        TextMeshProUGUI titleText = GetOrCreateQuizOverlayText(root, "Runtime_Quiz_Title");
-        ConfigureQuizOverlayText(titleText, title, 42f, new Vector2(0f, -34f), new Vector2(920f, 70f));
-
-        TextMeshProUGUI questionText = GetOrCreateQuizOverlayText(root, "Runtime_Quiz_Question");
-        ConfigureQuizOverlayText(questionText, question, 34f, new Vector2(0f, -112f), new Vector2(980f, 110f));
-    }
-
-    private static TextMeshProUGUI GetOrCreateQuizOverlayText(Transform root, string objectName)
-    {
-        Transform existing = FindDeepChild(root, objectName);
-        GameObject textObject = existing != null ? existing.gameObject : new GameObject(objectName, typeof(RectTransform));
-        if (existing == null)
-            textObject.transform.SetParent(root, false);
-
-        TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
-        if (text == null)
-            text = textObject.AddComponent<TextMeshProUGUI>();
-
-        textObject.SetActive(true);
-        text.transform.SetAsLastSibling();
-        return text;
-    }
-
-    private static void ConfigureQuizOverlayText(TextMeshProUGUI text, string value, float fontSize, Vector2 anchoredPosition, Vector2 size)
-    {
-        if (text == null)
-            return;
-
-        RectTransform rect = text.rectTransform;
-        rect.anchorMin = new Vector2(0.5f, 1f);
-        rect.anchorMax = new Vector2(0.5f, 1f);
-        rect.pivot = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = anchoredPosition;
-        rect.sizeDelta = size;
-        rect.localScale = Vector3.one;
-
-        text.text = value;
-        text.enabled = true;
-        text.raycastTarget = false;
-        text.alignment = TextAlignmentOptions.Center;
-        text.enableAutoSizing = true;
-        text.fontSizeMax = fontSize;
-        text.fontSizeMin = Mathf.Max(18f, fontSize * 0.55f);
-        text.color = Color.white;
-    }
-    private static void RestoreDesignedQuizText(GameObject target, string preferredChildName, string title, string question)
-    {
-        Transform root = target != null ? FindDeepChild(target.transform, preferredChildName) ?? target.transform : null;
-        if (root == null)
-            return;
-
-        SetDesignedText(root, "QUIZ", title);
-        SetDesignedText(root, "Question_Text", question);
-    }
-
-    private static void SetDesignedText(Transform root, string childName, string value)
-    {
-        Transform child = FindDeepChild(root, childName);
-        if (child == null)
-            return;
-
-        TMP_Text tmp = child.GetComponent<TMP_Text>() ?? child.GetComponentInChildren<TMP_Text>(true);
-        if (tmp != null)
-        {
-            tmp.text = value;
-            tmp.enabled = true;
-            Color color = tmp.color;
-            color.a = 1f;
-            tmp.color = color;
-            return;
-        }
-
-        Text legacy = child.GetComponent<Text>() ?? child.GetComponentInChildren<Text>(true);
-        if (legacy != null)
-        {
-            legacy.text = value;
-            legacy.enabled = true;
-            Color color = legacy.color;
-            color.a = 1f;
-            legacy.color = color;
-        }
-    }
     private static void SetPanelVisible(GameObject target, bool visible, string preferredChildName)
     {
         if (target == null)

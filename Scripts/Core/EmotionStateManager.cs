@@ -243,7 +243,7 @@ public class EmotionStateManager : MonoBehaviour
         KidEmotionState parsed;
         if (kidEmotionResponder != null && Enum.TryParse(state, true, out parsed))
         {
-            kidEmotionResponder.ForceState(parsed);
+            kidEmotionResponder.ApplyBackendState(parsed);
             return;
         }
 

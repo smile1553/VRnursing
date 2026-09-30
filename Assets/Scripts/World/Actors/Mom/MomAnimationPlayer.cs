@@ -1,4 +1,7 @@
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 using UnityEngine.Animations;
 using UnityEngine.Playables;
 
@@ -77,10 +80,10 @@ public class MomAnimationPlayer : MonoBehaviour
 
     public void PlayBend()
     {
-        if (PlayFirstAvailableStateDirect(bendState, "Base Layer.Armature|MomBend", "Armature|MomBend", "Base Layer.MomBend", "MomBend", "Mom Bend"))
+        if (PlayFirstAvailableStateDirect(bendState, "Base Layer.Listen_Mom", "Listen_Mom", "Base Layer.Armature|MomBend", "Armature|MomBend", "Base Layer.MomBend", "MomBend", "Mom Bend", "Mom_Bend", "Base Layer.Mom_Bend"))
             return;
 
-        PlayClipFallback(ref momBendClip, true, "MomBend", "Armature|MomBend", "Mom Bend");
+        PlayClipFallback(ref momBendClip, true, "Listen_Mom", "MomBend", "Armature|MomBend", "Mom Bend", "Mom_Bend");
     }
 
     public void PlayCustom(string stateName)
@@ -218,6 +221,19 @@ public class MomAnimationPlayer : MonoBehaviour
 
     private static AnimationClip FindAnimationClipByName(params string[] clipNames)
     {
+        AnimationClip loadedClip = FindLoadedAnimationClipByName(clipNames);
+        if (loadedClip != null)
+            return loadedClip;
+
+#if UNITY_EDITOR
+        return FindEditorAnimationClipByName(clipNames);
+#else
+        return null;
+#endif
+    }
+
+    private static AnimationClip FindLoadedAnimationClipByName(params string[] clipNames)
+    {
         AnimationClip[] clips = Resources.FindObjectsOfTypeAll<AnimationClip>();
         foreach (string rawName in clipNames)
         {
@@ -233,4 +249,50 @@ public class MomAnimationPlayer : MonoBehaviour
 
         return null;
     }
+
+#if UNITY_EDITOR
+    private static AnimationClip FindEditorAnimationClipByName(params string[] clipNames)
+    {
+        foreach (string rawName in clipNames)
+        {
+            if (string.IsNullOrWhiteSpace(rawName))
+                continue;
+
+            string[] guids = AssetDatabase.FindAssets($"{rawName} t:AnimationClip");
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(path))
+                {
+                    AnimationClip clip = asset as AnimationClip;
+                    if (clip != null && clip.name.IndexOf(rawName, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        return clip;
+                }
+            }
+        }
+        return FindEditorAnimationClipByModelName(clipNames);
+    }
+    private static AnimationClip FindEditorAnimationClipByModelName(params string[] clipNames)
+    {
+        foreach (string rawName in clipNames)
+        {
+            if (string.IsNullOrWhiteSpace(rawName))
+                continue;
+
+            string[] guids = AssetDatabase.FindAssets($"{rawName} t:Model");
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(path))
+                {
+                    AnimationClip clip = asset as AnimationClip;
+                    if (clip != null && !clip.name.StartsWith("__preview__", System.StringComparison.OrdinalIgnoreCase))
+                        return clip;
+                }
+            }
+        }
+
+        return null;
+    }
+#endif
 }

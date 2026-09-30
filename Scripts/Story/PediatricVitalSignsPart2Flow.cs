@@ -41,7 +41,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
     [SerializeField] private string respirationKeywords = "\u89c0\u5bdf\u8d77\u4f0f|\u8a08\u7b97\u547c\u5438\u6b21\u6578|\u89c0\u5bdf|\u8d77\u4f0f|\u547c\u5438\u6b21\u6578";
-    [SerializeField] private string heartbeatKeywords = "\u5fc3\u8df3|\u807d\u8a3a\u5668|\u4e0d\u6703\u75db|\u6478\u6478|\u807d\u807d";
+    [SerializeField] private string heartbeatKeywords = "\u5fc3\u8df3|\u807d\u8a3a\u5668|\u807d\u8a3a|\u4e0d\u6703\u75db|\u4e0d\u75db|\u6478\u6478|\u6478\u4e00\u4e0b|\u89f8\u6478|\u5148\u6478|\u807d\u807d|\u4e00\u4e0b\u5b50|\u5f88\u5feb";
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Audio")]
@@ -91,7 +91,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         "\u958b\u59cb\u6e2c\u91cf\u547c\u5438\u4e00\u5206\u9418\u3002";
 
     private const string HeartbeatPrompt =
-        "\u8acb\u56de\u61c9\u82bd\u82bd\uff0c\u4e26\u8aaa\u660e\u8046\u8a3a\u5668\u4e0d\u6703\u75db\uff0c\u53ef\u4ee5\u5148\u5f15\u5c0e\u82bd\u82bd\u89f8\u6478\u807d\u8a3a\u5668\uff0c\u8b93\u5979\u77e5\u9053\u4e00\u4e0b\u5b50\u5c31\u597d\u3002";
+        "請用溫柔的方式安撫芽芽，讓她知道聽診器不會痛、一下子就好，並安排媽媽先示範。";
 
     private const string CorrectFeedback =
         "\u7b54\u5c0d\u4e86\uff01";
@@ -235,7 +235,9 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         ShowNursePrompt(RespirationPrompt, WaitingForNurseAction.RespirationExplanation);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlaySittingDisbelief();
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        yield return WaitForNurseActionToComplete(
+            () => momAnimation?.PlayStandingIdle(),
+            () => yayaAnimation?.PlaySittingDisbelief());
         skipRequested = false;
 
         ShowDialogueLine(momLayDownLineIndex, momLayDownClip);
@@ -259,7 +261,9 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         ShowNursePrompt(HeartbeatPrompt, WaitingForNurseAction.HeartbeatExplanation);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlayLayingSleeping();
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        yield return WaitForNurseActionToComplete(
+            () => momAnimation?.PlayStandingIdle(),
+            () => yayaAnimation?.PlayLayingSleeping());
         skipRequested = false;
 
         ShowDialogueLine(yayaRefuseLineIndex, yayaRefuseClip);
@@ -307,12 +311,13 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         respirationTimer.duration = Mathf.Max(60f, observationDelay);
         respirationTimer.startOnAwake = false;
-        respirationTimer.displayMode = MinimalRingTimer.DisplayMode.WorldSpace;
-        respirationTimer.useCameraCorner = true;
+        respirationTimer.displayMode = MinimalRingTimer.DisplayMode.ScreenCorner;
         respirationTimer.corner = MinimalRingTimer.Corner.TopRight;
-        respirationTimer.worldDiameter = 0.14f;
-        respirationTimer.size = 180f;
-        respirationTimer.cameraCornerOffset = new Vector3(0.24f, 0.30f, 0.85f);
+        respirationTimer.worldDiameter = 0.10f;
+        respirationTimer.size = 140f;
+        respirationTimer.margin = new Vector2(120f, 90f);
+        respirationTimer.worldOffset = new Vector3(0.30f, 0.06f, 0.90f);
+        respirationTimer.SetVisible(false);
     }
 
     private void StartRespirationTimer()
@@ -322,6 +327,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             return;
 
         ConfigureRespirationTimer();
+        respirationTimer.SetVisible(true);
         respirationTimer.StartTimer();
     }
 
@@ -403,6 +409,22 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         skipRequested = false;
     }
 
+    private IEnumerator WaitForNurseActionToComplete(Action momLoop, Action yayaLoop)
+    {
+        float nextReplayAt = 0f;
+        while (waitingForNurseAction != WaitingForNurseAction.None)
+        {
+            if (Time.time >= nextReplayAt)
+            {
+                momLoop?.Invoke();
+                yayaLoop?.Invoke();
+                nextReplayAt = Time.time + 2f;
+            }
+
+            yield return null;
+        }
+    }
+
     private void PlayAudio(AudioClip clip)
     {
         if (dialogueAudioSource == null)
@@ -458,6 +480,12 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     {
         if (!startNextPartAfterCorrect)
             return;
+
+        SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
+        SetPromptSkipButtonsVisible(false);
+        SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
+        SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
+        HideRespirationTimer();
 
         if (nextPartFlow == null)
             nextPartFlow = FindObjectOfType<PediatricVitalSignsPart3Flow>(true);

@@ -68,11 +68,32 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
 
     [Header("Options")]
     [SerializeField] private float measurementActionDelay = 3f;
+    [SerializeField] private float correctAnswerDelay = 1.2f;
+    [SerializeField] private float wrongAnswerDelay = 1.2f;
+
+    [Header("Feedback")]
+    [SerializeField] private GameObject correctPopup;
+    [SerializeField] private GameObject wrongPopup;
+
+    [Header("Heartbeat Effect")]
+    [SerializeField] private GameObject heartbeatEffect;
+    [SerializeField] private string heartbeatEffectObjectNames = "HeartbeatEffect|heartbeat_Effect|heartbeat|heartbeat.prefab";
+    [HideInInspector] [SerializeField] private Transform heartbeatEffectAnchor;
+    [HideInInspector] [SerializeField] private string heartbeatEffectAnchorNames = "Yaya_Chest_StethoscopeAnchor|Yaya_Chest_Anchor|Yaya_StickerAnchor|StethoscopeAnchor|ChestAnchor";
+    [HideInInspector] [SerializeField] private Vector3 heartbeatEffectAnchorOffset = new Vector3(0f, 0.16f, -0.05f);
+    [Tooltip("Camera-relative position. X = right, Y = up, Z = forward. Use (0, 0, 0.85) for center view.")]
+    [SerializeField] private Vector3 heartbeatEffectCameraOffset = new Vector3(0f, 0f, 0.95f);
+    [Min(0.01f)] [SerializeField] private float heartbeatEffectVisibleScale = 0.16f;
+    [Min(0.1f)] [SerializeField] private float heartbeatEffectDuration = 3.2f;
+    [SerializeField] private AudioClip heartbeatEffectClip;
+    [Min(0f)] [SerializeField] private float heartbeatEffectVolume = 1.5f;
+    private GameObject heartbeatEffectInstance;
+    private Coroutine heartbeatRuntimeRoutine;
     [SerializeField] private float yayaHugToyDelay = 2f;
 
     [Header("Quiz")]
     [SerializeField] private bool bindQuizButtonsAutomatically = true;
-    [SerializeField] private int expectedQuizButtonCount = 3;
+    [SerializeField] private int expectedQuizButtonCount = 4;
     [SerializeField] private int correctAnswerIndex = 1;
     [SerializeField] private bool hideQuizAfterCorrect = false;
     [SerializeField] private TMP_Text quizQuestionText;
@@ -84,7 +105,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
 
     [Header("Flow Link")]
     [SerializeField] private PediatricVitalSignsPart5Flow nextPartFlow;
-    [SerializeField] private bool startNextPartAfterCorrect = false;
+    [SerializeField] private bool startNextPartAfterCorrect = true;
 
     private Coroutine routine;
     private WaitingForNurseAction waitingForNurseAction = WaitingForNurseAction.None;
@@ -92,20 +113,24 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     private string initialBackendSpeechToIgnore;
     private int lastStartFrame = -1;
     private bool quizButtonsBound;
+    private Coroutine correctRoutine;
+    private Coroutine wrongRoutine;
+    private Coroutine quizCompletionRoutine;
+    private Button promptSkipButton;
     private const string NurseReassureBeforeApexPulse =
-        "請引導護生說：芽芽不痛喔！芽芽好乖喔！媽媽聽完換姊姊聽聽喔！一下子就好！";
+        "請先安撫芽芽，降低她對心尖脈測量的緊張。";
 
     private const string ApexPulseAction =
-        "請觀察護生進行心尖脈測量，並記錄心跳次數。";
+        "請觀察心尖脈測量，並記錄心跳次數。";
 
     private const string NurseGiveStickerBeforeEarTemp =
-        "獎勵芽芽一張貼紙吧! 並告訴芽芽下一個要觀察的生命徵象";
+        "請用貼紙鼓勵芽芽，並提醒她接下來要觀察下一個生命徵象。";
 
     private const string NurseExplainEarTemperature =
-        "請引導護生說明接下來要量耳溫，耳溫槍只會放在耳朵一下子，不會痛。";
+        "請用孩子聽得懂的方式介紹耳溫測量，讓芽芽知道過程很快、不會痛，也可以先示範。";
 
     private const string NurseExplainFearToMom =
-        "請引導護生向媽媽說明：芽芽會害怕可能是因為不熟悉器材，可以先示範、讓她觸摸並用貼紙鼓勵。";
+        "請向媽媽說明芽芽害怕器材的原因，並提出示範、觸摸與貼紙鼓勵等做法。";
 
     private const string QuizQuestion =
         "考題4：護生使用了什麼方法來降低芽芽的害怕？";
@@ -114,20 +139,37 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     {
         "A. 直接要求芽芽配合",
         "B. 先示範並用貼紙鼓勵",
-        "C. 忽略芽芽的害怕"
+        "C. 忽略芽芽的害怕",
+        "D. 告訴芽芽不配合就不能出院"
     };
 
     private const string CorrectFeedback = "答對了！";
     private const string WrongFeedback = "再想一下，哪一種方法最能降低芽芽的害怕？";
+    private void OnValidate()
+    {
+        expectedQuizButtonCount = 4;
+        correctAnswerIndex = 1;
+        startNextPartAfterCorrect = true;
+        NormalizeHeartbeatInspectorDefaults();
+    }
+
     private void Awake()
     {
+        expectedQuizButtonCount = 4;
+        correctAnswerIndex = 1;
+        startNextPartAfterCorrect = true;
+        NormalizeHeartbeatInspectorDefaults();
         if (network == null)
             network = FindObjectOfType<RunAI_Network>();
 
         ResolveReferences();
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
+        SetPromptSkipButtonsVisible(false);
         SetPanelVisible(dialoguePanel, false, dialoguePanelChildName);
         SetPanelVisible(quizPanel, false, quizPanelChildName);
+        SetPanelVisible(correctPopup, false, "Correct_Popup");
+        SetPanelVisible(wrongPopup, false, "Wrong_Popup");
+        SetPanelVisible(heartbeatEffect, false, null);
     }
 
     private void OnEnable()
@@ -163,6 +205,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         StopRoutine();
         ResetBackendGate();
         waitingForNurseAction = WaitingForNurseAction.None;
+        part3VisualDemo?.RestoreStickerAfterQuiz();
         Debug.Log("[Part4] StartPart4: starting ear temperature preparation flow.", this);
         routine = StartCoroutine(Part4Routine());
     }
@@ -193,27 +236,41 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         SelectAnswer(2);
     }
 
+    public void SelectD()
+    {
+        SelectAnswer(3);
+    }
+
     private IEnumerator Part4Routine()
     {
         ShowNursePrompt(NurseReassureBeforeApexPulse, WaitingForNurseAction.ReassureBeforeApexPulse);
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        yield return WaitForNurseActionToComplete(
+            () => momAnimation?.PlayStandingIdle(),
+            () => yayaAnimation?.PlaySittingDisbelief());
 
         ShowNursePrompt(ApexPulseAction, WaitingForNurseAction.None);
+        ShowHeartbeatEffect(true);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlaySittingIdle();
-        yield return new WaitForSeconds(Mathf.Max(0.1f, measurementActionDelay));
+        yield return new WaitForSeconds(Mathf.Max(0.1f, heartbeatEffectDuration));
+        ShowHeartbeatEffect(false);
 
         ShowNursePrompt(NurseGiveStickerBeforeEarTemp, WaitingForNurseAction.GiveStickerBeforeEarTemp);
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        yield return WaitForNurseActionToComplete(
+            () => momAnimation?.PlayStandingIdle(),
+            () => yayaAnimation?.PlaySittingDisbelief());
         yield return PlayStickerRewardIfNeeded();
 
         ShowDialogueLine(momEncourageLineIndex, momEncourageClip);
         momAnimation?.PlayClapping();
         yayaAnimation?.PlaySittingIdle();
         yield return WaitForDialogue(momEncourageClip);
+        momAnimation?.PlayStandingIdle();
 
         ShowNursePrompt(NurseExplainEarTemperature, WaitingForNurseAction.ExplainEarTemperature);
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        yield return WaitForNurseActionToComplete(
+            () => momAnimation?.PlayStandingIdle(),
+            () => yayaAnimation?.PlaySittingIdle());
 
         ShowDialogueLine(yayaRefuseLineIndex, yayaRefuseClip);
         momAnimation?.PlayStandingIdle();
@@ -226,7 +283,9 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         yield return WaitForDialogue(momScoldClip);
 
         ShowNursePrompt(NurseExplainFearToMom, WaitingForNurseAction.ExplainFearToMom);
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        yield return WaitForNurseActionToComplete(
+            () => momAnimation?.PlayAngry(),
+            () => yayaAnimation?.PlaySittingDisbelief());
 
         ShowDialogueLine(momComfortLineIndex, momComfortClip);
         momAnimation?.PlayPointing();
@@ -253,6 +312,13 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         yield return stickerRewardAnimator.PlayAndWait();
     }
 
+
+    private IEnumerator WaitForNurseActionToComplete(Action momLoop, Action yayaLoop)
+    {
+        momLoop?.Invoke();
+        yayaLoop?.Invoke();
+        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+    }
     private void HandleBackendJson(string json)
     {
         if (string.Equals(json, lastProcessedBackendJson, StringComparison.Ordinal))
@@ -301,6 +367,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         SetPanelVisible(dialoguePanel, false, dialoguePanelChildName);
         SetPanelVisible(quizPanel, false, quizPanelChildName);
         SetPanelVisible(nursePromptPanel, true, "TopHint_Panel");
+        SetPromptSkipButtonsVisible(waitingAction != WaitingForNurseAction.None);
 
         if (nursePromptText != null)
             nursePromptText.text = prompt;
@@ -317,6 +384,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     {
         ResolveReferences();
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
+        SetPromptSkipButtonsVisible(false);
         SetPanelVisible(dialoguePanel, true, dialoguePanelChildName);
         SetPanelVisible(quizPanel, false, quizPanelChildName);
 
@@ -325,7 +393,8 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             dialogueManager.gameObject.SetActive(true);
             dialogueManager.StopPlayback();
             dialogueManager.ShowLine(lineIndex);
-        }        else
+        }
+        else
         {
             Debug.LogWarning("[Part4] Dialogue manager is missing.", this);
         }
@@ -336,14 +405,86 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     private void ShowQuiz()
     {
         ResolveReferences();
+        part3VisualDemo?.TemporarilyHideStickerForQuiz();
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
+        SetPromptSkipButtonsVisible(false);
         SetPanelVisible(dialoguePanel, false, dialoguePanelChildName);
-        WorldSpaceUiPlacer.PlaceCanvasInFrontOfCamera(quizPanel);
-        WorldSpaceUiPlacer.MatchQuizPanelToQuizOne(quizPanel, quizPanelChildName);
         SetPanelVisible(quizPanel, true, quizPanelChildName);
-        BindQuizButtonsIfNeeded();
+
+        PrepareDesignedQuizPanel(quizPanel, quizPanelChildName);
+        RestoreDesignedQuizText(quizPanel, quizPanelChildName, "考題 4：", "護生使用什麼方法來減少芽芽的害怕？");
+        EnsureQuizHeaderOverlay(GetQuizContentRoot(), "考題 4：", "護生使用什麼方法來減少芽芽的害怕？");
+
+        StopQuizCompletionRoutine();
+        quizCompletionRoutine = StartCoroutine(WaitForQuizPanelClosedThenStartNextPart());
     }
 
+    private IEnumerator WaitForQuizPanelClosedThenStartNextPart()
+    {
+        GameObject watchedPanel = GetQuizContentObject();
+        if (watchedPanel == null)
+            watchedPanel = quizPanel;
+
+        yield return null;
+
+        while (watchedPanel != null && watchedPanel.activeInHierarchy)
+            yield return null;
+
+        quizCompletionRoutine = null;
+        part3VisualDemo?.RestoreStickerAfterQuiz();
+        StartNextPartFlow();
+    }
+
+
+    private Transform GetQuizContentRoot()
+    {
+        if (quizPanel == null)
+            return null;
+
+        return FindDeepChild(quizPanel.transform, quizPanelChildName) ?? quizPanel.transform;
+    }
+    private GameObject GetQuizContentObject()
+    {
+        if (quizPanel == null)
+            return null;
+
+        Transform child = FindDeepChild(quizPanel.transform, quizPanelChildName);
+        return child != null ? child.gameObject : quizPanel;
+    }
+
+    private void StopQuizCompletionRoutine()
+    {
+        if (quizCompletionRoutine == null)
+            return;
+
+        StopCoroutine(quizCompletionRoutine);
+        quizCompletionRoutine = null;
+    }
+
+
+    private void ApplyQuizQuestionText()
+    {
+        TMP_Text question = quizQuestionText;
+        if (question == null && quizPanel != null)
+        {
+            Transform root = FindDeepChild(quizPanel.transform, quizPanelChildName) ?? quizPanel.transform;
+            TMP_Text[] texts = root.GetComponentsInChildren<TMP_Text>(true);
+            foreach (TMP_Text text in texts)
+            {
+                if (text == null || ShouldIgnoreQuizButton(text.gameObject.name))
+                    continue;
+
+                if (text.text.Contains("考題") || text.name.IndexOf("Question", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    question = text;
+                    break;
+                }
+            }
+        }
+
+        if (question != null)
+            question.text = QuizQuestion;
+    }
     private void ApplyQuizText()
     {
         if (quizQuestionText != null)
@@ -398,15 +539,56 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
 
         if (correct)
         {
-            if (hideQuizAfterCorrect)
-                SetPanelVisible(quizPanel, false, quizPanelChildName);
-
-            StartNextPartFlow();
-            onCorrectAnswer?.Invoke();
+            StopCorrectRoutine();
+            StopWrongRoutine();
+            SetPanelVisible(wrongPopup, false, "Wrong_Popup");
+            SetPanelVisible(correctPopup, true, "Correct_Popup");
+            correctRoutine = StartCoroutine(InvokeCorrectAfterDelay());
             return;
         }
 
+        StopWrongRoutine();
+        SetPanelVisible(correctPopup, false, "Correct_Popup");
+        SetPanelVisible(wrongPopup, true, "Wrong_Popup");
         onWrongAnswer?.Invoke();
+        wrongRoutine = StartCoroutine(HideWrongAfterDelay());
+    }
+
+    private IEnumerator InvokeCorrectAfterDelay()
+    {
+        yield return new WaitForSeconds(Mathf.Max(0f, correctAnswerDelay));
+        correctRoutine = null;
+        SetPanelVisible(correctPopup, false, "Correct_Popup");
+        if (hideQuizAfterCorrect)
+            SetPanelVisible(quizPanel, false, quizPanelChildName);
+        part3VisualDemo?.RestoreStickerAfterQuiz();
+        onCorrectAnswer?.Invoke();
+        StartNextPartFlow();
+    }
+
+    private IEnumerator HideWrongAfterDelay()
+    {
+        yield return new WaitForSeconds(Mathf.Max(0f, wrongAnswerDelay));
+        SetPanelVisible(wrongPopup, false, "Wrong_Popup");
+        wrongRoutine = null;
+    }
+
+    private void StopCorrectRoutine()
+    {
+        if (correctRoutine == null)
+            return;
+
+        StopCoroutine(correctRoutine);
+        correctRoutine = null;
+    }
+
+    private void StopWrongRoutine()
+    {
+        if (wrongRoutine == null)
+            return;
+
+        StopCoroutine(wrongRoutine);
+        wrongRoutine = null;
     }
 
     private IEnumerator WaitForDialogue(AudioClip clip)
@@ -446,12 +628,20 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
 
         if (dialogueManager != null)
             dialogueManager.StopPlayback();
+
+        StopCorrectRoutine();
+        StopQuizCompletionRoutine();
+        SetPromptSkipButtonsVisible(false);
+        ShowHeartbeatEffect(false);
     }
 
     private void StartNextPartFlow()
     {
         if (!startNextPartAfterCorrect)
+        {
+            Debug.LogWarning("[Part4] Correct answer received, but Start Next Part After Correct is disabled.", this);
             return;
+        }
 
         if (nextPartFlow == null)
             nextPartFlow = FindObjectOfType<PediatricVitalSignsPart5Flow>(true);
@@ -462,6 +652,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             return;
         }
 
+        Debug.Log("[Part4] Correct answer: starting Part5.", this);
         nextPartFlow.StartPart5();
     }
 
@@ -487,8 +678,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
 
         for (int i = 0; i < bindCount; i++)
         {
-            int capturedIndex = i;
-            buttons[i].onClick.AddListener(() => SelectAnswer(capturedIndex));
+            Button button = buttons[i];
+            int capturedIndex = GetAnswerIndexForButton(button, i);
+            button.onClick = new Button.ButtonClickedEvent();
+            button.onClick.AddListener(() => SelectAnswer(capturedIndex));
         }
 
         quizButtonsBound = bindCount > 0;
@@ -511,6 +704,15 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
 
         if (dialogueAudioSource == null)
             dialogueAudioSource = GetComponent<AudioSource>();
+
+        if (heartbeatEffect == null)
+            heartbeatEffect = FindFirstNamedObjectOrAsset(heartbeatEffectObjectNames);
+
+        if (correctPopup == null)
+            correctPopup = FindSceneObjectByName("Correct_Popup") ?? FindSceneObjectByName("CorrectPopup") ?? FindSceneObjectByName("Correct Panel");
+
+        if (wrongPopup == null)
+            wrongPopup = FindSceneObjectByName("Wrong_Popup") ?? FindSceneObjectByName("WrongPopup") ?? FindSceneObjectByName("Wrong Panel");
 
         ResolvePromptText();
     }
@@ -554,6 +756,90 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             nursePromptText = text;
             return;
         }
+    }
+
+
+    private void SetPromptSkipButtonsVisible(bool visible)
+    {
+        EnsurePromptSkipButton();
+
+        if (promptSkipButton != null)
+            promptSkipButton.gameObject.SetActive(visible);
+    }
+
+    private void EnsurePromptSkipButton()
+    {
+        if (nursePromptPanel == null)
+            nursePromptPanel = FindSceneObjectByName(promptPanelName);
+
+        if (nursePromptPanel == null)
+            return;
+
+        if (promptSkipButton != null && promptSkipButton.transform.IsChildOf(nursePromptPanel.transform))
+        {
+            BindPromptSkipButton(promptSkipButton);
+            return;
+        }
+
+        Transform existing = FindDeepChild(nursePromptPanel.transform, "SkipVoice_Button");
+        if (existing != null)
+        {
+            promptSkipButton = existing.GetComponent<Button>();
+            if (promptSkipButton == null)
+                promptSkipButton = existing.gameObject.AddComponent<Button>();
+        }
+
+        if (promptSkipButton == null)
+            promptSkipButton = CreatePromptSkipButton();
+
+        BindPromptSkipButton(promptSkipButton);
+    }
+
+    private Button CreatePromptSkipButton()
+    {
+        GameObject buttonObject = new GameObject("SkipVoice_Button");
+        buttonObject.transform.SetParent(nursePromptPanel.transform, false);
+
+        RectTransform rectTransform = buttonObject.AddComponent<RectTransform>();
+        rectTransform.anchorMin = new Vector2(0.5f, 0f);
+        rectTransform.anchorMax = new Vector2(0.5f, 0f);
+        rectTransform.pivot = new Vector2(0.5f, 0f);
+        rectTransform.anchoredPosition = new Vector2(0f, 14f);
+        rectTransform.sizeDelta = new Vector2(160f, 34f);
+
+        Image image = buttonObject.AddComponent<Image>();
+        image.color = new Color(1f, 1f, 1f, 0.92f);
+
+        Button button = buttonObject.AddComponent<Button>();
+        button.targetGraphic = image;
+
+        GameObject labelObject = new GameObject("Label");
+        labelObject.transform.SetParent(buttonObject.transform, false);
+
+        RectTransform labelRectTransform = labelObject.AddComponent<RectTransform>();
+        labelRectTransform.anchorMin = Vector2.zero;
+        labelRectTransform.anchorMax = Vector2.one;
+        labelRectTransform.offsetMin = Vector2.zero;
+        labelRectTransform.offsetMax = Vector2.zero;
+
+        Text label = labelObject.AddComponent<Text>();
+        label.text = "Skip Voice";
+        label.alignment = TextAnchor.MiddleCenter;
+        label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        label.fontSize = 18;
+        label.color = new Color(0.25f, 0.25f, 0.25f, 1f);
+
+        buttonObject.SetActive(false);
+        return button;
+    }
+
+    private void BindPromptSkipButton(Button button)
+    {
+        if (button == null)
+            return;
+
+        button.onClick.RemoveListener(DebugSkipCurrentNurseCheck);
+        button.onClick.AddListener(DebugSkipCurrentNurseCheck);
     }
 
     private void ResetBackendGate()
@@ -620,6 +906,346 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         return string.Empty;
     }
 
+
+    private void NormalizeHeartbeatInspectorDefaults()
+    {
+        if (heartbeatEffectDuration <= 0f)
+            heartbeatEffectDuration = 3.2f;
+
+        if (Vector3.Distance(heartbeatEffectCameraOffset, new Vector3(-0.22f, -0.18f, 0.9f)) < 0.001f || Vector3.Distance(heartbeatEffectCameraOffset, new Vector3(0f, 0f, 0.85f)) < 0.001f)
+            heartbeatEffectCameraOffset = new Vector3(0f, 0f, 0.95f);
+
+        if (heartbeatEffectVisibleScale <= 0f || Mathf.Abs(heartbeatEffectVisibleScale - 0.22f) < 0.001f || Mathf.Abs(heartbeatEffectVisibleScale - 0.35f) < 0.001f)
+            heartbeatEffectVisibleScale = 0.16f;
+    }
+    private void ShowHeartbeatEffect(bool visible)
+    {
+        GameObject effect = heartbeatEffectInstance != null ? heartbeatEffectInstance : heartbeatEffect;
+        if (effect == null)
+            effect = FindFirstNamedObjectOrAsset(heartbeatEffectObjectNames);
+
+        if (effect == null)
+        {
+            if (visible)
+                Debug.LogWarning("[Part4] Heartbeat effect not found. Assign Heartbeat Effect or name the prefab/object heartbeat.", this);
+            return;
+        }
+
+        if (!effect.scene.IsValid())
+        {
+            heartbeatEffectInstance = Instantiate(effect);
+            heartbeatEffectInstance.name = effect.name + "_Runtime";
+            effect = heartbeatEffectInstance;
+        }
+        else if (heartbeatEffectInstance == null)
+        {
+            heartbeatEffectInstance = effect;
+        }
+
+        if (visible)
+        {
+            PlaceHeartbeatEffect(effect);
+            EnsureHeartbeatEffectVisible(effect);
+        }
+
+        effect.SetActive(visible);
+        if (!visible)
+            StopHeartbeatRuntimeEffect(effect);
+        Debug.Log("[Part4] Heartbeat effect visible=" + visible + ", object=" + effect.name + ", position=" + effect.transform.position, this);
+        if (visible)
+        {
+            Animator animator = effect.GetComponentInChildren<Animator>(true);
+            if (animator != null)
+            {
+                animator.enabled = true;
+                animator.Rebind();
+                animator.Play(0, 0, 0f);
+                animator.Update(0f);
+            }
+
+            StartHeartbeatRuntimeEffect(effect);
+        }
+    }
+
+
+
+    private void StartHeartbeatRuntimeEffect(GameObject effect)
+    {
+        if (effect == null)
+            return;
+
+        StopHeartbeatRuntimeEffect(effect);
+        heartbeatRuntimeRoutine = StartCoroutine(HeartbeatRuntimeRoutine(effect));
+    }
+
+    private void StopHeartbeatRuntimeEffect(GameObject effect)
+    {
+        if (heartbeatRuntimeRoutine != null)
+        {
+            StopCoroutine(heartbeatRuntimeRoutine);
+            heartbeatRuntimeRoutine = null;
+        }
+
+        if (effect != null)
+        {
+            AudioSource source = effect.GetComponentInChildren<AudioSource>(true);
+            if (source != null)
+                source.Stop();
+        }
+    }
+
+    private IEnumerator HeartbeatRuntimeRoutine(GameObject effect)
+    {
+        EnsureHeartbeatAudio(effect);
+        LineRenderer[] rings = EnsureHeartbeatRings(effect);
+        Vector3 baseScale = Vector3.one * heartbeatEffectVisibleScale;
+        AudioSource source = effect.GetComponentInChildren<AudioSource>(true);
+        if (source != null && source.clip != null)
+        {
+            source.Stop();
+            source.loop = true;
+            source.Play();
+        }
+
+        float elapsed = 0f;
+        while (effect != null && effect.activeInHierarchy && elapsed < heartbeatEffectDuration)
+        {
+            elapsed += Time.deltaTime;
+            float cycle = Mathf.Repeat(elapsed, 1f);
+            float beat = Mathf.Exp(-Mathf.Pow((cycle - 0.08f) / 0.045f, 2f)) + 0.72f * Mathf.Exp(-Mathf.Pow((cycle - 0.28f) / 0.055f, 2f));
+            effect.transform.localScale = baseScale * (1f + beat * 0.18f);
+
+            for (int i = 0; i < rings.Length; i++)
+                UpdateHeartbeatRing(rings[i], Mathf.Repeat(cycle - i * 0.23f + 1f, 1f));
+
+            yield return null;
+        }
+
+        if (source != null)
+            source.Stop();
+        heartbeatRuntimeRoutine = null;
+    }
+
+    private void EnsureHeartbeatAudio(GameObject effect)
+    {
+        AudioSource source = effect.GetComponentInChildren<AudioSource>(true);
+        if (source == null)
+            source = effect.AddComponent<AudioSource>();
+
+        if (heartbeatEffectClip == null)
+            heartbeatEffectClip = FindAudioClipByName("heartbeat") ?? FindAudioClipByName("Heartbeat") ?? FindAudioClipByName("heartbeat-sound") ?? FindAudioClipByName("Heartbeat-sound");
+
+        if (source.clip == null)
+            source.clip = heartbeatEffectClip;
+
+        source.playOnAwake = false;
+        source.spatialBlend = 0f;
+        source.volume = heartbeatEffectVolume;
+    }
+
+    private LineRenderer[] EnsureHeartbeatRings(GameObject effect)
+    {
+        Transform root = effect.transform.Find("Heartbeat_Runtime_Rings");
+        if (root == null)
+        {
+            GameObject rootObject = new GameObject("Heartbeat_Runtime_Rings");
+            rootObject.transform.SetParent(effect.transform, false);
+            root = rootObject.transform;
+        }
+
+        LineRenderer[] rings = root.GetComponentsInChildren<LineRenderer>(true);
+        if (rings.Length >= 3)
+            return rings;
+
+        Material material = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color"));
+        material.color = new Color(1f, 0.45f, 0.78f, 0.65f);
+
+        List<LineRenderer> result = new List<LineRenderer>(rings);
+        for (int i = result.Count; i < 3; i++)
+        {
+            GameObject ringObject = new GameObject("Heartbeat_Ripple_" + (i + 1));
+            ringObject.transform.SetParent(root, false);
+            LineRenderer ring = ringObject.AddComponent<LineRenderer>();
+            ring.useWorldSpace = false;
+            ring.loop = true;
+            ring.positionCount = 72;
+            ring.material = material;
+            ring.numCapVertices = 4;
+            result.Add(ring);
+        }
+
+        return result.ToArray();
+    }
+
+    private static void UpdateHeartbeatRing(LineRenderer ring, float progress)
+    {
+        if (ring == null)
+            return;
+
+        float alpha = Mathf.Clamp01(1f - progress);
+        float radius = Mathf.Lerp(0.65f, 1.65f, progress);
+        float width = Mathf.Lerp(0.018f, 0.004f, progress);
+        Color color = new Color(1f, 0.45f, 0.78f, alpha * 0.55f);
+        ring.startColor = color;
+        ring.endColor = color;
+        ring.startWidth = width;
+        ring.endWidth = width;
+
+        for (int i = 0; i < ring.positionCount; i++)
+        {
+            float angle = i / (float)ring.positionCount * Mathf.PI * 2f;
+            ring.SetPosition(i, new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, 0.02f));
+        }
+    }
+
+    private static AudioClip FindAudioClipByName(string clipName)
+    {
+        if (string.IsNullOrWhiteSpace(clipName))
+            return null;
+
+        AudioClip[] clips = Resources.FindObjectsOfTypeAll<AudioClip>();
+        foreach (AudioClip clip in clips)
+        {
+            if (clip != null && clip.name.IndexOf(clipName, StringComparison.OrdinalIgnoreCase) >= 0)
+                return clip;
+        }
+
+        return null;
+    }
+    private void EnsureHeartbeatEffectVisible(GameObject effect)
+    {
+        if (effect == null)
+            return;
+
+        if (effect.transform.localScale.sqrMagnitude < 0.0001f)
+            effect.transform.localScale = Vector3.one * heartbeatEffectVisibleScale;
+
+        Renderer[] renderers = effect.GetComponentsInChildren<Renderer>(true);
+        Material fallbackMaterial = null;
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null)
+                continue;
+
+            renderer.enabled = true;
+            if ((renderer.sharedMaterials == null || renderer.sharedMaterials.Length == 0 || renderer.sharedMaterial == null) && fallbackMaterial == null)
+            {
+                Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
+                fallbackMaterial = new Material(shader);
+                fallbackMaterial.color = new Color(1f, 0.12f, 0.28f, 1f);
+            }
+
+            if (fallbackMaterial != null && (renderer.sharedMaterial == null || renderer.sharedMaterials.Length == 0))
+                renderer.material = fallbackMaterial;
+        }
+
+        if (renderers.Length == 0)
+            CreateFallbackHeartbeatVisual(effect.transform);
+    }
+
+    private void CreateFallbackHeartbeatVisual(Transform parent)
+    {
+        GameObject heart = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        heart.name = "Heartbeat_Fallback_Heart";
+        heart.transform.SetParent(parent, false);
+        heart.transform.localPosition = Vector3.zero;
+        heart.transform.localScale = Vector3.one * heartbeatEffectVisibleScale;
+
+        Renderer renderer = heart.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
+            Material material = new Material(shader);
+            material.color = new Color(1f, 0.12f, 0.28f, 1f);
+            renderer.material = material;
+        }
+    }
+    private void PlaceHeartbeatEffect(GameObject effect)
+    {
+        if (effect == null)
+            return;
+
+        Camera camera = Camera.main;
+        if (camera == null)
+            return;
+
+        Transform cameraTransform = camera.transform;
+        effect.transform.SetParent(null, true);
+        effect.transform.position = cameraTransform.position
+            + cameraTransform.right * heartbeatEffectCameraOffset.x
+            + cameraTransform.up * heartbeatEffectCameraOffset.y
+            + cameraTransform.forward * heartbeatEffectCameraOffset.z;
+        effect.transform.rotation = Quaternion.LookRotation(effect.transform.position - cameraTransform.position, cameraTransform.up);
+        effect.transform.localScale = Vector3.one * heartbeatEffectVisibleScale;
+    }
+
+    private Transform FindFirstNamedTransform(string objectNames)
+    {
+        GameObject found = FindFirstNamedObjectOrAsset(objectNames);
+        return found != null ? found.transform : null;
+    }
+    private static int GetAnswerIndexForButton(Button button, int fallbackIndex)
+    {
+        if (button == null)
+            return fallbackIndex;
+
+        string value = button.gameObject.name;
+        TMP_Text tmpText = button.GetComponentInChildren<TMP_Text>(true);
+        if (tmpText != null)
+            value += " " + tmpText.text;
+
+        Text legacyText = button.GetComponentInChildren<Text>(true);
+        if (legacyText != null)
+            value += " " + legacyText.text;
+
+        if (ContainsAnswerToken(value, "A")) return 0;
+        if (ContainsAnswerToken(value, "B")) return 1;
+        if (ContainsAnswerToken(value, "C")) return 2;
+        if (ContainsAnswerToken(value, "D")) return 3;
+        return fallbackIndex;
+    }
+
+    private static bool ContainsAnswerToken(string value, string token)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return value.IndexOf("(" + token + ")", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf(token + ".", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("Option_" + token, StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("Answer_" + token, StringComparison.OrdinalIgnoreCase) >= 0
+            || value.Equals(token, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private GameObject FindFirstNamedObjectOrAsset(string names)
+    {
+        if (string.IsNullOrWhiteSpace(names))
+            return null;
+
+        string[] splitNames = names.Split('|');
+        GameObject[] allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+
+        foreach (string rawName in splitNames)
+        {
+            string objectName = rawName.Trim();
+            if (objectName.Length == 0)
+                continue;
+
+            GameObject active = GameObject.Find(objectName);
+            if (active != null)
+                return active;
+
+            foreach (GameObject candidate in allObjects)
+            {
+                if (candidate == null || candidate.name != objectName)
+                    continue;
+
+                return candidate;
+            }
+        }
+
+        return null;
+    }
     private static int CompareButtonsByScreenOrder(Button left, Button right)
     {
         Vector3 leftPosition = left.transform.position;
@@ -655,6 +1281,129 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             || buttonName.IndexOf("ok", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
+
+    private static void PrepareDesignedQuizPanel(GameObject target, string preferredChildName)
+    {
+        Transform root = target != null ? FindDeepChild(target.transform, preferredChildName) ?? target.transform : null;
+        if (root == null)
+            return;
+
+        string[] requiredChildren = { "QUIZ", "Question_BG_Plate", "Question_Text", "Divider_Line", "Btn_A", "Btn_B", "Btn_C", "Btn_D" };
+        foreach (string childName in requiredChildren)
+        {
+            Transform child = FindDeepChild(root, childName);
+            if (child != null)
+                child.gameObject.SetActive(true);
+        }
+
+        foreach (CanvasGroup group in root.GetComponentsInChildren<CanvasGroup>(true))
+        {
+            group.alpha = 1f;
+            group.interactable = true;
+            group.blocksRaycasts = true;
+        }
+
+        foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true))
+            graphic.enabled = true;
+
+        foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
+        {
+            text.enabled = true;
+            Color color = text.color;
+            color.a = 1f;
+            text.color = color;
+        }
+    }
+
+
+
+    private static void EnsureQuizHeaderOverlay(Transform root, string title, string question)
+    {
+        if (root == null)
+            return;
+
+        TextMeshProUGUI titleText = GetOrCreateQuizOverlayText(root, "Runtime_Quiz_Title");
+        ConfigureQuizOverlayText(titleText, title, 42f, new Vector2(0f, -34f), new Vector2(920f, 70f));
+
+        TextMeshProUGUI questionText = GetOrCreateQuizOverlayText(root, "Runtime_Quiz_Question");
+        ConfigureQuizOverlayText(questionText, question, 34f, new Vector2(0f, -112f), new Vector2(980f, 110f));
+    }
+
+    private static TextMeshProUGUI GetOrCreateQuizOverlayText(Transform root, string objectName)
+    {
+        Transform existing = FindDeepChild(root, objectName);
+        GameObject textObject = existing != null ? existing.gameObject : new GameObject(objectName, typeof(RectTransform));
+        if (existing == null)
+            textObject.transform.SetParent(root, false);
+
+        TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
+        if (text == null)
+            text = textObject.AddComponent<TextMeshProUGUI>();
+
+        textObject.SetActive(true);
+        text.transform.SetAsLastSibling();
+        return text;
+    }
+
+    private static void ConfigureQuizOverlayText(TextMeshProUGUI text, string value, float fontSize, Vector2 anchoredPosition, Vector2 size)
+    {
+        if (text == null)
+            return;
+
+        RectTransform rect = text.rectTransform;
+        rect.anchorMin = new Vector2(0.5f, 1f);
+        rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = size;
+        rect.localScale = Vector3.one;
+
+        text.text = value;
+        text.enabled = true;
+        text.raycastTarget = false;
+        text.alignment = TextAlignmentOptions.Center;
+        text.enableAutoSizing = true;
+        text.fontSizeMax = fontSize;
+        text.fontSizeMin = Mathf.Max(18f, fontSize * 0.55f);
+        text.color = Color.white;
+    }
+    private static void RestoreDesignedQuizText(GameObject target, string preferredChildName, string title, string question)
+    {
+        Transform root = target != null ? FindDeepChild(target.transform, preferredChildName) ?? target.transform : null;
+        if (root == null)
+            return;
+
+        SetDesignedText(root, "QUIZ", title);
+        SetDesignedText(root, "Question_Text", question);
+    }
+
+    private static void SetDesignedText(Transform root, string childName, string value)
+    {
+        Transform child = FindDeepChild(root, childName);
+        if (child == null)
+            return;
+
+        TMP_Text tmp = child.GetComponent<TMP_Text>() ?? child.GetComponentInChildren<TMP_Text>(true);
+        if (tmp != null)
+        {
+            tmp.text = value;
+            tmp.enabled = true;
+            Color color = tmp.color;
+            color.a = 1f;
+            tmp.color = color;
+            return;
+        }
+
+        Text legacy = child.GetComponent<Text>() ?? child.GetComponentInChildren<Text>(true);
+        if (legacy != null)
+        {
+            legacy.text = value;
+            legacy.enabled = true;
+            Color color = legacy.color;
+            color.a = 1f;
+            legacy.color = color;
+        }
+    }
     private static void SetPanelVisible(GameObject target, bool visible, string preferredChildName)
     {
         if (target == null)

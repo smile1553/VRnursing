@@ -1,5 +1,9 @@
 using System.Collections;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+using UnityEngine.Events;
 using UnityEngine.XR.Interaction.Toolkit;
 
 public class Part3VisualDemoController : MonoBehaviour
@@ -8,19 +12,27 @@ public class Part3VisualDemoController : MonoBehaviour
     [SerializeField] private GameObject stickerObject;
     [SerializeField] private Sprite stickerSprite;
     [SerializeField] private Transform stickerAnchor;
-    [SerializeField] private Vector3 fallbackStickerCameraOffset = new Vector3(0.33f, -0.25f, 0.9f);
+    [SerializeField] private Vector3 fallbackStickerCameraOffset = new Vector3(0.34f, -0.04f, 0.9f);
+    [SerializeField] private bool forceStickerSymmetricHudOffset = true;
     [SerializeField] private bool keepStickerInCameraCorner = true;
     // Keep the bear sticker close to the size of the medical-record card in world space.
     [SerializeField] private Vector2 fallbackStickerSize = new Vector2(0.038f, 0.038f);
     [SerializeField] private float fallbackStickerWorldHeight = 0.14f;
     [SerializeField] private Transform yayaStickerAttachTarget;
-    [SerializeField] private string yayaStickerAttachTargetNames = "Yaya_StickerAnchor|Yaya_Chest_StethoscopeAnchor|Yaya_Chest_Anchor|Yaya_Hand_Anchor";
+    [SerializeField] private string yayaStickerAttachTargetNames = "Bear_Sticker_Target|BearSticker_Target|bow_bear (1)|bow_bear|bear.002|bears";
     [SerializeField] private float stickerAttachDistance = 0.22f;
+    [SerializeField] private GameObject stickerAttachAnimationPrefab;
+    [SerializeField] private string stickerAttachAnimationPrefabNames = "Bear_Sticker|BearSticker";
+    [SerializeField] private string stickerAttachAnimationState = "";
+    [SerializeField] private float stickerAttachAnimationDuration = 1.5f;
     [SerializeField] private float placedStickerWorldHeight = 0.09f;
+    [SerializeField] private Vector2 hudStickerColliderWorldSize = new Vector2(0.18f, 0.18f);
+    [SerializeField] private Vector2 placedStickerColliderWorldSize = new Vector2(0.12f, 0.12f);
     [SerializeField] private AudioSource audioSource;
     [SerializeField] private AudioClip popClip;
     [SerializeField] private float stickerPopDuration = 0.3f;
     [SerializeField] private float stickerHighlightDuration = 0.35f;
+    [SerializeField] private UnityEvent onHudStickerSelected;
 
     [Header("Stethoscope")]
     [SerializeField] private Transform stethoscope;
@@ -35,11 +47,23 @@ public class Part3VisualDemoController : MonoBehaviour
     [SerializeField] private float heartbeatDuration = 3.2f;
 
     private Coroutine stickerRoutine;
+    private Coroutine hudStickerAttachRoutine;
+    private GameObject stickerPrefabSource;
     private Coroutine stethoscopeRoutine;
     private Vector3 stickerBaseScale = Vector3.one;
     private Vector3 stethoscopeBaseScale = Vector3.one;
     private bool stickerHudVisible;
+    private bool stickerTemporarilyHiddenForQuiz;
+    private bool hudStickerWasSelected;
+    private bool hudStickerAttaching;
     private XRSimpleInteractable hudStickerInteractable;
+
+    public bool HudStickerWasSelected => hudStickerWasSelected;
+
+    public void ResetHudStickerSelection()
+    {
+        hudStickerWasSelected = false;
+    }
 
     private void Awake()
     {
@@ -59,6 +83,10 @@ public class Part3VisualDemoController : MonoBehaviour
 
     public void ShowSticker()
     {
+        stickerTemporarilyHiddenForQuiz = false;
+        if (stickerObject != null && !stickerObject.activeSelf)
+            hudStickerWasSelected = false;
+
         if (stickerRoutine != null)
             StopCoroutine(stickerRoutine);
 
@@ -85,9 +113,37 @@ public class Part3VisualDemoController : MonoBehaviour
             stickerObject.SetActive(false);
     }
 
+
+    public void TemporarilyHideStickerForQuiz()
+    {
+        stickerTemporarilyHiddenForQuiz = true;
+        if (stickerRoutine != null)
+        {
+            StopCoroutine(stickerRoutine);
+            stickerRoutine = null;
+        }
+        if (stickerObject != null)
+            stickerObject.SetActive(false);
+    }
+
+    public void RestoreStickerAfterQuiz()
+    {
+        stickerTemporarilyHiddenForQuiz = false;
+        ResolveReferences();
+        stickerHudVisible = true;
+        if (keepStickerInCameraCorner)
+            PlaceFallbackStickerNearCamera();
+        else if (stickerAnchor != null && stickerObject != null)
+            stickerObject.transform.SetPositionAndRotation(stickerAnchor.position, stickerAnchor.rotation);
+        if (stickerObject != null)
+        {
+            stickerObject.SetActive(true);
+            EnsureHudStickerInteractable();
+        }
+    }
     private void LateUpdate()
     {
-        if (stickerHudVisible && keepStickerInCameraCorner)
+        if (!stickerTemporarilyHiddenForQuiz && !hudStickerAttaching && stickerHudVisible && keepStickerInCameraCorner)
             PlaceFallbackStickerNearCamera();
     }
 
@@ -252,8 +308,17 @@ public class Part3VisualDemoController : MonoBehaviour
         audioSource.PlayOneShot(clip);
     }
 
+
+    private void NormalizeStickerHudOffset()
+    {
+        if (!forceStickerSymmetricHudOffset)
+            return;
+
+        fallbackStickerCameraOffset = new Vector3(0.34f, -0.04f, 0.9f);
+    }
     private void ResolveReferences()
     {
+        NormalizeStickerHudOffset();
         if (audioSource == null)
             audioSource = GetComponent<AudioSource>();
 
@@ -272,6 +337,8 @@ public class Part3VisualDemoController : MonoBehaviour
                 ?? FindAudioClipByName("Heartbeat-sound")
                 ?? FindAudioClipByName("heartbeat-sound")
                 ?? FindAudioClipByName("heartbeat");
+        PreferSpriteSticker();
+
 
         if (stickerObject == null)
             stickerObject = FindSceneObjectByName("Sticker");
@@ -284,6 +351,8 @@ public class Part3VisualDemoController : MonoBehaviour
 
         if (stickerObject == null)
             stickerObject = CreateFallbackSticker();
+
+        EnsureStickerSceneInstance();
 
         // Scene sticker objects can carry an old oversized scale. Normalize the sticker
         // before it is shown so the reward stays the same size in every run.
@@ -318,29 +387,216 @@ public class Part3VisualDemoController : MonoBehaviour
     }
 
 
+
+
+    private void PreferSpriteSticker()
+    {
+        if (stickerSprite == null)
+            stickerSprite = FindSpriteByName("bear_sticker") ?? FindSpriteByName("bear");
+
+        if (stickerSprite == null)
+            return;
+
+        if (stickerObject != null && stickerObject.scene.IsValid() && stickerObject.GetComponent<SpriteRenderer>() != null)
+            return;
+
+        stickerObject = CreateSpriteSticker(stickerSprite);
+    }
+
+    private void EnsureStickerSceneInstance()
+    {
+        if (stickerObject == null)
+            return;
+
+        if (stickerObject.scene.IsValid())
+            return;
+
+        stickerPrefabSource = stickerObject;
+        stickerObject = Instantiate(stickerPrefabSource, transform);
+        stickerObject.name = stickerPrefabSource.name + "_Runtime";
+        stickerObject.SetActive(false);
+    }
+
     private void EnsureHudStickerInteractable()
     {
         if (stickerObject == null)
             return;
 
-        Collider stickerCollider = stickerObject.GetComponent<Collider>();
-        if (stickerCollider == null)
-            stickerCollider = stickerObject.AddComponent<BoxCollider>();
-        stickerCollider.isTrigger = true;
+        ConfigureStickerCollider(stickerObject, hudStickerColliderWorldSize);
 
         hudStickerInteractable = stickerObject.GetComponent<XRSimpleInteractable>();
         if (hudStickerInteractable == null)
             hudStickerInteractable = stickerObject.AddComponent<XRSimpleInteractable>();
 
+        StickerHudClickProxy clickProxy = stickerObject.GetComponent<StickerHudClickProxy>();
+        if (clickProxy == null)
+            clickProxy = stickerObject.AddComponent<StickerHudClickProxy>();
+        clickProxy.Setup(this);
+
+        hudStickerInteractable.enabled = true;
         hudStickerInteractable.selectEntered.RemoveListener(OnHudStickerSelected);
         hudStickerInteractable.selectEntered.AddListener(OnHudStickerSelected);
     }
 
+    internal void HandleHudStickerClicked()
+    {
+        OnHudStickerSelected(null);
+    }
     private void OnHudStickerSelected(SelectEnterEventArgs args)
     {
-        SpawnPlaceableSticker(args != null && args.interactorObject != null ? args.interactorObject.transform : null);
+        if (hudStickerAttaching)
+            return;
+
+        hudStickerWasSelected = true;
+        stickerHudVisible = false;
+        if (stickerObject != null)
+            stickerObject.SetActive(true);
+
+        onHudStickerSelected?.Invoke();
+        PlayHudStickerAttachAnimation();
     }
 
+    private void PlayHudStickerAttachAnimation()
+    {
+        ResolveReferences();
+        Transform animationTarget = FindFirstNamedTransform(yayaStickerAttachTargetNames) ?? yayaStickerAttachTarget;
+
+        if (hudStickerAttachRoutine != null)
+            StopCoroutine(hudStickerAttachRoutine);
+
+        hudStickerAttachRoutine = StartCoroutine(FlyHudStickerToTargetRoutine(animationTarget));
+
+        if (stickerAttachAnimationPrefab == null)
+            stickerAttachAnimationPrefab = FindStickerAttachAnimationPrefab();
+
+        if (stickerAttachAnimationPrefab != null && animationTarget != null)
+        {
+            GetStickerTargetPose(animationTarget, out Vector3 animationPosition, out Quaternion animationRotation);
+            GameObject animationObject = Instantiate(stickerAttachAnimationPrefab, animationPosition, animationRotation);
+            animationObject.name = stickerAttachAnimationPrefab.name + "_HudStickerAttach";
+
+            Animator animator = animationObject.GetComponentInChildren<Animator>(true);
+            if (animator != null)
+            {
+                animator.enabled = true;
+                animator.Rebind();
+                animator.Update(0f);
+                if (!string.IsNullOrWhiteSpace(stickerAttachAnimationState))
+                    animator.Play(stickerAttachAnimationState, 0, 0f);
+                else if (animator.HasState(0, Animator.StringToHash("Scene")))
+                    animator.Play("Scene", 0, 0f);
+                else if (animator.HasState(0, Animator.StringToHash("Bear_Sticker")))
+                    animator.Play("Bear_Sticker", 0, 0f);
+            }
+
+            Destroy(animationObject, stickerAttachAnimationDuration);
+        }
+    }
+
+
+    private GameObject FindStickerAttachAnimationPrefab()
+    {
+#if UNITY_EDITOR
+        if (string.IsNullOrWhiteSpace(stickerAttachAnimationPrefabNames))
+            return null;
+
+        string[] names = stickerAttachAnimationPrefabNames.Split('|');
+        foreach (string rawName in names)
+        {
+            string wantedName = rawName.Trim();
+            if (string.IsNullOrEmpty(wantedName))
+                continue;
+
+            string[] guids = AssetDatabase.FindAssets($"{wantedName} t:Prefab");
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (prefab != null && prefab.name.IndexOf(wantedName, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return prefab;
+            }
+        }
+#endif
+        return null;
+    }
+    private IEnumerator FlyHudStickerToTargetRoutine(Transform target)
+    {
+        if (stickerObject == null)
+            yield break;
+
+        hudStickerAttaching = true;
+        stickerHudVisible = false;
+        stickerObject.SetActive(true);
+
+        if (hudStickerInteractable != null)
+            hudStickerInteractable.enabled = false;
+
+        SetCollidersEnabled(stickerObject, false);
+        PlayOneShot(popClip);
+
+        Vector3 startPosition = stickerObject.transform.position;
+        Quaternion startRotation = stickerObject.transform.rotation;
+        Vector3 startScale = stickerObject.transform.localScale;
+        Vector3 targetPosition = startPosition;
+        Quaternion targetRotation = startRotation;
+        if (target != null)
+            GetStickerTargetPose(target, out targetPosition, out targetRotation);
+
+        float duration = Mathf.Max(0.25f, stickerAttachAnimationDuration * 0.45f);
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            t = t * t * (3f - 2f * t);
+            float arc = Mathf.Sin(t * Mathf.PI) * 0.18f;
+
+            stickerObject.transform.position = Vector3.Lerp(startPosition, targetPosition, t) + Vector3.up * arc;
+            stickerObject.transform.rotation = Quaternion.Slerp(startRotation, targetRotation, t);
+            stickerObject.transform.localScale = Vector3.Lerp(startScale, startScale * 0.82f, t);
+            yield return null;
+        }
+
+        if (target != null)
+        {
+            stickerObject.transform.SetParent(target, true);
+            stickerObject.transform.SetPositionAndRotation(targetPosition, targetRotation);
+        }
+
+        SetStickerWorldHeight(stickerObject.transform, placedStickerWorldHeight);
+        hudStickerAttaching = false;
+        hudStickerAttachRoutine = null;
+    }
+    private static void GetStickerTargetPose(Transform target, out Vector3 position, out Quaternion rotation)
+    {
+        position = target != null ? target.position : Vector3.zero;
+        rotation = target != null ? target.rotation : Quaternion.identity;
+
+        if (target == null)
+            return;
+
+        Renderer[] renderers = target.GetComponentsInChildren<Renderer>(true);
+        bool hasBounds = false;
+        Bounds bounds = new Bounds(target.position, Vector3.zero);
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null || !renderer.enabled)
+                continue;
+
+            if (!hasBounds)
+            {
+                bounds = renderer.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(renderer.bounds);
+            }
+        }
+
+        if (hasBounds)
+            position = bounds.center + Vector3.up * (bounds.extents.y * 0.2f);
+    }
     private void SpawnPlaceableSticker(Transform interactorTransform)
     {
         ResolveReferences();
@@ -363,10 +619,7 @@ public class Part3VisualDemoController : MonoBehaviour
         SetStickerWorldHeight(copy.transform, placedStickerWorldHeight);
         SetCollidersEnabled(copy, true);
 
-        Collider copyCollider = copy.GetComponent<Collider>();
-        if (copyCollider == null)
-            copyCollider = copy.AddComponent<BoxCollider>();
-        copyCollider.isTrigger = true;
+        ConfigureStickerCollider(copy, placedStickerColliderWorldSize);
 
         Rigidbody body = copy.GetComponent<Rigidbody>();
         if (body == null)
@@ -382,7 +635,7 @@ public class Part3VisualDemoController : MonoBehaviour
         grab.throwOnDetach = false;
 
         StickerAutoAttach attach = copy.AddComponent<StickerAutoAttach>();
-        attach.Setup(yayaStickerAttachTarget, stickerAttachDistance, placedStickerWorldHeight, audioSource, popClip);
+        attach.Setup(yayaStickerAttachTarget, stickerAttachDistance, placedStickerWorldHeight, audioSource, popClip, stickerAttachAnimationPrefab, stickerAttachAnimationState, stickerAttachAnimationDuration);
         PlayOneShot(popClip);
     }
 
@@ -406,6 +659,35 @@ public class Part3VisualDemoController : MonoBehaviour
             float ratio = Mathf.Max(0.001f, worldHeight) / renderer.bounds.size.y;
             target.localScale *= ratio;
         }
+    }
+
+    private static void ConfigureStickerCollider(GameObject sticker, Vector2 minimumWorldSize)
+    {
+        if (sticker == null)
+            return;
+
+        BoxCollider box = sticker.GetComponent<BoxCollider>();
+        if (box == null)
+            box = sticker.AddComponent<BoxCollider>();
+
+        box.enabled = true;
+        box.isTrigger = true;
+
+        Vector3 localSize = Vector3.one;
+        SpriteRenderer spriteRenderer = sticker.GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null && spriteRenderer.sprite != null)
+            localSize = spriteRenderer.sprite.bounds.size;
+
+        Vector3 lossyScale = sticker.transform.lossyScale;
+        float minLocalX = Mathf.Max(0.001f, minimumWorldSize.x) / Mathf.Max(0.001f, Mathf.Abs(lossyScale.x));
+        float minLocalY = Mathf.Max(0.001f, minimumWorldSize.y) / Mathf.Max(0.001f, Mathf.Abs(lossyScale.y));
+
+        localSize.x = Mathf.Max(Mathf.Abs(localSize.x), minLocalX);
+        localSize.y = Mathf.Max(Mathf.Abs(localSize.y), minLocalY);
+        localSize.z = Mathf.Max(Mathf.Abs(localSize.z), 0.02f);
+
+        box.center = Vector3.zero;
+        box.size = localSize;
     }
     private GameObject CreateFallbackSticker()
     {
@@ -629,15 +911,21 @@ public class StickerAutoAttach : MonoBehaviour
     private float attachedWorldHeight = 0.09f;
     private AudioSource audioSource;
     private AudioClip attachClip;
+    private GameObject attachAnimationPrefab;
+    private string attachAnimationState;
+    private float attachAnimationDuration = 1.5f;
     private bool attached;
 
-    public void Setup(Transform target, float attachDistance, float attachedWorldHeight, AudioSource audioSource, AudioClip attachClip)
+    public void Setup(Transform target, float attachDistance, float attachedWorldHeight, AudioSource audioSource, AudioClip attachClip, GameObject attachAnimationPrefab = null, string attachAnimationState = "", float attachAnimationDuration = 1.5f)
     {
         this.target = target;
         this.attachDistance = Mathf.Max(0.01f, attachDistance);
         this.attachedWorldHeight = Mathf.Max(0.01f, attachedWorldHeight);
         this.audioSource = audioSource;
         this.attachClip = attachClip;
+        this.attachAnimationPrefab = attachAnimationPrefab;
+        this.attachAnimationState = attachAnimationState;
+        this.attachAnimationDuration = Mathf.Max(0.1f, attachAnimationDuration);
     }
 
     private void Update()
@@ -671,6 +959,30 @@ public class StickerAutoAttach : MonoBehaviour
 
         if (audioSource != null && attachClip != null)
             audioSource.PlayOneShot(attachClip);
+
+        PlayAttachAnimation();
+    }
+
+
+    private void PlayAttachAnimation()
+    {
+        if (attachAnimationPrefab == null || target == null)
+            return;
+
+        GameObject animationObject = Instantiate(attachAnimationPrefab, target);
+        animationObject.name = attachAnimationPrefab.name + "_Instance";
+        animationObject.transform.localPosition = Vector3.zero;
+        animationObject.transform.localRotation = Quaternion.identity;
+
+        Animator animator = animationObject.GetComponentInChildren<Animator>(true);
+        if (animator != null)
+        {
+            animator.enabled = true;
+            if (!string.IsNullOrWhiteSpace(attachAnimationState))
+                animator.Play(attachAnimationState, 0, 0f);
+        }
+
+        Destroy(animationObject, attachAnimationDuration);
     }
 
     private void SetWorldHeight(float worldHeight)
@@ -682,5 +994,20 @@ public class StickerAutoAttach : MonoBehaviour
             float scale = Mathf.Max(0.001f, worldHeight) / spriteHeight;
             transform.localScale = new Vector3(scale, scale, 1f);
         }
+    }
+}
+
+public class StickerHudClickProxy : MonoBehaviour
+{
+    private Part3VisualDemoController owner;
+
+    public void Setup(Part3VisualDemoController controller)
+    {
+        owner = controller;
+    }
+
+    private void OnMouseDown()
+    {
+        owner?.HandleHudStickerClicked();
     }
 }

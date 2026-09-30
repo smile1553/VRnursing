@@ -104,6 +104,7 @@ public class NewDialogueManager : MonoBehaviour
 
     public void ShowText(string speakerName, string content)
     {
+        speakerName = NormalizeSpeakerForContent(speakerName, content);
         TryBindReferences();
 
         if (speakerText != null)
@@ -222,6 +223,18 @@ public class NewDialogueManager : MonoBehaviour
             panelOutline.effectColor = outlineColor;
     }
 
+
+    private string NormalizeSpeakerForContent(string speakerName, string content)
+    {
+        if (!string.IsNullOrEmpty(content)
+            && content.Contains("不好意思")
+            && (content.Contains("打針") || content.Contains("一進來") || content.Contains("以為")))
+        {
+            return "媽媽";
+        }
+
+        return speakerName;
+    }
     private void SetDialoguePanelVisible(bool visible)
     {
         Transform panel = transform.Find("Dialogue_Panel");

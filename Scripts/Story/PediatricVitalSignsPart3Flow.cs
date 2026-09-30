@@ -31,6 +31,12 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     [SerializeField] private NewDialogueManager dialogueManager;
     [SerializeField] private TMP_Text speakerText;
     [SerializeField] private TMP_Text dialogueText;
+    [SerializeField] private int momLikesStickerLineIndex = 5;
+    [SerializeField] private int momEncourageLineIndex = 5;
+    [SerializeField] private int yayaRefuseLineIndex = 6;
+    [SerializeField] private int momDoctorLineIndex = 7;
+    [SerializeField] private int momHeartbeatLineIndex = 8;
+    [SerializeField] private int yayaEarPainLineIndex = 9;
 
     [Header("Actors")]
     [SerializeField] private MomAnimationPlayer momAnimation;
@@ -86,40 +92,20 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     private string lastProcessedBackendJson;
     private int lastStartFrame = -1;
     private bool quizButtonsBound;
+    private bool promptSkipRequested;
     private Coroutine correctRoutine;
     private Coroutine wrongRoutine;
     private const string AskPreferencePrompt =
         "護生如何知道芽芽喜歡什麼東西呢？";
 
     private const string ReassureWithStickerPrompt =
-        "獎勵芽芽一張貼紙吧! 並告訴芽芽下一個要觀察的生命徵象";
+        "以貼紙鼓勵芽芽，並告訴芽芽下一個要觀察的生命徵象。";
 
     private const string StickerStrategyPrompt =
         "以貼紙，鼓勵病童的正向行為。";
 
     private const string LetYayaListenMomPrompt =
-        "請引導芽芽先聽媽媽的心跳。";
-
-    private const string NurseLetYayaListenMomLine =
-        "請引導護生邀請芽芽先當小醫生，幫媽媽聽心跳，讓芽芽知道聽診器不會痛。";
-    private const string MomLikesStickerLine =
-        "她喜歡貼紙！";
-
-    private const string MomEncourageLine =
-        "好棒喔！有貼紙耶！我們讓姊姊聽聽！";
-
-    private const string YayaRefuseLine =
-        "我不要！我說我不要！";
-
-    private const string MomDoctorLine =
-        "芽芽當醫生聽媽媽的心跳，來，聽診器給你！";
-
-    private const string MomHeartbeatLine =
-        "聽到撲通撲通的聲音！";
-
-    private const string YayaEarPainLine =
-        "耳朵痛痛！";
-
+        "請用溫柔的方式安撫芽芽，讓她知道聽診不會痛、一下子就好，並安排媽媽先示範。";
     private const string QuizQuestion =
         "考題3：請問護生使用了什麼方法以減少芽芽的害怕？";
 
@@ -187,12 +173,15 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         ResetBackendGate();
         SetCombinedKidVisible(false);
         waitingForNurseAction = WaitingForNurseAction.None;
+        promptSkipRequested = false;
         Debug.Log("[Part3] StartPart3: starting sticker distraction flow.", this);
         routine = StartCoroutine(Part3Routine());
     }
 
     public void DebugSkipCurrentNurseCheck()
     {
+        promptSkipRequested = true;
+
         if (waitingForNurseAction != WaitingForNurseAction.None)
             waitingForNurseAction = WaitingForNurseAction.None;
     }
@@ -225,52 +214,55 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
 
     private IEnumerator Part3Routine()
     {
+        visualDemo?.HideSticker();
         ShowNursePrompt(AskPreferencePrompt, WaitingForNurseAction.AskMomPreference);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlaySittingDisbelief();
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        yield return WaitForNurseActionToComplete(
+            () => momAnimation?.PlayStandingIdle(),
+            () => yayaAnimation?.PlaySittingDisbelief());
 
-        ShowDialogueText("媽媽", MomLikesStickerLine, momStickerClip);
+        ShowDialogueLine(momLikesStickerLineIndex, momStickerClip);
         momAnimation?.PlayTalking();
         yayaAnimation?.PlaySittingDisbelief();
         yield return WaitForDialogue(momStickerClip);
 
+        visualDemo?.ResetHudStickerSelection();
         visualDemo?.ShowSticker();
         ShowNursePrompt(ReassureWithStickerPrompt, WaitingForNurseAction.ReassureWithSticker);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlaySittingDisbelief();
         PlayAudio(nursePromiseStickerClip);
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
-
-        ShowNursePrompt(StickerStrategyPrompt, WaitingForNurseAction.None);
-        momAnimation?.PlayStandingIdle();
-        yayaAnimation?.PlaySittingDisbelief();
+        yield return WaitForNurseActionToComplete(
+            () => momAnimation?.PlayStandingIdle(),
+            () => yayaAnimation?.PlaySittingDisbelief());
+        yield return WaitForStickerSelectionOrSkip();
         visualDemo?.HighlightSticker();
-        yield return new WaitForSeconds(2f);
 
-        ShowDialogueText("媽媽", MomEncourageLine, momEncourageClip);
-        // Mom celebrates with the configured clapping animation, then returns to talking.
-        momAnimation?.PlayClapping();
-        yield return WaitForDialogue(momEncourageClip);
-        momAnimation?.PlayTalking();
+        ShowDialogueLine(momEncourageLineIndex, momEncourageClip);
+        yield return HoldMomClapping(GetDialogueDelay(momEncourageClip));
+        momAnimation?.PlayStandingIdle();
 
-        ShowDialogueText("芽芽", YayaRefuseLine, yayaRefuseClip);
+        ShowDialogueLine(yayaRefuseLineIndex, yayaRefuseClip);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlaySittingDisbelief();
         yield return WaitForDialogue(yayaRefuseClip);
 
         visualDemo?.HighlightStethoscope();
-        ShowNursePrompt(NurseLetYayaListenMomLine, WaitingForNurseAction.LetYayaListenMom);
+        ShowNursePrompt(LetYayaListenMomPrompt, WaitingForNurseAction.LetYayaListenMom);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlaySittingIdle();
         PlayAudio(nurseLetYayaListenMomClip);
-        yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+        yield return WaitForNurseActionToComplete(
+            () => momAnimation?.PlayStandingIdle(),
+            () => yayaAnimation?.PlaySittingIdle());
 
-        ShowDialogueText("媽媽", MomDoctorLine, momDoctorClip);
-        momAnimation?.PlayPointing();
-        yield return WaitForDialogue(momDoctorClip);
+        ShowDialogueLine(momDoctorLineIndex, momDoctorClip);
+        Debug.Log($"[Part3] Starting MomBend/KidListen. mom={(momAnimation != null ? momAnimation.name : "null")}, yaya={(yayaAnimation != null ? yayaAnimation.name : "null")}", this);
+        yield return HoldMomBendKidListen(GetDialogueDelay(momDoctorClip));
 
-        yayaAnimation?.PlaySittingIdle();
+        momAnimation?.PlayBend();
+        yayaAnimation?.PlayKidListen();
         if (visualDemo != null)
         {
             yield return visualDemo.MoveStethoscopeForYayaListeningMom();
@@ -281,11 +273,12 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
             yield return new WaitForSeconds(2f);
         }
 
-        ShowDialogueText("媽媽", MomHeartbeatLine, momHeartbeatClip);
-        momAnimation?.PlayTalking();
+        ShowDialogueLine(momHeartbeatLineIndex, momHeartbeatClip);
+        momAnimation?.PlayBend();
+        yayaAnimation?.PlayKidListen();
         yield return WaitForDialogue(momHeartbeatClip);
 
-        ShowDialogueText("芽芽", YayaEarPainLine, yayaEarPainClip);
+        ShowDialogueLine(yayaEarPainLineIndex, yayaEarPainClip);
         yayaAnimation?.PlaySittingDisbelief();
         yield return WaitForDialogue(yayaEarPainClip);
 
@@ -341,12 +334,13 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         SetPanelVisible(nursePromptPanel, true, "TopHint_Panel");
         SetPromptSkipButtonsVisible(waitingAction != WaitingForNurseAction.None);
 
+        if (waitingAction == WaitingForNurseAction.ReassureWithSticker)
+            visualDemo?.ShowSticker();
+
         if (nursePromptText != null)
         {
             nursePromptText.enableWordWrapping = true;
-            nursePromptText.enableAutoSizing = true;
-            nursePromptText.fontSizeMin = Mathf.Min(nursePromptText.fontSizeMin, 18f);
-            nursePromptText.fontSizeMax = Mathf.Max(nursePromptText.fontSize, nursePromptText.fontSizeMax);
+            nursePromptText.enableAutoSizing = false;
             TryAddGlyphs(nursePromptText, prompt);
             nursePromptText.text = prompt;
         }
@@ -372,41 +366,10 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
             dialogueManager.gameObject.SetActive(true);
             dialogueManager.StopPlayback();
             dialogueManager.ShowLine(lineIndex);
-        }        else
-        {
-            Debug.LogWarning("[Part3] Dialogue manager is missing.", this);
-        }
-
-        PlayAudio(clip);
-    }
-
-    private void ShowDialogueText(string speakerName, string content, AudioClip clip)
-    {
-        ResolveReferences();
-        SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
-        SetPromptSkipButtonsVisible(false);
-        SetPanelVisible(dialoguePanel, true, dialoguePanelChildName);
-        SetPanelVisible(quizPanel, false, quizPanelChildName);
-
-        if (dialogueManager != null)
-        {
-            dialogueManager.gameObject.SetActive(true);
-            dialogueManager.StopPlayback();
-            dialogueManager.ShowText(speakerName, content);
         }
         else
         {
-            if (speakerText != null)
-            {
-                TryAddGlyphs(speakerText, speakerName);
-                speakerText.text = speakerName;
-            }
-
-            if (dialogueText != null)
-            {
-                TryAddGlyphs(dialogueText, content);
-                dialogueText.text = content;
-            }
+            Debug.LogWarning("[Part3] Dialogue manager is missing.", this);
         }
 
         PlayAudio(clip);
@@ -415,9 +378,9 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     private void ShowQuiz()
     {
         ResolveReferences();
+        visualDemo?.TemporarilyHideStickerForQuiz();
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
         SetPromptSkipButtonsVisible(false);
-        SetAllSceneObjectsNamedVisible("SkipVoice_Button", false);
         SetPanelVisible(dialoguePanel, false, dialoguePanelChildName);
         WorldSpaceUiPlacer.PlaceCanvasInFrontOfCamera(quizPanel);
         WorldSpaceUiPlacer.MatchQuizPanelToQuizOne(quizPanel, quizPanelChildName);
@@ -475,6 +438,59 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         yield return new WaitForSeconds(GetDialogueDelay(clip));
     }
 
+
+
+
+    private IEnumerator HoldMomClapping(float duration)
+    {
+        float endAt = Time.time + Mathf.Max(0.1f, duration);
+        float nextReplayAt = 0f;
+        while (Time.time < endAt)
+        {
+            if (Time.time >= nextReplayAt)
+            {
+                momAnimation?.PlayClapping();
+                nextReplayAt = Time.time + 0.45f;
+            }
+
+            yield return null;
+        }
+    }
+
+    private IEnumerator HoldMomBendKidListen(float duration)
+    {
+        momAnimation?.PlayBend();
+        yayaAnimation?.PlayKidListen();
+        yield return new WaitForSeconds(Mathf.Max(0.1f, duration));
+    }
+
+    private IEnumerator WaitForNurseActionToComplete(Action momLoop, Action yayaLoop)
+    {
+        float nextReplayAt = 0f;
+        while (waitingForNurseAction != WaitingForNurseAction.None)
+        {
+            if (Time.time >= nextReplayAt)
+            {
+                momLoop?.Invoke();
+                yayaLoop?.Invoke();
+                nextReplayAt = Time.time + 2f;
+            }
+
+            yield return null;
+        }
+    }
+    private IEnumerator WaitForStickerSelectionOrSkip()
+    {
+        if (visualDemo == null)
+            yield break;
+
+        visualDemo.ShowSticker();
+        while (!promptSkipRequested && !visualDemo.HudStickerWasSelected)
+            yield return null;
+
+        promptSkipRequested = false;
+    }
+
     private void PlayAudio(AudioClip clip)
     {
         if (dialogueAudioSource == null)
@@ -519,6 +535,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         correctRoutine = null;
         SetPanelVisible(correctPopup, false, "Correct_Popup");
         SetPanelVisible(quizPanel, false, quizPanelChildName);
+        visualDemo?.RestoreStickerAfterQuiz();
         onCorrectAnswer?.Invoke();
     }
 
@@ -601,6 +618,12 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         if (dialogueAudioSource == null)
             dialogueAudioSource = GetComponent<AudioSource>();
 
+        if (momAnimation == null)
+            momAnimation = FindObjectOfType<MomAnimationPlayer>(true);
+
+        if (yayaAnimation == null)
+            yayaAnimation = FindObjectOfType<YayaAnimationPlayer>(true);
+
         if (visualDemo == null)
             visualDemo = FindObjectOfType<Part3VisualDemoController>(true);
 
@@ -619,21 +642,6 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
             return;
 
         SetNamedChildrenVisible(nursePromptPanel.transform, "SkipVoice_Button", visible);
-    }
-
-    private static void SetAllSceneObjectsNamedVisible(string objectName, bool visible)
-    {
-        if (string.IsNullOrWhiteSpace(objectName))
-            return;
-
-        GameObject[] allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
-        foreach (GameObject candidate in allObjects)
-        {
-            if (candidate == null || candidate.name != objectName || !candidate.scene.IsValid())
-                continue;
-
-            candidate.SetActive(visible);
-        }
     }
 
     private void SetCombinedKidVisible(bool visible)
