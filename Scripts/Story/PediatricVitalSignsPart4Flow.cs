@@ -82,11 +82,18 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     [HideInInspector] [SerializeField] private string heartbeatEffectAnchorNames = "Yaya_Chest_StethoscopeAnchor|Yaya_Chest_Anchor|Yaya_StickerAnchor|StethoscopeAnchor|ChestAnchor";
     [HideInInspector] [SerializeField] private Vector3 heartbeatEffectAnchorOffset = new Vector3(0f, 0.16f, -0.05f);
     [Tooltip("Camera-relative position. X = right, Y = up, Z = forward. Use (0, 0, 0.85) for center view.")]
-    [SerializeField] private Vector3 heartbeatEffectCameraOffset = new Vector3(0f, 0f, 0.95f);
-    [Min(0.01f)] [SerializeField] private float heartbeatEffectVisibleScale = 0.16f;
+    [SerializeField] private Vector3 heartbeatEffectCameraOffset = new Vector3(0f, -0.16f, 0.95f);
+    [Min(0.01f)] [SerializeField] private float heartbeatEffectVisibleScale = 0.10f;
+    [Tooltip("Extra size multiplier for the heart (1 = original).")]
+    [Min(0.01f)] [SerializeField] private float heartbeatEffectSizeMultiplier = 0.75f;
+    [Tooltip("Extra height (m, along camera up) for the heart.")]
+    [SerializeField] private float heartbeatEffectExtraHeight = 0.12f;
     [Min(0.1f)] [SerializeField] private float heartbeatEffectDuration = 3.2f;
     [SerializeField] private AudioClip heartbeatEffectClip;
     [Min(0f)] [SerializeField] private float heartbeatEffectVolume = 1.5f;
+    [Tooltip("How many times louder than the clip itself (1 = as recorded).")]
+    [Range(1f, 5f)] [SerializeField] private float heartbeatLoudness = 3f;
+    private bool stickerStepSkipped;
     private GameObject heartbeatEffectInstance;
     private Coroutine heartbeatRuntimeRoutine;
     [SerializeField] private float yayaHugToyDelay = 2f;
@@ -212,6 +219,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
 
     public void DebugSkipCurrentNurseCheck()
     {
+        stickerStepSkipped = true;
         if (waitingForNurseAction != WaitingForNurseAction.None)
             waitingForNurseAction = WaitingForNurseAction.None;
     }
@@ -256,10 +264,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         ShowHeartbeatEffect(false);
 
         ShowNursePrompt(NurseGiveStickerBeforeEarTemp, WaitingForNurseAction.GiveStickerBeforeEarTemp);
-        yield return WaitForNurseActionToComplete(
-            () => momAnimation?.PlayStandingIdle(),
-            () => yayaAnimation?.PlaySittingDisbelief());
-        yield return PlayStickerRewardIfNeeded();
+        yield return WaitForStickerClickOrNurseAction();
 
         ShowDialogueLine(momEncourageLineIndex, momEncourageClip);
         momAnimation?.PlayClapping();
@@ -288,12 +293,51 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             () => yayaAnimation?.PlaySittingDisbelief());
 
         ShowDialogueLine(momComfortLineIndex, momComfortClip);
-        momAnimation?.PlayPointing();
+        momAnimation?.PlayComfortToward(yayaAnimation != null ? yayaAnimation.transform : null);
         yayaAnimation?.PlaySittingDisbelief();
         yield return WaitForDialogue(momComfortClip);
 
         ShowQuiz();
         routine = null;
+    }
+
+    // "è«‹ç”¨è²¼ç´™é¼“å‹µèŠ½èŠ½" step: clicking the HUD sticker completes the step and the sticker
+    // flies onto the teddy bear next to Yaya. Skip / matching speech plays the same flight.
+    private IEnumerator WaitForStickerClickOrNurseAction()
+    {
+        momAnimation?.PlayStandingIdle();
+        yayaAnimation?.PlaySittingDisbelief();
+
+        if (part3VisualDemo == null)
+            part3VisualDemo = FindObjectOfType<Part3VisualDemoController>(true);
+
+        if (part3VisualDemo == null)
+        {
+            yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+            yield return PlayStickerRewardIfNeeded();
+            yield break;
+        }
+
+        // This step needs BOTH: the nurse says the right thing AND gives Yaya the sticker
+        // (in any order). Only Skip gets past it without them.
+        part3VisualDemo.ResetHudStickerSelection();
+        part3VisualDemo.ShowSticker();
+        part3VisualDemo.BeginStickerGive();
+        stickerStepSkipped = false;
+        yield return new WaitUntil(() => stickerStepSkipped
+            || (waitingForNurseAction == WaitingForNurseAction.None && part3VisualDemo.HudStickerWasSelected));
+        stickerStepSkipped = false;
+        waitingForNurseAction = WaitingForNurseAction.None;
+
+        if (!part3VisualDemo.HudStickerWasSelected)
+            part3VisualDemo.HandleHudStickerClicked();
+        part3VisualDemo.EndStickerGive();
+
+        yield return null;
+        float timeout = Time.time + 3f;
+        while (part3VisualDemo.IsHudStickerAttaching && Time.time < timeout)
+            yield return null;
+        yield return new WaitForSeconds(0.3f);
     }
 
     private IEnumerator PlayStickerRewardIfNeeded()
@@ -332,6 +376,13 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         string keywords = GetKeywords(waitingForNurseAction);
         if (ContainsAnyKeyword(speechText, keywords))
         {
+            // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
+            if (KidEmotionGate.Blocking)
+            {
+                Debug.Log("[Part4] Keywords matched, but Yaya must be calmed first.", this);
+                return;
+            }
+
             Debug.Log($"[Part4] Backend matched {waitingForNurseAction}. text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
@@ -410,10 +461,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         SetPromptSkipButtonsVisible(false);
         SetPanelVisible(dialoguePanel, false, dialoguePanelChildName);
         SetPanelVisible(quizPanel, true, quizPanelChildName);
-
-        PrepareDesignedQuizPanel(quizPanel, quizPanelChildName);
-        RestoreDesignedQuizText(quizPanel, quizPanelChildName, "¦ÒÃD 4¡G", "Å@¥Í¨Ï¥Î¤°»ò¤èªk¨Ó´î¤ÖªÞªÞªº®`©È¡H");
-        EnsureQuizHeaderOverlay(GetQuizContentRoot(), "¦ÒÃD 4¡G", "Å@¥Í¨Ï¥Î¤°»ò¤èªk¨Ó´î¤ÖªÞªÞªº®`©È¡H");
+        QuizPanelRuntimeHelper.BeginQuiz(quizPanel, quizPanelChildName);
 
         StopQuizCompletionRoutine();
         quizCompletionRoutine = StartCoroutine(WaitForQuizPanelClosedThenStartNextPart());
@@ -431,6 +479,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             yield return null;
 
         quizCompletionRoutine = null;
+        QuizPanelRuntimeHelper.EndQuiz();
         part3VisualDemo?.RestoreStickerAfterQuiz();
         StartNextPartFlow();
     }
@@ -461,77 +510,6 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         quizCompletionRoutine = null;
     }
 
-
-    private void ApplyQuizQuestionText()
-    {
-        TMP_Text question = quizQuestionText;
-        if (question == null && quizPanel != null)
-        {
-            Transform root = FindDeepChild(quizPanel.transform, quizPanelChildName) ?? quizPanel.transform;
-            TMP_Text[] texts = root.GetComponentsInChildren<TMP_Text>(true);
-            foreach (TMP_Text text in texts)
-            {
-                if (text == null || ShouldIgnoreQuizButton(text.gameObject.name))
-                    continue;
-
-                if (text.text.Contains("¦ÒÃD") || text.name.IndexOf("Question", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    question = text;
-                    break;
-                }
-            }
-        }
-
-        if (question != null)
-            question.text = QuizQuestion;
-    }
-    private void ApplyQuizText()
-    {
-        if (quizQuestionText != null)
-            quizQuestionText.text = QuizQuestion;
-
-        if (quizOptionTexts != null)
-        {
-            for (int i = 0; i < quizOptionTexts.Length && i < QuizOptions.Length; i++)
-            {
-                if (quizOptionTexts[i] != null)
-                    quizOptionTexts[i].text = QuizOptions[i];
-            }
-        }
-
-        if (quizQuestionText != null && quizOptionTexts != null && quizOptionTexts.Length >= QuizOptions.Length)
-            return;
-
-        Transform root = quizPanel != null ? FindDeepChild(quizPanel.transform, quizPanelChildName) ?? quizPanel.transform : null;
-        if (root == null)
-            return;
-
-        TMP_Text[] foundTexts = root.GetComponentsInChildren<TMP_Text>(true);
-        List<TMP_Text> visibleTexts = new List<TMP_Text>();
-
-        foreach (TMP_Text text in foundTexts)
-        {
-            if (text == null || ShouldIgnoreQuizButton(text.gameObject.name))
-                continue;
-
-            visibleTexts.Add(text);
-        }
-
-        visibleTexts.Sort(CompareTextsByScreenOrder);
-        if (visibleTexts.Count > 0 && quizQuestionText == null)
-            visibleTexts[0].text = QuizQuestion;
-
-        for (int i = 0; i < QuizOptions.Length; i++)
-        {
-            if (quizOptionTexts != null && i < quizOptionTexts.Length && quizOptionTexts[i] != null)
-                continue;
-
-            int textIndex = i + 1;
-            if (textIndex < visibleTexts.Count)
-                visibleTexts[textIndex].text = QuizOptions[i];
-        }
-    }
-
     private void SelectAnswer(int index)
     {
         bool correct = index == correctAnswerIndex;
@@ -560,7 +538,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         correctRoutine = null;
         SetPanelVisible(correctPopup, false, "Correct_Popup");
         if (hideQuizAfterCorrect)
+        {
             SetPanelVisible(quizPanel, false, quizPanelChildName);
+            QuizPanelRuntimeHelper.EndQuiz();
+        }
         part3VisualDemo?.RestoreStickerAfterQuiz();
         onCorrectAnswer?.Invoke();
         StartNextPartFlow();
@@ -913,10 +894,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             heartbeatEffectDuration = 3.2f;
 
         if (Vector3.Distance(heartbeatEffectCameraOffset, new Vector3(-0.22f, -0.18f, 0.9f)) < 0.001f || Vector3.Distance(heartbeatEffectCameraOffset, new Vector3(0f, 0f, 0.85f)) < 0.001f)
-            heartbeatEffectCameraOffset = new Vector3(0f, 0f, 0.95f);
+            heartbeatEffectCameraOffset = new Vector3(0f, -0.16f, 0.95f);
 
-        if (heartbeatEffectVisibleScale <= 0f || Mathf.Abs(heartbeatEffectVisibleScale - 0.22f) < 0.001f || Mathf.Abs(heartbeatEffectVisibleScale - 0.35f) < 0.001f)
-            heartbeatEffectVisibleScale = 0.16f;
+        if (heartbeatEffectVisibleScale <= 0f || Mathf.Abs(heartbeatEffectVisibleScale - 0.22f) < 0.001f || Mathf.Abs(heartbeatEffectVisibleScale - 0.35f) < 0.001f || Mathf.Abs(heartbeatEffectVisibleScale - 0.16f) < 0.001f)
+            heartbeatEffectVisibleScale = 0.10f;
     }
     private void ShowHeartbeatEffect(bool visible)
     {
@@ -990,7 +971,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         {
             AudioSource source = effect.GetComponentInChildren<AudioSource>(true);
             if (source != null)
+            {
                 source.Stop();
+                AudioBoost.Stop(source);
+            }
         }
     }
 
@@ -998,13 +982,14 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     {
         EnsureHeartbeatAudio(effect);
         LineRenderer[] rings = EnsureHeartbeatRings(effect);
-        Vector3 baseScale = Vector3.one * heartbeatEffectVisibleScale;
+        Vector3 baseScale = Vector3.one * heartbeatEffectVisibleScale * heartbeatEffectSizeMultiplier;
         AudioSource source = effect.GetComponentInChildren<AudioSource>(true);
         if (source != null && source.clip != null)
         {
             source.Stop();
             source.loop = true;
             source.Play();
+            AudioBoost.Play(source, heartbeatLoudness);
         }
 
         float elapsed = 0f;
@@ -1022,7 +1007,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         }
 
         if (source != null)
+        {
             source.Stop();
+            AudioBoost.Stop(source);
+        }
         heartbeatRuntimeRoutine = null;
     }
 
@@ -1174,9 +1162,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         effect.transform.position = cameraTransform.position
             + cameraTransform.right * heartbeatEffectCameraOffset.x
             + cameraTransform.up * heartbeatEffectCameraOffset.y
-            + cameraTransform.forward * heartbeatEffectCameraOffset.z;
+            + cameraTransform.forward * heartbeatEffectCameraOffset.z
+            + cameraTransform.up * heartbeatEffectExtraHeight;
         effect.transform.rotation = Quaternion.LookRotation(effect.transform.position - cameraTransform.position, cameraTransform.up);
-        effect.transform.localScale = Vector3.one * heartbeatEffectVisibleScale;
+        effect.transform.localScale = Vector3.one * heartbeatEffectVisibleScale * heartbeatEffectSizeMultiplier;
     }
 
     private Transform FindFirstNamedTransform(string objectNames)
@@ -1281,129 +1270,6 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             || buttonName.IndexOf("ok", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-
-    private static void PrepareDesignedQuizPanel(GameObject target, string preferredChildName)
-    {
-        Transform root = target != null ? FindDeepChild(target.transform, preferredChildName) ?? target.transform : null;
-        if (root == null)
-            return;
-
-        string[] requiredChildren = { "QUIZ", "Question_BG_Plate", "Question_Text", "Divider_Line", "Btn_A", "Btn_B", "Btn_C", "Btn_D" };
-        foreach (string childName in requiredChildren)
-        {
-            Transform child = FindDeepChild(root, childName);
-            if (child != null)
-                child.gameObject.SetActive(true);
-        }
-
-        foreach (CanvasGroup group in root.GetComponentsInChildren<CanvasGroup>(true))
-        {
-            group.alpha = 1f;
-            group.interactable = true;
-            group.blocksRaycasts = true;
-        }
-
-        foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true))
-            graphic.enabled = true;
-
-        foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
-        {
-            text.enabled = true;
-            Color color = text.color;
-            color.a = 1f;
-            text.color = color;
-        }
-    }
-
-
-
-    private static void EnsureQuizHeaderOverlay(Transform root, string title, string question)
-    {
-        if (root == null)
-            return;
-
-        TextMeshProUGUI titleText = GetOrCreateQuizOverlayText(root, "Runtime_Quiz_Title");
-        ConfigureQuizOverlayText(titleText, title, 42f, new Vector2(0f, -34f), new Vector2(920f, 70f));
-
-        TextMeshProUGUI questionText = GetOrCreateQuizOverlayText(root, "Runtime_Quiz_Question");
-        ConfigureQuizOverlayText(questionText, question, 34f, new Vector2(0f, -112f), new Vector2(980f, 110f));
-    }
-
-    private static TextMeshProUGUI GetOrCreateQuizOverlayText(Transform root, string objectName)
-    {
-        Transform existing = FindDeepChild(root, objectName);
-        GameObject textObject = existing != null ? existing.gameObject : new GameObject(objectName, typeof(RectTransform));
-        if (existing == null)
-            textObject.transform.SetParent(root, false);
-
-        TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
-        if (text == null)
-            text = textObject.AddComponent<TextMeshProUGUI>();
-
-        textObject.SetActive(true);
-        text.transform.SetAsLastSibling();
-        return text;
-    }
-
-    private static void ConfigureQuizOverlayText(TextMeshProUGUI text, string value, float fontSize, Vector2 anchoredPosition, Vector2 size)
-    {
-        if (text == null)
-            return;
-
-        RectTransform rect = text.rectTransform;
-        rect.anchorMin = new Vector2(0.5f, 1f);
-        rect.anchorMax = new Vector2(0.5f, 1f);
-        rect.pivot = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = anchoredPosition;
-        rect.sizeDelta = size;
-        rect.localScale = Vector3.one;
-
-        text.text = value;
-        text.enabled = true;
-        text.raycastTarget = false;
-        text.alignment = TextAlignmentOptions.Center;
-        text.enableAutoSizing = true;
-        text.fontSizeMax = fontSize;
-        text.fontSizeMin = Mathf.Max(18f, fontSize * 0.55f);
-        text.color = Color.white;
-    }
-    private static void RestoreDesignedQuizText(GameObject target, string preferredChildName, string title, string question)
-    {
-        Transform root = target != null ? FindDeepChild(target.transform, preferredChildName) ?? target.transform : null;
-        if (root == null)
-            return;
-
-        SetDesignedText(root, "QUIZ", title);
-        SetDesignedText(root, "Question_Text", question);
-    }
-
-    private static void SetDesignedText(Transform root, string childName, string value)
-    {
-        Transform child = FindDeepChild(root, childName);
-        if (child == null)
-            return;
-
-        TMP_Text tmp = child.GetComponent<TMP_Text>() ?? child.GetComponentInChildren<TMP_Text>(true);
-        if (tmp != null)
-        {
-            tmp.text = value;
-            tmp.enabled = true;
-            Color color = tmp.color;
-            color.a = 1f;
-            tmp.color = color;
-            return;
-        }
-
-        Text legacy = child.GetComponent<Text>() ?? child.GetComponentInChildren<Text>(true);
-        if (legacy != null)
-        {
-            legacy.text = value;
-            legacy.enabled = true;
-            Color color = legacy.color;
-            color.a = 1f;
-            legacy.color = color;
-        }
-    }
     private static void SetPanelVisible(GameObject target, bool visible, string preferredChildName)
     {
         if (target == null)

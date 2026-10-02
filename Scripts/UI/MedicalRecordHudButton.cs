@@ -11,6 +11,10 @@ public class MedicalRecordHudButton : MonoBehaviour
     [SerializeField] bool followHead = true;
     [SerializeField] Vector3 localOffset = new Vector3(0f, 0.32f, 1.4f);
     [SerializeField] float followLerp = 12f;
+    [Tooltip("Extra offset added to Local Offset (x < 0 = more to the left).")]
+    [SerializeField] Vector3 extraLocalOffset = new Vector3(-0.06f, 0f, 0f);
+    [Tooltip("When the button is fixed to the camera (Follow Head off): metres to move it up (+) / down (-).")]
+    [SerializeField] float fixedRaise = 0.055f;
 
     [Header("Panel")]
     [SerializeField] bool hidePanelOnStart = true;
@@ -26,6 +30,10 @@ public class MedicalRecordHudButton : MonoBehaviour
             head = Camera.main.transform;
 
         ResolveMedicalRecordPanel();
+
+        // Fixed to the camera: nudge it up a little so the bear sticker fits right below it.
+        if (!followHead && head != null && transform.IsChildOf(head))
+            transform.position += head.up * fixedRaise;
 
         if (hidePanelOnStart && medicalRecordPanel != null)
             medicalRecordPanel.SetActive(false);
@@ -50,7 +58,7 @@ public class MedicalRecordHudButton : MonoBehaviour
         if (!followHead || head == null)
             return;
 
-        Vector3 targetPosition = head.TransformPoint(localOffset);
+        Vector3 targetPosition = head.TransformPoint(localOffset + extraLocalOffset);
         Quaternion targetRotation = Quaternion.LookRotation(transform.position - head.position, Vector3.up);
 
         if (followLerp <= 0f)

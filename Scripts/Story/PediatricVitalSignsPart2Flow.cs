@@ -194,6 +194,13 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         if (ContainsAnyKeyword(speechText, keywords))
         {
+            // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
+            if (KidEmotionGate.Blocking)
+            {
+                Debug.Log("[Part2] Keywords matched, but Yaya must be calmed first.", this);
+                return;
+            }
+
             Debug.Log($"[Part2] Backend matched {waitingForNurseAction}. text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
@@ -311,12 +318,17 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         respirationTimer.duration = Mathf.Max(60f, observationDelay);
         respirationTimer.startOnAwake = false;
-        respirationTimer.displayMode = MinimalRingTimer.DisplayMode.ScreenCorner;
-        respirationTimer.corner = MinimalRingTimer.Corner.TopRight;
+        // Same presentation as the heartbeat effect: world-space, centered under the prompt panel.
+        respirationTimer.displayMode = MinimalRingTimer.DisplayMode.WorldSpace;
+        respirationTimer.useHeartbeatLayout = true;
+        respirationTimer.heartbeatLayoutDiameter = 0.22f;
+        respirationTimer.heartbeatLayoutOffset = new Vector3(0f, -0.085f, 0.95f);
+        respirationTimer.showRingCaps = false;
+        respirationTimer.corner = MinimalRingTimer.Corner.TopLeft;
         respirationTimer.worldDiameter = 0.10f;
-        respirationTimer.size = 140f;
-        respirationTimer.margin = new Vector2(120f, 90f);
-        respirationTimer.worldOffset = new Vector3(0.30f, 0.06f, 0.90f);
+        respirationTimer.size = 110f;
+        respirationTimer.margin = new Vector2(680f, 210f);
+        respirationTimer.worldOffset = new Vector3(-0.10f, -0.08f, 0.90f);
         respirationTimer.SetVisible(false);
     }
 
@@ -326,11 +338,13 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         if (respirationTimer == null)
             return;
 
+        if (!respirationTimer.gameObject.activeSelf)
+            respirationTimer.gameObject.SetActive(true);
+
         ConfigureRespirationTimer();
         respirationTimer.SetVisible(true);
         respirationTimer.StartTimer();
     }
-
     private void ResetRespirationTimer()
     {
         ResolveRespirationTimer();
@@ -450,9 +464,8 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
         SetPromptSkipButtonsVisible(false);
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
-        WorldSpaceUiPlacer.PlaceCanvasInFrontOfCamera(quizPanel);
-        WorldSpaceUiPlacer.MatchQuizPanelToQuizOne(quizPanel, "Quiz_Panel_2");
         SetPanelVisible(quizPanel, true, "Quiz_Panel_2");
+        QuizPanelRuntimeHelper.BeginQuiz(quizPanel, "Quiz_Panel_2");
         BindQuizButtonsIfNeeded();
         momAnimation?.PlayStandingIdle();
     }
@@ -465,7 +478,10 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         if (correct)
         {
             if (hideQuizAfterCorrect)
+            {
                 SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
+                QuizPanelRuntimeHelper.EndQuiz();
+            }
 
             NurseryRhymeMusicController.Stop();
             StopCorrectRoutine();
@@ -485,6 +501,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         SetPromptSkipButtonsVisible(false);
         SetPanelVisible(dialoguePanel, false, "Dialogue_Panel");
         SetPanelVisible(quizPanel, false, "Quiz_Panel_2");
+        QuizPanelRuntimeHelper.EndQuiz();
         HideRespirationTimer();
 
         if (nextPartFlow == null)

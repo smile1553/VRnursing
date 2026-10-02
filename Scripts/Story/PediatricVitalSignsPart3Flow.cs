@@ -45,6 +45,19 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     [Header("Visual Demo")]
     [SerializeField] private Part3VisualDemoController visualDemo;
 
+    [Header("Listen Performance (ForGan prefab: mom + kid + stethoscope)")]
+    [SerializeField] private bool useListenPerformancePrefab = true;
+    [SerializeField] private string listenPerformancePrefabNames = "Listen_Mom_Kid";
+    [SerializeField] private string listenPerformanceHideNames = "Stethoscope";
+    [Tooltip("Mom stays where she is standing and just turns to Yaya (no teleport to Gan's spot).")]
+    [SerializeField] private bool listenMomStayInPlace = true;
+    [Tooltip("0..1: how much Yaya turns toward Mom during the listen performance (1 = face Mom).")]
+    [Range(0f, 1f)] [SerializeField] private float listenYayaTurnTowardMom = 1f;
+    public enum ListenStaging { MomWalksToFront, MomStaysYayaTurns }
+    [Tooltip("MomWalksToFront: Mom walks to the spot in front of Yaya, then the listen animation plays (no clipping).\nMomStaysYayaTurns: Mom stays, Yaya turns toward her (may clip into the bed).")]
+    [SerializeField] private ListenStaging listenStaging = ListenStaging.MomWalksToFront;
+    private PrefabPerformanceRuntime.PerformanceHandle listenPerformance;
+
     [Header("Prompt Text")]
     [SerializeField] private TMP_Text nursePromptText;
 
@@ -229,6 +242,8 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
 
         visualDemo?.ResetHudStickerSelection();
         visualDemo?.ShowSticker();
+        visualDemo?.BeginStickerGive();
+        promptSkipRequested = false;
         ShowNursePrompt(ReassureWithStickerPrompt, WaitingForNurseAction.ReassureWithSticker);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlaySittingDisbelief();
@@ -261,8 +276,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         Debug.Log($"[Part3] Starting MomBend/KidListen. mom={(momAnimation != null ? momAnimation.name : "null")}, yaya={(yayaAnimation != null ? yayaAnimation.name : "null")}", this);
         yield return HoldMomBendKidListen(GetDialogueDelay(momDoctorClip));
 
-        momAnimation?.PlayBend();
-        yayaAnimation?.PlayKidListen();
+        BeginListenPerformance();
         if (visualDemo != null)
         {
             yield return visualDemo.MoveStethoscopeForYayaListeningMom();
@@ -274,12 +288,15 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         }
 
         ShowDialogueLine(momHeartbeatLineIndex, momHeartbeatClip);
-        momAnimation?.PlayBend();
-        yayaAnimation?.PlayKidListen();
-        yield return WaitForDialogue(momHeartbeatClip);
+        float momHeartbeatDelay = GetDialogueDelay(momHeartbeatClip);
+        BeginListenPerformance();
+        yield return new WaitForSeconds(momHeartbeatDelay);
 
+        EndListenPerformance();
+        // Mom walks back right away so she does not block Yaya during the next line.
+        momAnimation?.WalkBackToStart();
         ShowDialogueLine(yayaEarPainLineIndex, yayaEarPainClip);
-        yayaAnimation?.PlaySittingDisbelief();
+        yayaAnimation?.PlayEarPain();
         yield return WaitForDialogue(yayaEarPainClip);
 
         ShowQuiz();
@@ -299,6 +316,13 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         string keywords = GetKeywords(waitingForNurseAction);
         if (ContainsAnyKeyword(speechText, keywords))
         {
+            // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
+            if (KidEmotionGate.Blocking)
+            {
+                Debug.Log("[Part3] Keywords matched, but Yaya must be calmed first.", this);
+                return;
+            }
+
             Debug.Log($"[Part3] Backend matched {waitingForNurseAction}. text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
@@ -334,8 +358,8 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         SetPanelVisible(nursePromptPanel, true, "TopHint_Panel");
         SetPromptSkipButtonsVisible(waitingAction != WaitingForNurseAction.None);
 
-        if (waitingAction == WaitingForNurseAction.ReassureWithSticker)
-            visualDemo?.ShowSticker();
+        if (waitingAction == WaitingForNurseAction.ReassureWithSticker && visualDemo != null && !visualDemo.HudStickerWasSelected)
+            visualDemo.ShowSticker();
 
         if (nursePromptText != null)
         {
@@ -382,30 +406,12 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
         SetPromptSkipButtonsVisible(false);
         SetPanelVisible(dialoguePanel, false, dialoguePanelChildName);
-        WorldSpaceUiPlacer.PlaceCanvasInFrontOfCamera(quizPanel);
-        WorldSpaceUiPlacer.MatchQuizPanelToQuizOne(quizPanel, quizPanelChildName);
         SetPanelVisible(quizPanel, true, quizPanelChildName);
+        QuizPanelRuntimeHelper.BeginQuiz(quizPanel, quizPanelChildName);
         SetPanelVisible(correctPopup, false, "Correct_Popup");
         SetPanelVisible(wrongPopup, false, "Wrong_Popup");
         BindQuizButtonsIfNeeded();
-    }
-
-    private void ApplyQuizText()
-    {
-        if (quizQuestionText != null)
-            quizQuestionText.text = QuizQuestion;
-
-        if (quizOptionTexts == null)
-            return;
-
-        for (int i = 0; i < quizOptionTexts.Length && i < QuizOptions.Length; i++)
-        {
-            if (quizOptionTexts[i] != null)
-                quizOptionTexts[i].text = QuizOptions[i];
-        }
-    }
-
-    private void SelectAnswer(int index)
+    }    private void SelectAnswer(int index)
     {
         bool correct = index == correctAnswerIndex;
         Debug.Log(correct ? CorrectFeedback : WrongFeedback, this);
@@ -417,7 +423,10 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
             SetPanelVisible(correctPopup, true, "Correct_Popup");
 
             if (hideQuizAfterCorrect)
+            {
                 SetPanelVisible(quizPanel, false, quizPanelChildName);
+                QuizPanelRuntimeHelper.EndQuiz();
+            }
 
             yayaAnimation?.PlaySittingIdle();
             StopCorrectRoutine();
@@ -428,6 +437,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         StopCorrectRoutine();
         StopWrongRoutine();
         SetPanelVisible(quizPanel, true, quizPanelChildName);
+        QuizPanelRuntimeHelper.BeginQuiz(quizPanel, quizPanelChildName);
         SetPanelVisible(correctPopup, false, "Correct_Popup");
         SetPanelVisible(wrongPopup, true, "Wrong_Popup");
         wrongRoutine = StartCoroutine(HideWrongAfterDelay());
@@ -459,9 +469,47 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
 
     private IEnumerator HoldMomBendKidListen(float duration)
     {
-        momAnimation?.PlayBend();
-        yayaAnimation?.PlayKidListen();
-        yield return new WaitForSeconds(Mathf.Max(0.1f, duration));
+        float startTime = Time.time;
+        if (listenStaging == ListenStaging.MomWalksToFront)
+            yield return BeginListenPerformanceWithWalk();
+        else
+            BeginListenPerformance();
+
+        float remaining = duration - (Time.time - startTime);
+        if (remaining > 0.05f)
+            yield return new WaitForSeconds(remaining);
+    }
+
+    // Build the performance invisibly, walk the scene Mom to where the performance Mom stands,
+    // then swap to the performance (Mom + Yaya + stethoscope). Yaya never turns, so no clipping.
+    private IEnumerator BeginListenPerformanceWithWalk()
+    {
+        if (listenPerformance != null && !listenPerformance.IsStopped)
+            yield break;
+
+        listenPerformance = null;
+        if (useListenPerformancePrefab && yayaAnimation != null)
+        {
+            listenPerformance = PrefabPerformanceRuntime.StartBoneAligned(
+                this,
+                listenPerformancePrefabNames,
+                "Kid", yayaAnimation.gameObject,
+                "Mom", momAnimation != null ? momAnimation.gameObject : null,
+                false, 0f, true, 0f,
+                FindObjectsByNames(listenPerformanceHideNames));
+        }
+
+        if (listenPerformance == null)
+        {
+            BeginListenPerformance();
+            yield break;
+        }
+
+        if (momAnimation != null && listenPerformance.TryGetActorPose("Mom", out Vector3 momPosition, out Vector3 momForward))
+            yield return momAnimation.WalkTo(momPosition, momForward);
+
+        listenPerformance.Reveal();
+        Debug.Log("[Part3] Mom walked over; playing ForGan listen performance.", this);
     }
 
     private IEnumerator WaitForNurseActionToComplete(Action momLoop, Action yayaLoop)
@@ -484,11 +532,17 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         if (visualDemo == null)
             yield break;
 
-        visualDemo.ShowSticker();
+        // The right words were already said (or skipped); the sticker must be given too.
+        if (!visualDemo.HudStickerWasSelected)
+        {
+            visualDemo.ShowSticker();
+            visualDemo.BeginStickerGive();
+        }
         while (!promptSkipRequested && !visualDemo.HudStickerWasSelected)
             yield return null;
 
         promptSkipRequested = false;
+        visualDemo.EndStickerGive();
     }
 
     private void PlayAudio(AudioClip clip)
@@ -510,8 +564,77 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         return Mathf.Max(0.1f, dialogueAdvanceDelay);
     }
 
+    private void BeginListenPerformance()
+    {
+        if (listenPerformance != null && !listenPerformance.IsStopped)
+            return;
+
+        listenPerformance = null;
+        if (useListenPerformancePrefab && yayaAnimation != null)
+        {
+            listenPerformance = PrefabPerformanceRuntime.StartBoneAligned(
+                this,
+                listenPerformancePrefabNames,
+                "Kid", yayaAnimation.gameObject,
+                "Mom", momAnimation != null ? momAnimation.gameObject : null,
+                listenMomStayInPlace,
+                listenYayaTurnTowardMom,
+                0f,
+                FindObjectsByNames(listenPerformanceHideNames));
+        }
+
+        if (listenPerformance != null)
+        {
+            Debug.Log("[Part3] Playing ForGan listen performance (Listen_Mom_Kid).", this);
+            return;
+        }
+
+        // Fallback: retarget the humanoid clips onto the scene actors.
+        momAnimation?.PlayBend();
+        yayaAnimation?.PlayKidListen();
+    }
+
+    private void EndListenPerformance()
+    {
+        if (listenPerformance == null)
+            return;
+
+        listenPerformance.Stop();
+        listenPerformance = null;
+    }
+
+    private static GameObject[] FindObjectsByNames(string names)
+    {
+        if (string.IsNullOrWhiteSpace(names))
+            return new GameObject[0];
+
+        System.Collections.Generic.List<GameObject> found = new System.Collections.Generic.List<GameObject>();
+        Transform[] all = Resources.FindObjectsOfTypeAll<Transform>();
+        foreach (string raw in names.Split('|'))
+        {
+            string wanted = raw.Trim();
+            if (wanted.Length == 0)
+                continue;
+            foreach (Transform t in all)
+            {
+                if (t != null && t.gameObject.scene.IsValid() && t.name == wanted)
+                {
+                    found.Add(t.gameObject);
+                    break;
+                }
+            }
+        }
+        return found.ToArray();
+    }
+
+    private void OnDisable()
+    {
+        EndListenPerformance();
+    }
+
     private void StopRoutine()
     {
+        EndListenPerformance();
         if (routine != null)
         {
             StopCoroutine(routine);
@@ -535,6 +658,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         correctRoutine = null;
         SetPanelVisible(correctPopup, false, "Correct_Popup");
         SetPanelVisible(quizPanel, false, quizPanelChildName);
+        QuizPanelRuntimeHelper.EndQuiz();
         visualDemo?.RestoreStickerAfterQuiz();
         onCorrectAnswer?.Invoke();
     }

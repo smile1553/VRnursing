@@ -76,6 +76,9 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     [SerializeField] private float subtitleDelay = 3f;
     [SerializeField] private float actionDelay = 2.5f;
 
+    [Header("Next Part")]
+    [SerializeField] private bool startPart6AfterQuiz = true;
+
     [Header("Quiz")]
     [SerializeField] private bool bindQuizButtonsAutomatically = true;
     [SerializeField] private int expectedQuizButtonCount = 4;
@@ -239,18 +242,19 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         yield return WaitForNurseActionOrSkip();
 
         ShowDialogueLine(yayaComfortToyLineIndex, yayaComfortToyClip);
-        yayaAnimation?.PlaySittingIdle();
+        yayaAnimation?.PlayHugBear();
         momAnimation?.PlayStandingIdle();
         yield return WaitForDialogue(yayaComfortToyClip);
 
         ShowDialogueLine(yayaComfortToyFeelingLineIndex, yayaComfortToyFeelingClip);
-        yayaAnimation?.PlaySittingIdle();
+        yayaAnimation?.PlayHugBear();
         momAnimation?.PlayStandingIdle();
         yield return WaitForDialogue(yayaComfortToyFeelingClip);
 
-        if (!PrefabPerformanceRuntime.TryPlayBoundsAligned(this, "Kid_Combined|Kid_Combined 1|kidtakingbeartemp", actionDelay, yayaAnimation != null ? yayaAnimation.gameObject : null))
-            yayaAnimation?.PlayKidCombine();
+        yayaAnimation?.PlayKidCombine();
         onToyTemperatureMeasure?.Invoke();
+        // Short beat after the comfort-toy line so the next prompt follows quickly.
+        yield return new WaitForSeconds(Mathf.Clamp(actionDelay, 0.1f, 0.6f));
 
         ShowNursePrompt(NurseEncourageYayaTemperature, WaitingForNurseAction.EncourageYayaTemperature);
         momAnimation?.PlayStandingIdle();
@@ -258,7 +262,7 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
 
         ShowDialogueLine(yayaMomHugLineIndex, yayaMomHugClip);
         yayaAnimation?.PlaySittingDisbelief();
-        momAnimation?.PlayStandingIdle();
+        momAnimation?.PlayComfortToward(yayaAnimation != null ? yayaAnimation.transform : null);
         yield return WaitForDialogue(yayaMomHugClip);
 
         ShowDialogueLine(momEncourageEarLineIndex, momEncourageEarClip);
@@ -283,7 +287,7 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
 
         ShowDialogueLine(yayaChooseEarLineIndex, yayaChooseEarClip);
         float pointEarDelay = GetDialogueDelay(yayaChooseEarClip);
-        if (!PrefabPerformanceRuntime.TryPlay(this, "Kid_PointEar|KidPointEar", pointEarDelay, yayaAnimation != null ? yayaAnimation.gameObject : null))
+        if (!PrefabPerformanceRuntime.TryPlayBoneAligned(this, "Kid_PointEar|KidPointEar", pointEarDelay, yayaAnimation != null ? yayaAnimation.gameObject : null))
             yayaAnimation?.PlayKidPointEar();
         onYayaTemperatureMeasure?.Invoke();
         yield return new WaitForSeconds(pointEarDelay);
@@ -304,6 +308,13 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         string keywords = GetKeywords(waitingForNurseAction);
         if (ContainsAnyKeyword(speechText, keywords))
         {
+            // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
+            if (KidEmotionGate.Blocking)
+            {
+                Debug.Log("[Part5] Keywords matched, but Yaya must be calmed first.", this);
+                return;
+            }
+
             Debug.Log($"[Part5] Backend matched {waitingForNurseAction}. text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
@@ -332,7 +343,8 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     private IEnumerator WaitForNurseActionOrSkip()
     {
         skipRequested = false;
-        bool allowStickerSelection = waitingForNurseAction == WaitingForNurseAction.EncourageYayaTemperature;
+        // The sticker can only be given when a prompt asks for it; this one does not.
+        bool allowStickerSelection = false;
         if (allowStickerSelection && part3VisualDemo != null)
         {
             part3VisualDemo.ResetHudStickerSelection();
@@ -455,6 +467,12 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         quizCompletionRoutine = null;
         QuizPanelRuntimeHelper.EndQuiz();
         part3VisualDemo?.RestoreStickerAfterQuiz();
+
+        if (startPart6AfterQuiz)
+        {
+            Debug.Log("[Part5] Quiz 5 closed: starting Part6.", this);
+            PediatricVitalSignsPart6Flow.FindOrCreate().StartPart6();
+        }
     }
 
     private void StopQuizCompletionRoutine()
@@ -522,8 +540,10 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
 
     private float GetDialogueDelay(AudioClip clip)
     {
+        // Use the audible part of the clip (trailing silence trimmed) so lines follow each other
+        // right after the voice ends instead of pausing.
         if (useAudioLengthForDialogueDelay && clip != null)
-            return Mathf.Max(0.1f, clip.length + extraDelayAfterAudio);
+            return Mathf.Max(0.1f, AudioClipTrim.GetAudibleLength(clip) + Mathf.Min(extraDelayAfterAudio, 0.2f));
 
         return Mathf.Max(0.1f, dialogueAdvanceDelay);
     }

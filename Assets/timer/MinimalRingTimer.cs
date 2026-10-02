@@ -18,6 +18,13 @@ public class MinimalRingTimer : MonoBehaviour
     public bool useCameraCorner = true;
     public Vector3 cameraCornerOffset = new Vector3(0.24f, 0.30f, 0.85f);
 
+    [Header("Heartbeat-style Placement (center of view, like the heart effect)")]
+    public bool useHeartbeatLayout = true;
+    public Vector3 heartbeatLayoutOffset = new Vector3(0f, -0.04f, 0.95f);
+    public float heartbeatLayoutDiameter = 0.16f;
+    [Tooltip("Round dots at both ends of the ring.")]
+    public bool showRingCaps = false;
+
     [Header("Timer")]
     public float duration = 60f;
     public bool startOnAwake = false;
@@ -61,6 +68,7 @@ public class MinimalRingTimer : MonoBehaviour
     private int lastWholeSecond;
 
     private GameObject canvasGO;
+    private float builtSize;
     private Image ring;
     private Image capStart;
     private Image capEnd;
@@ -196,6 +204,7 @@ public class MinimalRingTimer : MonoBehaviour
 
     private void BuildUI()
     {
+        builtSize = size;
         canvasGO = new GameObject("RingTimerCanvas", typeof(RectTransform));
         canvasGO.transform.SetParent(transform, false);
 
@@ -279,6 +288,15 @@ public class MinimalRingTimer : MonoBehaviour
         Transform t = canvasGO.transform;
         Camera cam = Camera.main;
 
+        if (useHeartbeatLayout && cam != null)
+        {
+            Transform hct = cam.transform;
+            t.position = hct.position + hct.right * heartbeatLayoutOffset.x + hct.up * heartbeatLayoutOffset.y + hct.forward * heartbeatLayoutOffset.z;
+            t.rotation = Quaternion.LookRotation(t.position - hct.position, hct.up);
+            t.localScale = Vector3.one * (heartbeatLayoutDiameter / Mathf.Max(1f, builtSize > 0f ? builtSize : size));
+            return;
+        }
+
         if (useCameraCorner && cam != null)
         {
             Transform ct = cam.transform;
@@ -316,12 +334,15 @@ public class MinimalRingTimer : MonoBehaviour
         }
 
         if (capStart != null)
+        {
             capStart.color = warning ? warningRingColor : ringColor;
+            capStart.enabled = showRingCaps;
+        }
 
         if (capEnd != null)
         {
             capEnd.color = warning ? warningRingColor : ringColor;
-            capEnd.enabled = normalized > 0.001f;
+            capEnd.enabled = showRingCaps && normalized > 0.001f;
         }
 
         if (capEndPivot != null)

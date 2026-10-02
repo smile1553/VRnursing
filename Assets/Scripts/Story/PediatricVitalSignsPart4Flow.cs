@@ -84,9 +84,16 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     [Tooltip("Camera-relative position. X = right, Y = up, Z = forward. Use (0, 0, 0.85) for center view.")]
     [SerializeField] private Vector3 heartbeatEffectCameraOffset = new Vector3(0f, -0.16f, 0.95f);
     [Min(0.01f)] [SerializeField] private float heartbeatEffectVisibleScale = 0.10f;
+    [Tooltip("Extra size multiplier for the heart (1 = original).")]
+    [Min(0.01f)] [SerializeField] private float heartbeatEffectSizeMultiplier = 0.75f;
+    [Tooltip("Extra height (m, along camera up) for the heart.")]
+    [SerializeField] private float heartbeatEffectExtraHeight = 0.12f;
     [Min(0.1f)] [SerializeField] private float heartbeatEffectDuration = 3.2f;
     [SerializeField] private AudioClip heartbeatEffectClip;
     [Min(0f)] [SerializeField] private float heartbeatEffectVolume = 1.5f;
+    [Tooltip("How many times louder than the clip itself (1 = as recorded).")]
+    [Range(1f, 5f)] [SerializeField] private float heartbeatLoudness = 3f;
+    private bool stickerStepSkipped;
     private GameObject heartbeatEffectInstance;
     private Coroutine heartbeatRuntimeRoutine;
     [SerializeField] private float yayaHugToyDelay = 2f;
@@ -212,6 +219,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
 
     public void DebugSkipCurrentNurseCheck()
     {
+        stickerStepSkipped = true;
         if (waitingForNurseAction != WaitingForNurseAction.None)
             waitingForNurseAction = WaitingForNurseAction.None;
     }
@@ -256,10 +264,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         ShowHeartbeatEffect(false);
 
         ShowNursePrompt(NurseGiveStickerBeforeEarTemp, WaitingForNurseAction.GiveStickerBeforeEarTemp);
-        yield return WaitForNurseActionToComplete(
-            () => momAnimation?.PlayStandingIdle(),
-            () => yayaAnimation?.PlaySittingDisbelief());
-        yield return PlayStickerRewardIfNeeded();
+        yield return WaitForStickerClickOrNurseAction();
 
         ShowDialogueLine(momEncourageLineIndex, momEncourageClip);
         momAnimation?.PlayClapping();
@@ -288,12 +293,51 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             () => yayaAnimation?.PlaySittingDisbelief());
 
         ShowDialogueLine(momComfortLineIndex, momComfortClip);
-        momAnimation?.PlayPointing();
+        momAnimation?.PlayComfortToward(yayaAnimation != null ? yayaAnimation.transform : null);
         yayaAnimation?.PlaySittingDisbelief();
         yield return WaitForDialogue(momComfortClip);
 
         ShowQuiz();
         routine = null;
+    }
+
+    // "請用貼紙鼓勵芽芽" step: clicking the HUD sticker completes the step and the sticker
+    // flies onto the teddy bear next to Yaya. Skip / matching speech plays the same flight.
+    private IEnumerator WaitForStickerClickOrNurseAction()
+    {
+        momAnimation?.PlayStandingIdle();
+        yayaAnimation?.PlaySittingDisbelief();
+
+        if (part3VisualDemo == null)
+            part3VisualDemo = FindObjectOfType<Part3VisualDemoController>(true);
+
+        if (part3VisualDemo == null)
+        {
+            yield return new WaitUntil(() => waitingForNurseAction == WaitingForNurseAction.None);
+            yield return PlayStickerRewardIfNeeded();
+            yield break;
+        }
+
+        // This step needs BOTH: the nurse says the right thing AND gives Yaya the sticker
+        // (in any order). Only Skip gets past it without them.
+        part3VisualDemo.ResetHudStickerSelection();
+        part3VisualDemo.ShowSticker();
+        part3VisualDemo.BeginStickerGive();
+        stickerStepSkipped = false;
+        yield return new WaitUntil(() => stickerStepSkipped
+            || (waitingForNurseAction == WaitingForNurseAction.None && part3VisualDemo.HudStickerWasSelected));
+        stickerStepSkipped = false;
+        waitingForNurseAction = WaitingForNurseAction.None;
+
+        if (!part3VisualDemo.HudStickerWasSelected)
+            part3VisualDemo.HandleHudStickerClicked();
+        part3VisualDemo.EndStickerGive();
+
+        yield return null;
+        float timeout = Time.time + 3f;
+        while (part3VisualDemo.IsHudStickerAttaching && Time.time < timeout)
+            yield return null;
+        yield return new WaitForSeconds(0.3f);
     }
 
     private IEnumerator PlayStickerRewardIfNeeded()
@@ -332,6 +376,13 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         string keywords = GetKeywords(waitingForNurseAction);
         if (ContainsAnyKeyword(speechText, keywords))
         {
+            // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
+            if (KidEmotionGate.Blocking)
+            {
+                Debug.Log("[Part4] Keywords matched, but Yaya must be calmed first.", this);
+                return;
+            }
+
             Debug.Log($"[Part4] Backend matched {waitingForNurseAction}. text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
@@ -920,7 +971,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         {
             AudioSource source = effect.GetComponentInChildren<AudioSource>(true);
             if (source != null)
+            {
                 source.Stop();
+                AudioBoost.Stop(source);
+            }
         }
     }
 
@@ -928,13 +982,14 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     {
         EnsureHeartbeatAudio(effect);
         LineRenderer[] rings = EnsureHeartbeatRings(effect);
-        Vector3 baseScale = Vector3.one * heartbeatEffectVisibleScale;
+        Vector3 baseScale = Vector3.one * heartbeatEffectVisibleScale * heartbeatEffectSizeMultiplier;
         AudioSource source = effect.GetComponentInChildren<AudioSource>(true);
         if (source != null && source.clip != null)
         {
             source.Stop();
             source.loop = true;
             source.Play();
+            AudioBoost.Play(source, heartbeatLoudness);
         }
 
         float elapsed = 0f;
@@ -952,7 +1007,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         }
 
         if (source != null)
+        {
             source.Stop();
+            AudioBoost.Stop(source);
+        }
         heartbeatRuntimeRoutine = null;
     }
 
@@ -1104,9 +1162,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         effect.transform.position = cameraTransform.position
             + cameraTransform.right * heartbeatEffectCameraOffset.x
             + cameraTransform.up * heartbeatEffectCameraOffset.y
-            + cameraTransform.forward * heartbeatEffectCameraOffset.z;
+            + cameraTransform.forward * heartbeatEffectCameraOffset.z
+            + cameraTransform.up * heartbeatEffectExtraHeight;
         effect.transform.rotation = Quaternion.LookRotation(effect.transform.position - cameraTransform.position, cameraTransform.up);
-        effect.transform.localScale = Vector3.one * heartbeatEffectVisibleScale;
+        effect.transform.localScale = Vector3.one * heartbeatEffectVisibleScale * heartbeatEffectSizeMultiplier;
     }
 
     private Transform FindFirstNamedTransform(string objectNames)

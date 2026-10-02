@@ -12,7 +12,13 @@ public class Part3VisualDemoController : MonoBehaviour
     [SerializeField] private GameObject stickerObject;
     [SerializeField] private Sprite stickerSprite;
     [SerializeField] private Transform stickerAnchor;
-    [SerializeField] private Vector3 fallbackStickerCameraOffset = new Vector3(0.34f, -0.04f, 0.9f);
+    [SerializeField] private Vector3 fallbackStickerCameraOffset = new Vector3(-0.30f, -0.17f, 0.9f);
+    [Tooltip("Sticker sits on the LEFT, in the same column as the medical-record button, just below it (moved further down/up automatically if a prompt or dialogue box is in the way).")]
+    [SerializeField] private bool alignStickerWithRecordButton = true;
+    [Tooltip("Extra up (+) / down (-) shift in metres after the automatic placement.")]
+    [SerializeField] private float stickerExtraVerticalOffset = 0.012f;
+    [Tooltip("Size of the sticker in the corner of the view (1 = original size).")]
+    [SerializeField] private float hudStickerSizeMultiplier = 0.8f;
     [SerializeField] private bool forceStickerSymmetricHudOffset = true;
     [SerializeField] private bool keepStickerInCameraCorner = true;
     // Keep the bear sticker close to the size of the medical-record card in world space.
@@ -45,6 +51,8 @@ public class Part3VisualDemoController : MonoBehaviour
     [SerializeField] private float stethoscopeMoveDuration = 0.65f;
     [SerializeField] private float stethoscopePulseDuration = 0.45f;
     [SerializeField] private float heartbeatDuration = 3.2f;
+    [Tooltip("How many times louder than the clip itself (1 = as recorded).")]
+    [Range(1f, 5f)] [SerializeField] private float heartbeatLoudness = 3f;
 
     private Coroutine stickerRoutine;
     private Coroutine hudStickerAttachRoutine;
@@ -59,6 +67,8 @@ public class Part3VisualDemoController : MonoBehaviour
     private XRSimpleInteractable hudStickerInteractable;
 
     public bool HudStickerWasSelected => hudStickerWasSelected;
+    public bool IsHudStickerAttaching => hudStickerAttaching;
+    public GameObject StickerObject => stickerObject;
 
     public void ResetHudStickerSelection()
     {
@@ -145,6 +155,9 @@ public class Part3VisualDemoController : MonoBehaviour
     {
         if (!stickerTemporarilyHiddenForQuiz && !hudStickerAttaching && stickerHudVisible && keepStickerInCameraCorner)
             PlaceFallbackStickerNearCamera();
+
+        UpdateStickerGlow();
+        UpdateVrStickerClick();
     }
 
     public void HighlightStethoscope()
@@ -178,9 +191,12 @@ public class Part3VisualDemoController : MonoBehaviour
         audioSource.Stop();
         audioSource.clip = heartbeatClip;
         audioSource.loop = true;
+        audioSource.volume = 1f;
         audioSource.Play();
+        AudioBoost.Play(audioSource, heartbeatLoudness);
         yield return new WaitForSeconds(Mathf.Max(0.1f, heartbeatDuration));
         audioSource.Stop();
+        AudioBoost.Stop(audioSource);
         audioSource.loop = false;
     }
 
@@ -314,7 +330,152 @@ public class Part3VisualDemoController : MonoBehaviour
         if (!forceStickerSymmetricHudOffset)
             return;
 
-        fallbackStickerCameraOffset = new Vector3(0.34f, -0.04f, 0.9f);
+        fallbackStickerCameraOffset = new Vector3(-0.30f, -0.17f, 0.9f);
+    }
+
+    private bool stickerColumnSolved;
+    private float stickerColumnSolveTime;
+    private Vector3 stickerColumnOffset;
+
+    // ------------------------------------------------------------------------------
+    // Giving the sticker: only possible while a prompt asks for it. During that time the
+    // sticker glows and pulses, and it can be clicked with the mouse or a VR controller ray.
+    // ------------------------------------------------------------------------------
+    [Header("Sticker giving")]
+    [SerializeField] private Color stickerGlowColor = new Color(1f, 0.85f, 0.35f, 1f);
+    [SerializeField] private float stickerGlowPulseSpeed = 0.7f;
+    private bool stickerGiveEnabled;
+    private GameObject placedStickerCopy;
+    private SpriteRenderer stickerGlow;
+    private XRRayInteractor[] rayInteractors;
+    private float nextRayScanTime;
+    private bool vrTriggerWasDown;
+    private readonly System.Collections.Generic.List<UnityEngine.XR.InputDevice> xrDevices = new System.Collections.Generic.List<UnityEngine.XR.InputDevice>();
+
+    public bool IsStickerGiveActive => stickerGiveEnabled;
+
+    public void BeginStickerGive()
+    {
+        stickerGiveEnabled = true;
+    }
+
+    public void EndStickerGive()
+    {
+        stickerGiveEnabled = false;
+        if (stickerGlow != null)
+            stickerGlow.enabled = false;
+    }
+
+    private void UpdateStickerGlow()
+    {
+        bool glowing = stickerGiveEnabled && !hudStickerWasSelected && stickerHudVisible && !hudStickerAttaching
+            && stickerObject != null && stickerObject.activeInHierarchy;
+
+        if (glowing && stickerGlow == null)
+        {
+            SpriteRenderer source = stickerObject.GetComponent<SpriteRenderer>();
+            if (source != null && source.sprite != null)
+            {
+                GameObject glowObject = new GameObject("Sticker_Glow");
+                glowObject.transform.SetParent(stickerObject.transform, false);
+                glowObject.transform.localPosition = new Vector3(0f, 0f, 0.002f);
+                stickerGlow = glowObject.AddComponent<SpriteRenderer>();
+                stickerGlow.sprite = source.sprite;
+                stickerGlow.sortingLayerID = source.sortingLayerID;
+                stickerGlow.sortingOrder = source.sortingOrder - 1;
+            }
+        }
+
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f * stickerGlowPulseSpeed);
+        if (stickerGlow != null)
+        {
+            stickerGlow.enabled = glowing;
+            if (glowing)
+            {
+                Color c = stickerGlowColor;
+                c.a = Mathf.Lerp(0.35f, 0.9f, pulse);
+                stickerGlow.color = c;
+                stickerGlow.transform.localScale = Vector3.one * Mathf.Lerp(1.14f, 1.22f, pulse);
+            }
+        }
+
+        // Gentle "pick me" pulse of the sticker itself (placement resets the scale every frame).
+        if (glowing)
+            stickerObject.transform.localScale *= 1f + 0.015f * pulse;
+    }
+
+    // VR: pulling the trigger while a controller ray points at the sticker gives it.
+    // (Done by hand because the sticker's collider is a trigger, which controller rays skip.)
+    private void UpdateVrStickerClick()
+    {
+        bool down = false;
+        System.Collections.Generic.List<UnityEngine.XR.InputDevice> devices = xrDevices;
+        devices.Clear();
+        UnityEngine.XR.InputDevices.GetDevicesWithCharacteristics(
+            UnityEngine.XR.InputDeviceCharacteristics.Controller | UnityEngine.XR.InputDeviceCharacteristics.HeldInHand, devices);
+        foreach (UnityEngine.XR.InputDevice device in devices)
+        {
+            if (device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.triggerButton, out bool pressed) && pressed)
+                down = true;
+        }
+
+        bool clicked = down && !vrTriggerWasDown;
+        vrTriggerWasDown = down;
+        if (!clicked || !stickerGiveEnabled || !stickerHudVisible || hudStickerAttaching || stickerObject == null || !stickerObject.activeInHierarchy)
+            return;
+
+        if (rayInteractors == null || Time.unscaledTime >= nextRayScanTime)
+        {
+            rayInteractors = FindObjectsOfType<XRRayInteractor>();
+            nextRayScanTime = Time.unscaledTime + 2f;
+        }
+
+        Transform sticker = stickerObject.transform;
+        float half = Mathf.Max(hudStickerColliderWorldSize.x, hudStickerColliderWorldSize.y, fallbackStickerWorldHeight) * 0.5f + 0.03f;
+        Plane plane = new Plane(sticker.forward, sticker.position);
+        foreach (XRRayInteractor interactor in rayInteractors)
+        {
+            if (interactor == null || !interactor.isActiveAndEnabled)
+                continue;
+
+            Ray ray = new Ray(interactor.transform.position, interactor.transform.forward);
+            if (!plane.Raycast(ray, out float distance) || distance > 6f)
+                continue;
+
+            Vector3 local = sticker.InverseTransformDirection(ray.GetPoint(distance) - sticker.position);
+            if (Mathf.Abs(local.x) <= half && Mathf.Abs(local.y) <= half)
+            {
+                HandleHudStickerClicked();
+                return;
+            }
+        }
+    }
+
+    // Left column: same x as the medical-record button, below it, clear of prompt/dialogue boxes.
+    private bool TryGetStickerColumnOffset(Transform cameraTransform, out Vector3 offset)
+    {
+        offset = stickerColumnOffset;
+        if (stickerColumnSolved && Time.unscaledTime - stickerColumnSolveTime < 3f)
+            return true;
+
+        if (!HudFreeSpot.TryGetRecordButtonRect(cameraTransform, out Rect button))
+            return stickerColumnSolved;
+
+        float z = Mathf.Max(0.3f, fallbackStickerCameraOffset.z);
+        float half = Mathf.Max(0.01f, fallbackStickerWorldHeight * hudStickerSizeMultiplier) * 0.5f / z;
+        const float margin = 0.006f;
+        float x = button.center.x;
+
+        // Always right under the record button (same column).
+        float y = button.yMin - margin - half;
+
+        stickerColumnOffset = new Vector3(x * z, y * z + stickerExtraVerticalOffset, z);
+        if (!stickerColumnSolved)
+            Debug.Log($"[Part3VisualDemoController] Sticker HUD spot: x={stickerColumnOffset.x:0.000} y={stickerColumnOffset.y:0.000} z={z:0.00} (record button x={button.center.x * z:0.000})", this);
+        stickerColumnSolved = true;
+        stickerColumnSolveTime = Time.unscaledTime;
+        offset = stickerColumnOffset;
+        return true;
     }
     private void ResolveReferences()
     {
@@ -447,6 +608,10 @@ public class Part3VisualDemoController : MonoBehaviour
         if (hudStickerAttaching)
             return;
 
+        // The sticker can only be given while a prompt asks for it, and only once per prompt.
+        if (!stickerGiveEnabled || hudStickerWasSelected)
+            return;
+
         hudStickerWasSelected = true;
         stickerHudVisible = false;
         if (stickerObject != null)
@@ -559,11 +724,32 @@ public class Part3VisualDemoController : MonoBehaviour
 
         if (target != null)
         {
-            stickerObject.transform.SetParent(target, true);
-            stickerObject.transform.SetPositionAndRotation(targetPosition, targetRotation);
+            // A copy of the sticker stays on the bear...
+            if (placedStickerCopy != null)
+                Destroy(placedStickerCopy);
+            placedStickerCopy = Instantiate(stickerObject, targetPosition, targetRotation);
+            placedStickerCopy.name = "Sticker_OnBear";
+            XRSimpleInteractable copyInteractable = placedStickerCopy.GetComponent<XRSimpleInteractable>();
+            if (copyInteractable != null)
+                Destroy(copyInteractable);
+            StickerHudClickProxy copyProxy = placedStickerCopy.GetComponent<StickerHudClickProxy>();
+            if (copyProxy != null)
+                Destroy(copyProxy);
+            foreach (Collider copyCollider in placedStickerCopy.GetComponentsInChildren<Collider>(true))
+                Destroy(copyCollider);
+            Transform copyGlow = placedStickerCopy.transform.Find("Sticker_Glow");
+            if (copyGlow != null)
+                Destroy(copyGlow.gameObject);
+            placedStickerCopy.transform.SetParent(target, true);
+            SetStickerWorldHeight(placedStickerCopy.transform, placedStickerWorldHeight);
         }
 
-        SetStickerWorldHeight(stickerObject.transform, placedStickerWorldHeight);
+        // ...and the sticker itself goes back to its corner, ready for the next time it is needed.
+        stickerObject.transform.localScale = startScale;
+        SetCollidersEnabled(stickerObject, true);
+        if (hudStickerInteractable != null)
+            hudStickerInteractable.enabled = true;
+        stickerHudVisible = true;
         hudStickerAttaching = false;
         hudStickerAttachRoutine = null;
     }
@@ -769,13 +955,17 @@ public class Part3VisualDemoController : MonoBehaviour
             return;
 
         Transform cameraTransform = camera.transform;
+        Vector3 hudOffset = fallbackStickerCameraOffset;
+        if (alignStickerWithRecordButton && TryGetStickerColumnOffset(cameraTransform, out Vector3 aligned))
+            hudOffset = aligned;
+
         Vector3 targetPosition = cameraTransform.position
-            + cameraTransform.right * fallbackStickerCameraOffset.x
-            + cameraTransform.up * fallbackStickerCameraOffset.y
-            + cameraTransform.forward * fallbackStickerCameraOffset.z;
+            + cameraTransform.right * hudOffset.x
+            + cameraTransform.up * hudOffset.y
+            + cameraTransform.forward * hudOffset.z;
 
         stickerObject.transform.position = targetPosition;
-        stickerObject.transform.rotation = Quaternion.LookRotation(stickerObject.transform.position - cameraTransform.position, cameraTransform.up);
+        stickerObject.transform.rotation = cameraTransform.rotation;
         ApplyStickerHudScale();
     }
 
@@ -789,7 +979,7 @@ public class Part3VisualDemoController : MonoBehaviour
         if (spriteRenderer != null && spriteRenderer.sprite != null)
         {
             float spriteHeight = Mathf.Max(0.001f, spriteRenderer.sprite.bounds.size.y);
-            float scale = Mathf.Max(0.001f, fallbackStickerWorldHeight) / spriteHeight;
+            float scale = Mathf.Max(0.001f, fallbackStickerWorldHeight * hudStickerSizeMultiplier) / spriteHeight;
             stickerObject.transform.localScale = new Vector3(scale, scale, 1f);
             return;
         }
@@ -797,7 +987,7 @@ public class Part3VisualDemoController : MonoBehaviour
         Renderer renderer = stickerObject.GetComponentInChildren<Renderer>();
         if (renderer != null && renderer.bounds.size.y > 0.001f)
         {
-            float ratio = Mathf.Max(0.001f, fallbackStickerWorldHeight) / renderer.bounds.size.y;
+            float ratio = Mathf.Max(0.001f, fallbackStickerWorldHeight * hudStickerSizeMultiplier) / renderer.bounds.size.y;
             stickerObject.transform.localScale *= ratio;
             return;
         }

@@ -194,6 +194,13 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         if (ContainsAnyKeyword(speechText, keywords))
         {
+            // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
+            if (KidEmotionGate.Blocking)
+            {
+                Debug.Log("[Part2] Keywords matched, but Yaya must be calmed first.", this);
+                return;
+            }
+
             Debug.Log($"[Part2] Backend matched {waitingForNurseAction}. text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
@@ -311,7 +318,12 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         respirationTimer.duration = Mathf.Max(60f, observationDelay);
         respirationTimer.startOnAwake = false;
-        respirationTimer.displayMode = MinimalRingTimer.DisplayMode.ScreenCorner;
+        // Same presentation as the heartbeat effect: world-space, centered under the prompt panel.
+        respirationTimer.displayMode = MinimalRingTimer.DisplayMode.WorldSpace;
+        respirationTimer.useHeartbeatLayout = true;
+        respirationTimer.heartbeatLayoutDiameter = 0.22f;
+        respirationTimer.heartbeatLayoutOffset = new Vector3(0f, -0.085f, 0.95f);
+        respirationTimer.showRingCaps = false;
         respirationTimer.corner = MinimalRingTimer.Corner.TopLeft;
         respirationTimer.worldDiameter = 0.10f;
         respirationTimer.size = 110f;
