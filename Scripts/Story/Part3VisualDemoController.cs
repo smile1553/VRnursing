@@ -16,7 +16,7 @@ public class Part3VisualDemoController : MonoBehaviour
     [Tooltip("Sticker sits on the LEFT, in the same column as the medical-record button, just below it (moved further down/up automatically if a prompt or dialogue box is in the way).")]
     [SerializeField] private bool alignStickerWithRecordButton = true;
     [Tooltip("Extra up (+) / down (-) shift in metres after the automatic placement.")]
-    [SerializeField] private float stickerExtraVerticalOffset = 0.012f;
+    [SerializeField] private float stickerRaise = 0.028f;
     [Tooltip("Size of the sticker in the corner of the view (1 = original size).")]
     [SerializeField] private float hudStickerSizeMultiplier = 0.8f;
     [SerializeField] private bool forceStickerSymmetricHudOffset = true;
@@ -61,6 +61,12 @@ public class Part3VisualDemoController : MonoBehaviour
     private Vector3 stickerBaseScale = Vector3.one;
     private Vector3 stethoscopeBaseScale = Vector3.one;
     private bool stickerHudVisible;
+    [Tooltip("How much Yaya's upset value (0-100) drops when she is given a sticker.")]
+    [SerializeField] private float stickerCalmAmount = 12f;
+    [Tooltip("Sticker on the bear: how far below its middle (part of its half height) and how far out from its middle (part of its half depth; bigger = further from the bear).")]
+    [SerializeField] private float stickerOnBearDrop = 0.12f;
+    [SerializeField] private float stickerOnBearOut = 0.5f;
+    public Transform HudSticker => stickerObject != null ? stickerObject.transform : null;
     private bool stickerTemporarilyHiddenForQuiz;
     private bool hudStickerWasSelected;
     private bool hudStickerAttaching;
@@ -157,8 +163,69 @@ public class Part3VisualDemoController : MonoBehaviour
             PlaceFallbackStickerNearCamera();
 
         UpdateStickerGlow();
+        TrimRecordButtonHitArea();
         UpdateVrStickerClick();
     }
+
+    // The medical-record button's clickable area is a square that is bigger than its icon and
+    // reaches down over the bear sticker. Trim it to the icon, and never lower than the top of
+    // the sticker, so clicking the sticker gives the sticker.
+    private UnityEngine.UI.Image recordButtonImage;
+    private float nextRecordButtonScan;
+
+    private void TrimRecordButtonHitArea()
+    {
+        if (recordButtonImage == null)
+        {
+            if (Time.unscaledTime < nextRecordButtonScan)
+                return;
+            nextRecordButtonScan = Time.unscaledTime + 1f;
+            MedicalRecordHudButton hud = FindObjectOfType<MedicalRecordHudButton>(true);
+            UnityEngine.UI.Selectable selectable = hud != null ? hud.GetComponentInChildren<UnityEngine.UI.Selectable>(true) : null;
+            if (selectable != null)
+                recordButtonImage = selectable.targetGraphic as UnityEngine.UI.Image ?? selectable.GetComponent<UnityEngine.UI.Image>();
+            if (recordButtonImage == null)
+                return;
+        }
+
+        RectTransform rectTransform = recordButtonImage.rectTransform;
+        Rect rect = rectTransform.rect;
+        float bottom = 0f;
+        if (stickerObject != null && stickerObject.activeInHierarchy && stickerHudVisible && !hudStickerAttaching)
+        {
+            float halfHeight = Mathf.Max(0.01f, fallbackStickerWorldHeight * hudStickerSizeMultiplier) * 0.5f;
+            Vector3 stickerTop = stickerObject.transform.position + stickerObject.transform.up * halfHeight;
+            float localTop = rectTransform.InverseTransformPoint(stickerTop).y;
+            bottom = Mathf.Clamp(localTop - rect.yMin - rect.height * 0.05f, bottom, rect.height * 0.7f);
+        }
+        float side = rect.width * 0.04f;
+        float top = 0f;
+        recordButtonImage.raycastPadding = new Vector4(side, bottom, side, top);
+
+        // Controller rays ignore the padding above, so the icon itself stops catching clicks
+        // and an invisible, smaller child does it instead (clicks on it still reach the button).
+        if (recordButtonHitArea == null)
+        {
+            GameObject hit = new GameObject("HitArea", typeof(RectTransform));
+            hit.layer = recordButtonImage.gameObject.layer;
+            recordButtonHitArea = (RectTransform)hit.transform;
+            recordButtonHitArea.SetParent(rectTransform, false);
+            recordButtonHitArea.anchorMin = Vector2.zero;
+            recordButtonHitArea.anchorMax = Vector2.one;
+            UnityEngine.UI.Image area = hit.AddComponent<UnityEngine.UI.Image>();
+            area.color = new Color(1f, 1f, 1f, 0f);
+            area.raycastTarget = true;
+            hit.GetComponent<CanvasRenderer>().cullTransparentMesh = false;
+            foreach (UnityEngine.UI.Graphic graphic in rectTransform.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
+            {
+                if (graphic != area)
+                    graphic.raycastTarget = false;
+            }
+        }
+        recordButtonHitArea.offsetMin = new Vector2(side, bottom);
+        recordButtonHitArea.offsetMax = new Vector2(-side, -top);
+    }
+    private RectTransform recordButtonHitArea;
 
     public void HighlightStethoscope()
     {
@@ -469,7 +536,7 @@ public class Part3VisualDemoController : MonoBehaviour
         // Always right under the record button (same column).
         float y = button.yMin - margin - half;
 
-        stickerColumnOffset = new Vector3(x * z, y * z + stickerExtraVerticalOffset, z);
+        stickerColumnOffset = new Vector3(x * z, y * z + stickerRaise, z);
         if (!stickerColumnSolved)
             Debug.Log($"[Part3VisualDemoController] Sticker HUD spot: x={stickerColumnOffset.x:0.000} y={stickerColumnOffset.y:0.000} z={z:0.00} (record button x={button.center.x * z:0.000})", this);
         stickerColumnSolved = true;
@@ -613,6 +680,8 @@ public class Part3VisualDemoController : MonoBehaviour
             return;
 
         hudStickerWasSelected = true;
+        // A sticker makes Yaya feel a little better.
+        KidEmotionPresenter.Calm(stickerCalmAmount, "\u8CBC\u7D19\u9F13\u52F5");
         stickerHudVisible = false;
         if (stickerObject != null)
             stickerObject.SetActive(true);
@@ -625,6 +694,33 @@ public class Part3VisualDemoController : MonoBehaviour
     {
         ResolveReferences();
         Transform animationTarget = FindFirstNamedTransform(yayaStickerAttachTargetNames) ?? yayaStickerAttachTarget;
+
+        // Always the teddy that is next to Yaya, and its body itself (the named object can be a
+        // group of several bears, whose middle is somewhere between them).
+        YayaAnimationPlayer yayaPlayer = FindObjectOfType<YayaAnimationPlayer>();
+        Transform nearBear = yayaPlayer != null ? yayaPlayer.FindComfortBear() : null;
+        if (nearBear != null)
+        {
+            Renderer body = null;
+            float biggest = 0f;
+            Vector3 reference = yayaPlayer.transform.position;
+            foreach (Renderer r in nearBear.GetComponentsInChildren<Renderer>())
+            {
+                if (r is SpriteRenderer || r is LineRenderer || r is ParticleSystemRenderer
+                    || r.name.StartsWith("Part9_") || r.name.StartsWith("Sticker"))
+                    continue;
+                Vector3 e = r.bounds.size;
+                // biggest mesh, preferring the one closest to Yaya when there are several bears
+                float score = e.x * e.y * e.z / (1f + Vector3.Distance(r.bounds.center, reference));
+                if (score > biggest)
+                {
+                    biggest = score;
+                    body = r;
+                }
+            }
+            if (body != null)
+                animationTarget = body.transform;
+        }
 
         if (hudStickerAttachRoutine != null)
             StopCoroutine(hudStickerAttachRoutine);
@@ -705,7 +801,30 @@ public class Part3VisualDemoController : MonoBehaviour
         Vector3 targetPosition = startPosition;
         Quaternion targetRotation = startRotation;
         if (target != null)
+        {
             GetStickerTargetPose(target, out targetPosition, out targetRotation);
+            // On the side of the bear that faces the nurse, turned toward her.
+            Camera viewer = Camera.main;
+            Renderer body = target.GetComponent<Renderer>();
+            if (viewer != null && body != null)
+            {
+                // Flat on the bear's tummy: at tummy height, on its surface (about half-way out
+                // from its middle, the rest of its depth being the legs), upright and facing out.
+                Bounds b = body.bounds;
+                Vector3 outward = Vector3.ProjectOnPlane(viewer.transform.position - b.center, Vector3.up);
+                if (outward.sqrMagnitude > 1e-4f)
+                {
+                    outward.Normalize();
+                    float halfDepth = Mathf.Abs(outward.x) * b.extents.x + Mathf.Abs(outward.z) * b.extents.z;
+                    targetPosition = b.center - Vector3.up * (b.extents.y * stickerOnBearDrop) + outward * (halfDepth * stickerOnBearOut);
+                    targetRotation = Quaternion.LookRotation(-outward, Vector3.up);
+                }
+            }
+            else if (viewer != null)
+            {
+                targetRotation = viewer.transform.rotation;
+            }
+        }
 
         float duration = Mathf.Max(0.25f, stickerAttachAnimationDuration * 0.45f);
         float elapsed = 0f;
@@ -729,6 +848,10 @@ public class Part3VisualDemoController : MonoBehaviour
                 Destroy(placedStickerCopy);
             placedStickerCopy = Instantiate(stickerObject, targetPosition, targetRotation);
             placedStickerCopy.name = "Sticker_OnBear";
+            // The corner sticker is drawn on top of everything (it is part of the HUD). The copy
+            // on the bear is a thing in the room: panels in front of it must cover it.
+            foreach (Renderer copyRenderer in placedStickerCopy.GetComponentsInChildren<Renderer>(true))
+                copyRenderer.sortingOrder = -20;
             XRSimpleInteractable copyInteractable = placedStickerCopy.GetComponent<XRSimpleInteractable>();
             if (copyInteractable != null)
                 Destroy(copyInteractable);
@@ -740,8 +863,10 @@ public class Part3VisualDemoController : MonoBehaviour
             Transform copyGlow = placedStickerCopy.transform.Find("Sticker_Glow");
             if (copyGlow != null)
                 Destroy(copyGlow.gameObject);
-            placedStickerCopy.transform.SetParent(target, true);
+            // Size it first (in world units), then attach: its size no longer depends on
+            // the scale of whatever it is attached to.
             SetStickerWorldHeight(placedStickerCopy.transform, placedStickerWorldHeight);
+            placedStickerCopy.transform.SetParent(target, true);
         }
 
         // ...and the sticker itself goes back to its corner, ready for the next time it is needed.
@@ -781,7 +906,7 @@ public class Part3VisualDemoController : MonoBehaviour
         }
 
         if (hasBounds)
-            position = bounds.center + Vector3.up * (bounds.extents.y * 0.2f);
+            position = bounds.center - Vector3.up * (bounds.extents.y * 0.30f);   // on its tummy, not its face
     }
     private void SpawnPlaceableSticker(Transform interactorTransform)
     {

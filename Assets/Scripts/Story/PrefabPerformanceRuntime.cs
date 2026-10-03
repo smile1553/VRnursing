@@ -162,6 +162,44 @@ public static class PrefabPerformanceRuntime
             PlayAnimators(instance);
         }
 
+        // Turns the whole performance around `pivotChild` (the seated kid) so the viewer sees the
+        // two actors from the side instead of one hiding the other. `sideHint` = where the other
+        // actor comes from (used to pick the side when she is straight in front).
+        public float TurnForSideView(string pivotChild, string otherChild, Vector3 viewer, Vector3 sideHint, float wantedDegrees, float maxTurnDegrees)
+        {
+            if (instance == null || wantedDegrees <= 0f || maxTurnDegrees <= 0f)
+                return 0f;
+
+            Transform a = FindChildByName(instance.transform, pivotChild);
+            Transform b = FindChildByName(instance.transform, otherChild);
+            if (a == null || b == null)
+                return 0f;
+
+            Transform pivot = MixamoHumanoidAvatarBuilder.FindBone(a, "Hips") ?? a;
+            Transform other = MixamoHumanoidAvatarBuilder.FindBone(b, "Hips") ?? b;
+            Vector3 toOther = Vector3.ProjectOnPlane(other.position - pivot.position, Vector3.up);
+            Vector3 toViewer = Vector3.ProjectOnPlane(viewer - pivot.position, Vector3.up);
+            if (toOther.sqrMagnitude < 1e-6f || toViewer.sqrMagnitude < 1e-6f)
+                return 0f;
+
+            float current = Vector3.SignedAngle(toViewer, toOther, Vector3.up);
+            float need = wantedDegrees - Mathf.Abs(current);
+            if (need <= 0f)
+                return 0f;
+
+            float sign = current >= 0f ? 1f : -1f;
+            if (Mathf.Abs(current) < 10f)
+            {
+                Vector3 toHint = Vector3.ProjectOnPlane(sideHint - pivot.position, Vector3.up);
+                if (toHint.sqrMagnitude > 1e-6f)
+                    sign = Vector3.SignedAngle(toViewer, toHint, Vector3.up) >= 0f ? 1f : -1f;
+            }
+
+            float yaw = sign * Mathf.Min(need, maxTurnDegrees);
+            instance.transform.RotateAround(pivot.position, Vector3.up, yaw);
+            return yaw;
+        }
+
         // World position + facing (from the pelvis) of a named actor inside the performance.
         public bool TryGetActorPose(string childName, out Vector3 position, out Vector3 forward)
         {

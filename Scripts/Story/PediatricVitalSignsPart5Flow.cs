@@ -242,12 +242,12 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         yield return WaitForNurseActionOrSkip();
 
         ShowDialogueLine(yayaComfortToyLineIndex, yayaComfortToyClip);
-        yayaAnimation?.PlayHugBear();
+        yayaAnimation?.PlayHugBearWithThermometer();
         momAnimation?.PlayStandingIdle();
         yield return WaitForDialogue(yayaComfortToyClip);
 
         ShowDialogueLine(yayaComfortToyFeelingLineIndex, yayaComfortToyFeelingClip);
-        yayaAnimation?.PlayHugBear();
+        yayaAnimation?.PlayHugBearWithThermometer();
         momAnimation?.PlayStandingIdle();
         yield return WaitForDialogue(yayaComfortToyFeelingClip);
 
@@ -287,8 +287,8 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
 
         ShowDialogueLine(yayaChooseEarLineIndex, yayaChooseEarClip);
         float pointEarDelay = GetDialogueDelay(yayaChooseEarClip);
-        if (!PrefabPerformanceRuntime.TryPlayBoneAligned(this, "Kid_PointEar|KidPointEar", pointEarDelay, yayaAnimation != null ? yayaAnimation.gameObject : null))
-            yayaAnimation?.PlayKidPointEar();
+        // Yaya stays as she is and just lifts a hand to her ear (no separate performance model).
+        yayaAnimation?.PlayKidPointEar();
         onYayaTemperatureMeasure?.Invoke();
         yield return new WaitForSeconds(pointEarDelay);
 

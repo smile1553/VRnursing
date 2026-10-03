@@ -47,6 +47,8 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
 
     [Header("Listen Performance (ForGan prefab: mom + kid + stethoscope)")]
     [SerializeField] private bool useListenPerformancePrefab = true;
+    [SerializeField] private float listenSideAngle = 52f;
+    [SerializeField] private float listenSideMaxTurn = 52f;
     [SerializeField] private string listenPerformancePrefabNames = "Listen_Mom_Kid";
     [SerializeField] private string listenPerformanceHideNames = "Stethoscope";
     [Tooltip("Mom stays where she is standing and just turns to Yaya (no teleport to Gan's spot).")]
@@ -503,6 +505,14 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         {
             BeginListenPerformance();
             yield break;
+        }
+
+        // Turn the pair a little so the nurse sees Yaya and Mom from the side (not Mom's back).
+        if (listenSideAngle > 0f && Camera.main != null)
+        {
+            Vector3 hint = momAnimation != null ? momAnimation.transform.position : Camera.main.transform.position;
+            float turned = listenPerformance.TurnForSideView("Kid", "Mom", Camera.main.transform.position, hint, listenSideAngle, listenSideMaxTurn);
+            Debug.Log($"[Part3] Listen performance turned {turned:0} degrees for a side view.", this);
         }
 
         if (momAnimation != null && listenPerformance.TryGetActorPose("Mom", out Vector3 momPosition, out Vector3 momForward))

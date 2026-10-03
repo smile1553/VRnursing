@@ -170,6 +170,7 @@ public class YayaAnimationPlayer : MonoBehaviour
         UpdateBearStroke();
         UpdateEarPain();
         UpdateHug();
+        UpdatePointEar();
 
         if (!holdLayingAnchorAfterSnap || anchorMoveRoutine != null || heldLayingAnchor == null)
             return;
@@ -290,8 +291,71 @@ public class YayaAnimationPlayer : MonoBehaviour
 
         ShowKidCombinePoseFallback();
     }
+    // ---------------------------------------------------------------------------------
+    // Pointing at her ear: she keeps sitting as she is (idle) and just lifts one hand to her
+    // ear. (No switch to the separate "point ear" animation, which made her pop.)
+    // ---------------------------------------------------------------------------------
+    [Header("Point at ear")]
+    [Tooltip("Lift a hand to the ear on top of the sitting idle, instead of the separate point-ear animation.")]
+    [SerializeField] private bool pointEarOnIdle = true;
+    [Tooltip("On = her left ear (left hand), off = her right ear (right hand).")]
+    [SerializeField] private bool pointLeftEar = true;
+    public bool PointsLeftEar => pointLeftEar;
+    private bool pointEarActive;
+    private float pointEarWeight;
+    private float pointEarStartTime;
+
+    private void EndPointEar()
+    {
+        if (pointEarActive)
+            calmPoseForAction = false;
+        pointEarActive = false;
+    }
+
+    private void UpdatePointEar()
+    {
+        pointEarWeight = Mathf.MoveTowards(pointEarWeight, pointEarActive ? 1f : 0f, Time.deltaTime / (pointEarActive ? 0.6f : 0.35f));
+        if (pointEarWeight <= 0f)
+            return;
+
+        Transform head = MixamoHumanoidAvatarBuilder.FindBone(transform, "Head");
+        Transform hips = MixamoHumanoidAvatarBuilder.FindBone(transform, "Hips");
+        ArmReachIK.Arm arm = ArmReachIK.FindArm(transform, !pointLeftEar);
+        if (head == null || !arm.IsValid)
+            return;
+
+        Vector3 forward = PrefabPerformanceRuntime.GetActorPelvisForward(transform);
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 1e-6f)
+            forward = transform.forward;
+        forward.Normalize();
+        Vector3 side = Vector3.Cross(Vector3.up, forward).normalized * (pointLeftEar ? -1f : 1f);
+        float torso = hips != null ? Vector3.Distance(hips.position, head.position) : 0.35f;
+
+        // Wrist just outside and a little below the ear, so the fingers reach the ear; a small
+        // tapping movement shows "this one".
+        float w = Mathf.SmoothStep(0f, 1f, pointEarWeight);
+        float tap = Mathf.Sin((Time.time - pointEarStartTime) * Mathf.PI * 2f * 1.1f) * 0.012f * pointEarWeight;
+        Vector3 ear = head.position + side * (torso * 0.21f) + Vector3.up * (torso * 0.12f);
+        Vector3 wrist = ear + side * (torso * 0.10f + tap) - Vector3.up * (torso * 0.14f) + forward * (torso * 0.05f);
+        ArmReachIK.Solve(arm, wrist, w);
+
+        // Head leans a little toward that hand.
+        head.rotation = Quaternion.AngleAxis(7f * w * (pointLeftEar ? 1f : -1f), forward) * head.rotation;
+    }
+
     public void PlayKidPointEar()
     {
+        if (pointEarOnIdle)
+        {
+            calmPoseForAction = true;
+            PlaySittingIdle();
+            calmPoseForAction = true;
+            pointEarActive = true;
+            pointEarStartTime = Time.time;
+            return;
+        }
+
         StopKickingOutLoop();
         HideKidCombinePoseFallback();
         heldLayingAnchor = null;
@@ -353,7 +417,9 @@ public class YayaAnimationPlayer : MonoBehaviour
         if (hugActive && hugBear != null)
             return; // already hugging: keep going through the next line
 
+        calmPoseForAction = true;
         PlaySittingIdle();
+        calmPoseForAction = true;
 
         if (hugReturnRoutine != null)
         {
@@ -387,6 +453,93 @@ public class YayaAnimationPlayer : MonoBehaviour
                   $"{Vector3.Distance(b.center, GetBodyCenter()):0.00} m from Yaya, arms ok={hugLeftArm.IsValid && hugRightArm.IsValid}", bear);
     }
 
+    // ---------------------------------------------------------------------------------
+    // Hug bear + ear thermometer: the nurse hands the thermometer to Yaya, who takes it with
+    // one hand and holds it to the bear's ear while the other arm keeps hugging the bear.
+    // ---------------------------------------------------------------------------------
+    [Header("Hug Bear + thermometer")]
+    [Tooltip("Size of the thermometer (1 = real size; a little bigger reads better in VR).")]
+    [SerializeField] private float thermometerScale = 0.6f;
+    [Tooltip("Seconds: the nurse brings the thermometer up into view.")]
+    [SerializeField] private float thermometerPickTime = 0.7f;
+    [Tooltip("Seconds: the nurse hands it over while Yaya reaches out for it.")]
+    [SerializeField] private float thermometerGiveTime = 0.9f;
+    [Tooltip("Seconds: Yaya brings it to the bear's ear.")]
+    [SerializeField] private float thermometerToBearTime = 0.7f;
+    [Tooltip("Turn the thermometer in her hand (degrees) if its tip does not point at the bear's ear.")]
+    [SerializeField] private Vector3 thermometerHoldRotation = Vector3.zero;
+    [Tooltip("Where the bear's ear is, from the middle of the bear: sideways (1 = its edge) and upward (0.5 = its top).")]
+    [SerializeField] private float bearEarSide = 0.7f;
+    [SerializeField] private float bearEarHeight = 0.36f;
+    private Transform heldThermometer;
+    private Vector3 thermometerHomePosition;
+    private Quaternion thermometerHomeRotation;
+    private float thermometerStartTime;
+    private Transform thermometerProp;
+    private Coroutine thermometerReturnRoutine;
+
+    public void PlayHugBearWithThermometer()
+    {
+        PlayHugBear();
+        if (!hugActive || hugBear == null || heldThermometer != null)
+            return;
+
+        if (thermometerReturnRoutine != null)
+        {
+            StopCoroutine(thermometerReturnRoutine);
+            thermometerReturnRoutine = null;
+        }
+        if (thermometerProp != null)
+            Destroy(thermometerProp.gameObject);
+
+        // Its own little thermometer (the ones lying in the room are static scenery).
+        Vector3 start = GetNurseHand(GetBodyCenter() + Vector3.up * 0.3f);
+        thermometerProp = EarThermometerProp.Create(start - Vector3.up * 0.25f, Quaternion.identity, thermometerScale);
+        heldThermometer = thermometerProp;
+        thermometerHomePosition = thermometerProp.position;
+        thermometerHomeRotation = thermometerProp.rotation;
+        thermometerStartTime = Time.time;
+        Debug.Log("[YayaAnimationPlayer] Thermometer hand-over starts.", this);
+    }
+
+    // Where the nurse "holds it out": a little below and in front of the player's eyes.
+    private static Vector3 GetNurseHand(Vector3 fallback)
+    {
+        Camera cam = Camera.main;
+        return cam != null
+            ? cam.transform.position + cam.transform.forward * 0.42f - cam.transform.up * 0.16f
+            : fallback;
+    }
+
+    private void ReleaseThermometer()
+    {
+        if (heldThermometer == null)
+            return;
+        Transform t = heldThermometer;
+        heldThermometer = null;
+        if (isActiveAndEnabled)
+            thermometerReturnRoutine = StartCoroutine(ReturnThermometerRoutine(t));
+        else
+            Destroy(t.gameObject);
+    }
+
+    // Yaya gives it back to the nurse, then it disappears.
+    private IEnumerator ReturnThermometerRoutine(Transform t)
+    {
+        Vector3 fromPosition = t.position;
+        Vector3 fromScale = t.localScale;
+        for (float time = 0f; time < 0.6f && t != null; time += Time.deltaTime)
+        {
+            float k = Mathf.SmoothStep(0f, 1f, time / 0.6f);
+            t.position = Vector3.Lerp(fromPosition, GetNurseHand(fromPosition), k);
+            t.localScale = fromScale * Mathf.Lerp(1f, 0.2f, Mathf.Clamp01((k - 0.6f) / 0.4f));
+            yield return null;
+        }
+        if (t != null)
+            Destroy(t.gameObject);
+        thermometerReturnRoutine = null;
+    }
+
     private static string GetPath(Transform t)
     {
         string path = t.name;
@@ -408,6 +561,8 @@ public class YayaAnimationPlayer : MonoBehaviour
             return;
 
         hugActive = false;
+        calmPoseForAction = false;
+        ReleaseThermometer();
         if (hugBear != null && isActiveAndEnabled)
             hugReturnRoutine = StartCoroutine(ReturnBearRoutine(hugBear, hugBearOrigPosition, hugBearOrigRotation));
     }
@@ -456,10 +611,12 @@ public class YayaAnimationPlayer : MonoBehaviour
 
             Vector3 chestPoint = chestBone != null ? chestBone.position : GetBodyCenter() + Vector3.up * torso * 0.5f;
             float bearDepth = Mathf.Clamp(Mathf.Min(hugBearSize.x, hugBearSize.z) * 0.5f, 0.02f, 0.12f);
-            Vector3 held = chestPoint + forward * (torso * 0.20f + bearDepth * 0.6f);
-            // Bear sits on her lap: its bottom above the thighs, its body in front of the chest.
+            // Pressed against her chest (not held out in front of the belly).
+            Vector3 held = chestPoint + forward * (torso * 0.11f + bearDepth * 0.85f);
+            if (heldThermometer != null)
+                held -= right * (hugBearHalfWidth * 0.45f);   // a little to her left: room for the thermometer hand
             float lapY = (hips != null ? hips.position.y : chestPoint.y - torso * 0.5f) + torso * 0.15f;
-            held.y = Mathf.Max(chestPoint.y - torso * 0.12f, lapY + hugBearSize.y * 0.5f);
+            held.y = Mathf.Max(chestPoint.y - torso * 0.03f, lapY + hugBearSize.y * 0.5f);
 
             Vector3 from = hugBearOrigPosition + hugBearCenterOffset;
             Vector3 center = Vector3.Lerp(from, held, lift) + Vector3.up * (Mathf.Sin(lift * Mathf.PI) * hugLiftArc);
@@ -482,10 +639,73 @@ public class YayaAnimationPlayer : MonoBehaviour
             return;
 
         Vector3 bearCenter = hugBear.position + hugBear.rotation * Quaternion.Inverse(hugBearOrigRotation) * hugBearCenterOffset;
-        // Hands on the bear's sides, slightly to the front so the arms wrap around it.
-        Vector3 wrap = forward * (hugBearHalfWidth * 0.35f * lift);
-        ArmReachIK.Solve(hugLeftArm, bearCenter - right * hugBearHalfWidth + wrap, hugWeight);
-        ArmReachIK.Solve(hugRightArm, bearCenter + right * hugBearHalfWidth + wrap, hugWeight);
+        // Arms wrap around the bear: once it is at her chest the hands cross over its front,
+        // one a little above the other, like a real hug.
+        float bearFront = Mathf.Clamp(Mathf.Min(hugBearSize.x, hugBearSize.z) * 0.5f, 0.02f, 0.12f);
+        Vector3 wrap = forward * (bearFront * (0.3f + 0.75f * lift));
+        float across = Mathf.Lerp(1f, 0.25f, lift);   // from the bear's sides to its middle
+        Vector3 leftHandTarget = bearCenter - right * (hugBearHalfWidth * across) + wrap + Vector3.up * (hugBearSize.y * 0.12f * lift);
+        Vector3 rightHandTarget = bearCenter + right * (hugBearHalfWidth * across) + wrap - Vector3.up * (hugBearSize.y * 0.10f * lift);
+
+        // With the thermometer: the left arm alone holds the bear, the right hand takes the
+        // thermometer from the nurse and brings it to the bear's ear.
+        bool thermometerInHand = false;
+        Vector3 bearEar = bearCenter + right * (hugBearHalfWidth * bearEarSide) + Vector3.up * (hugBearSize.y * bearEarHeight);
+        if (heldThermometer != null && hugActive)
+        {
+            // Left hand on the bear's tummy, holding it against her.
+            leftHandTarget = bearCenter + right * (hugBearHalfWidth * 0.15f) + wrap - Vector3.up * (hugBearSize.y * 0.08f);
+
+            float p = Time.time - thermometerStartTime;
+            float pick = Mathf.Max(0.05f, thermometerPickTime);
+            float give = Mathf.Max(0.05f, thermometerGiveTime);
+            float toBear = Mathf.Max(0.05f, thermometerToBearTime);
+            Vector3 shoulder = hugRightArm.upper.position;
+            float armLength = Vector3.Distance(hugRightArm.upper.position, hugRightArm.lower.position)
+                + Vector3.Distance(hugRightArm.lower.position, hugRightArm.hand.position);
+            Vector3 nurseHand = GetNurseHand(shoulder + forward * 0.6f);
+            Vector3 toNurse = nurseHand - shoulder;
+            Vector3 reach = shoulder + toNurse.normalized * Mathf.Min(armLength * 0.92f, toNurse.magnitude);
+            // Her wrist: out to the side of the bear's ear, the thermometer between hand and ear.
+            Vector3 handAtEar = bearEar + (right + forward * 0.35f).normalized * (EarThermometerProp.TipDistance + 0.03f) - Vector3.up * EarThermometerProp.TipRise;
+
+            if (p < pick)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, p / pick);
+                Vector3 position = Vector3.Lerp(nurseHand - Vector3.up * 0.25f, nurseHand, k);
+                Quaternion aim = Quaternion.LookRotation((shoulder - nurseHand).normalized, Vector3.up);
+                heldThermometer.SetPositionAndRotation(position, Quaternion.Slerp(thermometerHomeRotation, aim, k));
+            }
+            else if (p < pick + give)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, (p - pick) / give);
+                rightHandTarget = Vector3.Lerp(rightHandTarget, reach, k);
+                heldThermometer.SetPositionAndRotation(Vector3.Lerp(nurseHand, reach, k),
+                    Quaternion.LookRotation((shoulder - nurseHand).normalized, Vector3.up));
+            }
+            else
+            {
+                float k = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((p - pick - give) / toBear));
+                rightHandTarget = Vector3.Lerp(reach, handAtEar, k);
+                thermometerInHand = true;
+            }
+        }
+
+        // Elbows down and out to her sides (not crossed in front of the bear).
+        ArmReachIK.SolveWithElbow(hugLeftArm, leftHandTarget, (Vector3.down - right * 0.7f - forward * 0.1f).normalized, hugWeight);
+        ArmReachIK.SolveWithElbow(hugRightArm, rightHandTarget, (Vector3.down * 0.7f + right - forward * 0.1f).normalized, hugWeight);
+        // Hands softly closed on the bear instead of flat, spread fingers.
+        HandGrip.Curl(hugLeftArm.hand, false, 0.45f * hugWeight);
+        if (!thermometerInHand)
+            HandGrip.Curl(hugRightArm.hand, true, 0.45f * hugWeight);
+
+        if (thermometerInHand && heldThermometer != null)
+        {
+            // Really held in her hand (fingers around the handle), its tip pointing at the bear's ear.
+            HandGrip.Apply(hugRightArm.hand, true, heldThermometer, bearEar, 1f, 1f, 75f);
+            if (thermometerHoldRotation != Vector3.zero)
+                heldThermometer.rotation *= Quaternion.Euler(thermometerHoldRotation);
+        }
     }
 
     private static Bounds GetBounds(Transform root)
@@ -720,9 +940,13 @@ public class YayaAnimationPlayer : MonoBehaviour
         }
     }
 
+    private bool calmPoseForAction;
+
     private void PlaySitting(int severity)
     {
-        int effective = emotionDrivenIdle ? Mathf.Max(severity, Mathf.Min(emotionLevel, 2)) : severity;
+        // While she is busy with her hands (hugging the bear, pointing at her ear) she sits
+        // calmly, whatever the emotion bar says: no "uneasy" pose mixed into it.
+        int effective = emotionDrivenIdle && !calmPoseForAction ? Mathf.Max(severity, Mathf.Min(emotionLevel, 2)) : severity;
         pendingSittingSeverity = severity;
         PlayState(effective >= 2 ? sittingDisbeliefState : effective == 1 ? sittingRubbingArmState : sittingIdleState);
     }
@@ -821,6 +1045,12 @@ public class YayaAnimationPlayer : MonoBehaviour
     // The teddy on the bed next to Yaya: the closest visible object whose name contains "bear"
     // (or is listed in Comfort Bear Names). Distances are measured between what you SEE
     // (mesh centre and Yaya's hips), because model pivots can be far away from the mesh.
+    // The teddy bear next to Yaya (for other scripts, e.g. to put a toy cuff on it).
+    public Transform FindComfortBear()
+    {
+        return FindNearestBear();
+    }
+
     private Transform FindNearestBear()
     {
         Transform best = null;
@@ -921,6 +1151,7 @@ public class YayaAnimationPlayer : MonoBehaviour
             bearStrokeActive = false;
             earPainActive = false;
             EndHug();
+            EndPointEar();
         }
         if (animator == null)
         {
@@ -979,6 +1210,7 @@ public class YayaAnimationPlayer : MonoBehaviour
         bearStrokeActive = false;
         earPainActive = false;
         EndHug();
+        EndPointEar();
         if (animator == null)
         {
             Debug.LogWarning("[YayaAnimationPlayer] Animator is missing.", this);
@@ -1042,6 +1274,7 @@ public class YayaAnimationPlayer : MonoBehaviour
         bearStrokeActive = false;
         earPainActive = false;
         EndHug();
+        EndPointEar();
         if (animator == null)
         {
             Debug.LogWarning("[YayaAnimationPlayer] Animator is missing.", this);
@@ -1075,6 +1308,7 @@ public class YayaAnimationPlayer : MonoBehaviour
         bearStrokeActive = false;
         earPainActive = false;
         EndHug();
+        EndPointEar();
         if (animator == null)
         {
             Debug.LogWarning("[YayaAnimationPlayer] Animator is missing.", this);
