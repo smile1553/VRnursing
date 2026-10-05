@@ -841,6 +841,11 @@ public static class PrefabPerformanceRuntime
                     return prefab;
             }
 #endif
+            // In a built app (the headset) there is no asset database: the prefab must be in a
+            // Resources folder to be found. Without it the performance silently does not happen.
+            GameObject fromResources = Resources.Load<GameObject>(wantedName);
+            if (fromResources != null)
+                return fromResources;
         }
 
         return null;

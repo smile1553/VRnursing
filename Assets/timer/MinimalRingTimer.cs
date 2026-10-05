@@ -291,18 +291,20 @@ public class MinimalRingTimer : MonoBehaviour
         if (useHeartbeatLayout && cam != null)
         {
             Transform hct = cam.transform;
-            t.position = hct.position + hct.right * heartbeatLayoutOffset.x + hct.up * heartbeatLayoutOffset.y + hct.forward * heartbeatLayoutOffset.z;
+            Vector3 heartOffset = HudDepth.Flatten(heartbeatLayoutOffset, out float heartFactor);
+            t.position = hct.position + hct.right * heartOffset.x + hct.up * heartOffset.y + hct.forward * heartOffset.z;
             t.rotation = Quaternion.LookRotation(t.position - hct.position, hct.up);
-            t.localScale = Vector3.one * (heartbeatLayoutDiameter / Mathf.Max(1f, builtSize > 0f ? builtSize : size));
+            t.localScale = Vector3.one * (heartbeatLayoutDiameter / Mathf.Max(1f, builtSize > 0f ? builtSize : size)) * heartFactor;
             return;
         }
 
         if (useCameraCorner && cam != null)
         {
             Transform ct = cam.transform;
-            t.position = ct.position + ct.right * cameraCornerOffset.x + ct.up * cameraCornerOffset.y + ct.forward * cameraCornerOffset.z + worldOffset;
+            Vector3 cornerOffset = HudDepth.Flatten(cameraCornerOffset, out float cornerFactor);
+            t.position = ct.position + ct.right * cornerOffset.x + ct.up * cornerOffset.y + ct.forward * cornerOffset.z + worldOffset;
             t.rotation = Quaternion.LookRotation(t.position - ct.position, ct.up);
-            t.localScale = Vector3.one * (worldDiameter / Mathf.Max(1f, size));
+            t.localScale = Vector3.one * (worldDiameter / Mathf.Max(1f, size)) * cornerFactor;
             return;
         }
 

@@ -1083,6 +1083,7 @@ public class Part3VisualDemoController : MonoBehaviour
         Vector3 hudOffset = fallbackStickerCameraOffset;
         if (alignStickerWithRecordButton && TryGetStickerColumnOffset(cameraTransform, out Vector3 aligned))
             hudOffset = aligned;
+        hudOffset = HudDepth.Flatten(hudOffset, out float depthFactor);
 
         Vector3 targetPosition = cameraTransform.position
             + cameraTransform.right * hudOffset.x
@@ -1092,6 +1093,7 @@ public class Part3VisualDemoController : MonoBehaviour
         stickerObject.transform.position = targetPosition;
         stickerObject.transform.rotation = cameraTransform.rotation;
         ApplyStickerHudScale();
+        stickerObject.transform.localScale *= depthFactor;
     }
 
 

@@ -396,6 +396,14 @@ public class MomAnimationPlayer : MonoBehaviour
     // Walk back to where Mom stood before her first WalkTo (e.g. after the listen scene).
     public void WalkBackToStart()
     {
+        // A looping clip started by PlayBend() (the fallback of the listening scene) has no end
+        // of its own: stop it here, or Mom keeps bending over and over for the rest of the story.
+        if (clipGraph.IsValid())
+        {
+            StopClipFallback();
+            PlayState(standingIdleState);
+        }
+
         if (!hasStartHome || !isActiveAndEnabled)
             return;
 
@@ -931,7 +939,13 @@ public class MomAnimationPlayer : MonoBehaviour
         }
 
         if (IsAlreadyPlaying(stateHash))
+        {
+            // The state is already running underneath a looping clip: the clip must still go,
+            // otherwise it keeps covering the state that was asked for.
+            if (clipGraph.IsValid())
+                StopClipFallback();
             return;
+        }
 
         StopClipFallback();
         if (logEvents)

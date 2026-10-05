@@ -114,7 +114,7 @@ public class MedicalRecordPanelFollower : MonoBehaviour
             return;
 
         transform.position = head.TransformPoint(EffectiveOffset());
-        transform.rotation = head.rotation * Quaternion.Euler(localEulerAngles);
+        transform.rotation = FacingRotation();
         ApplyDistanceScale();
     }
 
@@ -123,8 +123,22 @@ public class MedicalRecordPanelFollower : MonoBehaviour
         if (scaleApplied)
             return;
         scaleApplied = true;
-        if (overrideDistance > 0f && localOffset.z > 0.01f)
-            transform.localScale = originalScale * (overrideDistance / localOffset.z) * Mathf.Max(0.01f, sizeMultiplier);
+        float distance = closeUpDistance > 0f ? closeUpDistance : overrideDistance;
+        if (distance > 0f && localOffset.z > 0.01f)
+            transform.localScale = originalScale * (distance / localOffset.z) * Mathf.Max(0.01f, sizeMultiplier);
+    }
+
+    float closeUpDistance;
+
+    // Something stands close in front of the student (a desk, a computer): hold the record
+    // nearer to the eyes so it is not cut by it. It is made smaller by the same amount, so it
+    // looks the same size. 0 = back to the normal distance.
+    public void SetCloseUp(float distance)
+    {
+        closeUpDistance = Mathf.Max(0f, distance);
+        scaleApplied = false;
+        if (isActiveAndEnabled)
+            PlaceInFrontOfHead();
     }
 
     void LateUpdate()
@@ -133,16 +147,30 @@ public class MedicalRecordPanelFollower : MonoBehaviour
             return;
 
         Vector3 targetPosition = head.TransformPoint(EffectiveOffset());
-        Quaternion targetRotation = head.rotation * Quaternion.Euler(localEulerAngles);
         float k = followLerp <= 0f ? 1f : 1f - Mathf.Exp(-followLerp * Time.deltaTime);
         transform.position = Vector3.Lerp(transform.position, targetPosition, k);
-        transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, k);
+        transform.rotation = FacingRotation();
+    }
+
+    // Always squarely facing the eyes from where the record is right now, and upright: while it
+    // catches up with a turning head it used to hang at an angle (one side looked bigger), and
+    // a tilted head made it lean.
+    Quaternion FacingRotation()
+    {
+        Vector3 away = transform.position - head.position;
+        if (away.sqrMagnitude < 1e-6f)
+            away = head.forward;
+        away.Normalize();
+        Vector3 up = Mathf.Abs(Vector3.Dot(away, Vector3.up)) > 0.98f ? head.up : Vector3.up;
+        return Quaternion.LookRotation(away, up) * Quaternion.Euler(localEulerAngles);
     }
 
     Vector3 EffectiveOffset()
     {
         Vector3 offset = localOffset;
-        if (overrideDistance > 0f)
+        if (closeUpDistance > 0f)
+            offset.z = closeUpDistance;
+        else if (overrideDistance > 0f)
             offset.z = overrideDistance;
         return offset;
     }

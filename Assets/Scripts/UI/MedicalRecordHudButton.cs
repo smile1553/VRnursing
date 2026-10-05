@@ -53,12 +53,23 @@ public class MedicalRecordHudButton : MonoBehaviour
         medicalRecordPanel = byName;
     }
 
+    Vector3 hudBaseScale;
+    bool hudBaseScaleKnown;
+
     void LateUpdate()
     {
         if (!followHead || head == null)
             return;
 
-        Vector3 targetPosition = head.TransformPoint(localOffset + extraLocalOffset);
+        // Same distance as the rest of the display (see HudDepth), same place and size in the view.
+        Vector3 flatOffset = HudDepth.Flatten(localOffset + extraLocalOffset, out float depthFactor);
+        if (!hudBaseScaleKnown)
+        {
+            hudBaseScale = transform.localScale;
+            hudBaseScaleKnown = true;
+        }
+        transform.localScale = hudBaseScale * depthFactor;
+        Vector3 targetPosition = head.TransformPoint(flatOffset);
         Quaternion targetRotation = Quaternion.LookRotation(transform.position - head.position, Vector3.up);
 
         if (followLerp <= 0f)
