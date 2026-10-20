@@ -50,12 +50,14 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
     [SerializeField] private bool ignoreFirstBackendJson = true;
-    [SerializeField] private string startToyRolePlayKeywords = "佩佩豬|玩偶|量體溫";
-    [SerializeField] private string checkToyFeverKeywords = "發燒|出院|回家|體溫幾度|佩佩豬";
-    [SerializeField] private string letYayaMeasureToyKeywords = "芽芽幫佩佩豬|幫佩佩豬量|幫忙佩佩豬|量體溫";
-    [SerializeField] private string askYayaComfortToyKeywords = "很怕|怎麼辦|會不會痛|好怕|佩佩豬";
-    [SerializeField] private string encourageYayaTemperatureKeywords = "勇敢|一樣勇敢|嗶|不會痛|幫你量";
-    [SerializeField] private string askWhichEarKeywords = "哪一隻耳朵|哪隻耳朵|右耳|左耳|這個";
+    [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
+    [SerializeField] private string startToyRolePlayKeywords = "佩佩豬|玩偶;量體溫|耳溫|測量";
+    [SerializeField] private string checkToyFeverKeywords = "佩佩豬|玩偶;發燒|體溫|幾度;出院|回家";
+    [SerializeField] private string letYayaMeasureToyKeywords = "芽芽|妳|你;佩佩豬|玩偶;幫忙|量體溫|測量";
+    [SerializeField] private string askYayaComfortToyKeywords = "佩佩豬|玩偶;很怕|好怕|害怕|會不會痛;怎麼辦|安慰|跟她說";
+    [SerializeField] private string encourageYayaTemperatureKeywords = "芽芽|妳|你;勇敢|不會痛|嗶一聲;量體溫|耳溫|幫你量";
+    [SerializeField] private string askWhichEarKeywords = "量|測量;哪一隻耳朵|哪隻耳朵|右耳|左耳";
+    [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
 
     [Header("Audio")]
     [SerializeField] private AudioSource dialogueAudioSource;
@@ -299,14 +301,18 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
             return;
 
         string keywords = GetKeywords(waitingForNurseAction);
-        if (ContainsAnyKeyword(speechText, keywords))
+        string actionTags = GetActionTags(waitingForNurseAction);
+        AudioAnalysisResponse response;
+        string reason;
+        if (SpeechGateMatcher.TryParseAndMatch(
+            json, keywords, actionTags, out response, out reason, minSemanticConfidence))
         {
-            Debug.Log($"[Part5] Backend matched {waitingForNurseAction}. text={speechText}", this);
+            Debug.Log($"[Part5] Backend matched {waitingForNurseAction} ({reason}). text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
         }
 
-        Debug.Log($"[Part5] Waiting for {waitingForNurseAction}, speech did not match. text={speechText}", this);
+        Debug.Log($"[Part5] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
 
     private string GetKeywords(WaitingForNurseAction action)
@@ -325,6 +331,26 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
                 return encourageYayaTemperatureKeywords;
             case WaitingForNurseAction.AskWhichEar:
                 return askWhichEarKeywords;
+            default:
+                return string.Empty;
+        }
+    }
+
+    private static string GetActionTags(WaitingForNurseAction action)
+    {
+        switch (action)
+        {
+            case WaitingForNurseAction.StartToyRolePlay:
+            case WaitingForNurseAction.CheckToyFever:
+                return "role_play_temp|role_play_demo";
+            case WaitingForNurseAction.LetYayaMeasureToy:
+                return "practice_before_exam|role_play_temp";
+            case WaitingForNurseAction.AskYayaComfortToy:
+                return "coach_comfort_words";
+            case WaitingForNurseAction.EncourageYayaTemperature:
+                return "temp_reassurance|reassure_child";
+            case WaitingForNurseAction.AskWhichEar:
+                return "ask_consent|ask_preference";
             default:
                 return string.Empty;
         }

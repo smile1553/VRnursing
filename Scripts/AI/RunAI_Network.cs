@@ -30,6 +30,9 @@ public class RunAI_Network : MonoBehaviour
     string _lastLoggedJson;
     int _initializationVersion;
     bool _shuttingDown;
+    bool _directAudioSubscribed;
+
+    public string LastJson { get; private set; }
 
     public event Action<string> EmotionJsonReceived;
 
@@ -63,6 +66,25 @@ public class RunAI_Network : MonoBehaviour
             if (runAi == null)
                 Debug.LogWarning("[RunAI_Network] RunAI not found. Feed JSON will not be applied to avatar.");
         }
+
+        SubscribeToDirectAudioResponses();
+    }
+
+    void SubscribeToDirectAudioResponses()
+    {
+        if (_directAudioSubscribed || audioUploader == null)
+            return;
+
+        audioUploader.AudioResponseAccepted += HandleDirectAudioResponse;
+        _directAudioSubscribed = true;
+    }
+
+    void HandleDirectAudioResponse(AudioAnalysisResponse response, string json)
+    {
+        if (response == null || response.ignored || string.IsNullOrWhiteSpace(json))
+            return;
+
+        LastJson = json;
     }
 
     void StartInitialization()
@@ -306,6 +328,7 @@ public class RunAI_Network : MonoBehaviour
 
     void OnJson(string json)
     {
+        LastJson = json;
         if (logIncomingJson && !string.IsNullOrEmpty(json) && !string.Equals(json, _lastLoggedJson))
         {
             Debug.Log("[EmotionFeed] " + json);
@@ -363,6 +386,9 @@ public class RunAI_Network : MonoBehaviour
         CancelInitialization();
         _serverDiscovery?.Dispose();
         _serverDiscovery = null;
+        if (_directAudioSubscribed && audioUploader != null)
+            audioUploader.AudioResponseAccepted -= HandleDirectAudioResponse;
+        _directAudioSubscribed = false;
         StopFormalConnections();
     }
 }

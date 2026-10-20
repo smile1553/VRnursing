@@ -49,10 +49,12 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     [Header("Backend")]
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
-    [SerializeField] private string reassureBeforeApexPulseKeywords = "銝?|憟賭?|慦賢直?賢?|憪??罵銝銝?";
-    [SerializeField] private string giveStickerBeforeEarTempKeywords = "憟賣?|鞎潛?|?單澈|?單澈";
-    [SerializeField] private string explainEarTemperatureKeywords = "??皞咽撟曉漲|?芯??餉單|?單";
-    [SerializeField] private string explainFearToMomKeywords = "瘝?靽??|銝??敹?|皞Ⅱ";
+    [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
+    [SerializeField] private string reassureBeforeApexPulseKeywords = "芽芽|妳|你;不痛|不會痛|一下子|別怕|好乖;聽心跳|心尖脈|聽診器";
+    [SerializeField] private string giveStickerBeforeEarTempKeywords = "貼紙|獎勵;量耳溫|耳溫|量體溫";
+    [SerializeField] private string explainEarTemperatureKeywords = "量耳溫|耳溫|量體溫;幾度|哪隻耳朵|哪一隻耳朵|左耳|右耳";
+    [SerializeField] private string explainFearToMomKeywords = "媽媽|家屬;害怕|緊張|不舒服;準確|體溫|心跳|呼吸|血壓";
+    [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Audio")]
@@ -261,14 +263,18 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             return;
 
         string keywords = GetKeywords(waitingForNurseAction);
-        if (ContainsAnyKeyword(speechText, keywords))
+        string actionTags = GetActionTags(waitingForNurseAction);
+        AudioAnalysisResponse response;
+        string reason;
+        if (SpeechGateMatcher.TryParseAndMatch(
+            json, keywords, actionTags, out response, out reason, minSemanticConfidence))
         {
-            Debug.Log($"[Part4] Backend matched {waitingForNurseAction}. text={speechText}", this);
+            Debug.Log($"[Part4] Backend matched {waitingForNurseAction} ({reason}). text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
         }
 
-        Debug.Log($"[Part4] Waiting for {waitingForNurseAction}, speech did not match. text={speechText}", this);
+        Debug.Log($"[Part4] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
 
     private string GetKeywords(WaitingForNurseAction action)
@@ -283,6 +289,23 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
                 return explainEarTemperatureKeywords;
             case WaitingForNurseAction.ExplainFearToMom:
                 return explainFearToMomKeywords;
+            default:
+                return string.Empty;
+        }
+    }
+
+    private static string GetActionTags(WaitingForNurseAction action)
+    {
+        switch (action)
+        {
+            case WaitingForNurseAction.ReassureBeforeApexPulse:
+                return "reassure_child|practice_before_exam";
+            case WaitingForNurseAction.GiveStickerBeforeEarTemp:
+                return "praise_child|transition_to_temp|reduce_fear";
+            case WaitingForNurseAction.ExplainEarTemperature:
+                return "temp_reassurance|ask_consent";
+            case WaitingForNurseAction.ExplainFearToMom:
+                return "delay_temp_exam|calm_guidance";
             default:
                 return string.Empty;
         }

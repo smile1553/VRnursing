@@ -52,10 +52,12 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     [Header("Backend")]
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
-    [SerializeField] private string askMomPreferenceKeywords = "喜歡|貼紙|玩具|故事|卡通";
-    [SerializeField] private string reassureWithStickerKeywords = "貼紙|不打針|不會痛|一下子";
-    [SerializeField] private string letYayaListenMomKeywords = "媽媽|心跳|聽診器|聽聽";
-    [SerializeField] private string letMomListenYayaKeywords = "媽媽|芽芽|心跳|聽診器|撲通";
+    [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
+    [SerializeField] private string askMomPreferenceKeywords = "喜歡|想要|選;貼紙|玩具|故事|卡通";
+    [SerializeField] private string reassureWithStickerKeywords = "貼紙|獎勵;不打針|不會痛|一下子|別怕";
+    [SerializeField] private string letYayaListenMomKeywords = "芽芽|妳|你;媽媽;心跳|聽診器|聽聽";
+    [SerializeField] private string letMomListenYayaKeywords = "媽媽;芽芽|她;心跳|聽診器|撲通|聽聽";
+    [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Audio")]
@@ -313,14 +315,18 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
             return;
 
         string keywords = GetKeywords(waitingForNurseAction);
-        if (ContainsAnyKeyword(speechText, keywords))
+        string actionTags = GetActionTags(waitingForNurseAction);
+        AudioAnalysisResponse response;
+        string reason;
+        if (SpeechGateMatcher.TryParseAndMatch(
+            json, keywords, actionTags, out response, out reason, minSemanticConfidence))
         {
-            Debug.Log($"[Part3] Backend matched {waitingForNurseAction}. text={speechText}", this);
+            Debug.Log($"[Part3] Backend matched {waitingForNurseAction} ({reason}). text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
         }
 
-        Debug.Log($"[Part3] Waiting for {waitingForNurseAction}, speech did not match. text={speechText}", this);
+        Debug.Log($"[Part3] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
 
     private string GetKeywords(WaitingForNurseAction action)
@@ -335,6 +341,22 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
                 return letYayaListenMomKeywords;
             case WaitingForNurseAction.TellMomListenYaya:
                 return letMomListenYayaKeywords;
+            default:
+                return string.Empty;
+        }
+    }
+
+    private static string GetActionTags(WaitingForNurseAction action)
+    {
+        switch (action)
+        {
+            case WaitingForNurseAction.AskMomPreference:
+                return "ask_preference";
+            case WaitingForNurseAction.ReassureWithSticker:
+                return "reduce_fear|reassure_child";
+            case WaitingForNurseAction.LetYayaListenMom:
+            case WaitingForNurseAction.TellMomListenYaya:
+                return "role_play_demo|practice_before_exam";
             default:
                 return string.Empty;
         }
