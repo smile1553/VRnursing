@@ -28,6 +28,8 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     [SerializeField] private bool startDialogueFromBackendJson = true;
     [SerializeField] private string greetingKeywords = "";
     [SerializeField] private string measurementKeywords = "";
+    [SerializeField] private string introductionActionTags = "introduce_bp_exam";
+    [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
     [SerializeField] private float staleBackendIgnoreSeconds = 1.5f;
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
@@ -218,22 +220,18 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
         initialBackendSpeechToIgnore = null;
 
-        if (ignoreFirstBackendJson && !hasSkippedInitialBackendJson)
-        {
-            hasSkippedInitialBackendJson = true;
-            initialBackendSpeechToIgnore = speechText;
-            Debug.Log("[Part1] First backend speech ignored after startup: " + initialBackendSpeechToIgnore, this);
-            return;
-        }
-
         Debug.Log("[Part1] Backend speech text: " + speechText, this);
 
         if (!hasSkippedInitialBackendJson)
             hasSkippedInitialBackendJson = true;
 
+        AudioAnalysisResponse response;
+        string semanticReason;
+        bool semanticMatch = SpeechGateMatcher.TryParseAndMatch(
+            json, string.Empty, introductionActionTags, out response, out semanticReason, minSemanticConfidence);
         bool hasGreeting = ContainsAnyKeyword(speechText, Part1GreetingKeywords) || ContainsAnyKeyword(speechText, greetingKeywords);
         bool hasMeasurement = ContainsAnyKeyword(speechText, Part1MeasurementKeywords) || ContainsAnyKeyword(speechText, measurementKeywords);
-        if (hasGreeting && hasMeasurement)
+        if (semanticMatch || (hasGreeting && hasMeasurement))
         {
             // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
             if (KidEmotionGate.Blocking)
@@ -242,6 +240,9 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
                 return;
             }
 
+            Debug.Log(semanticMatch
+                ? "[Part1] Introduction matched by semantic action: " + semanticReason
+                : "[Part1] Introduction matched both greeting and measurement concepts.", this);
             SkipVoiceAndStartDialogue();
         }
         else
@@ -882,7 +883,6 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         public string llm_window_text;
     }
 }
-
 
 
 

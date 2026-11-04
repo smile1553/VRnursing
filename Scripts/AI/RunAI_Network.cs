@@ -71,6 +71,7 @@ public class RunAI_Network : MonoBehaviour
             if (runAi == null)
                 Debug.LogWarning("[RunAI_Network] RunAI not found. Legacy feed JSON will not be applied to avatar.");
         }
+
     }
 
     void StartInitialization()
@@ -341,7 +342,7 @@ public class RunAI_Network : MonoBehaviour
 
     void HandleDirectAudioResponse(AudioAnalysisResponse response, string json)
     {
-        if (!directAudioResponseMode || string.IsNullOrWhiteSpace(json))
+        if (!directAudioResponseMode || response == null || response.ignored || string.IsNullOrWhiteSpace(json))
             return;
 
         // Formal story gates consume RunAI_Network.LastJson. Forward the

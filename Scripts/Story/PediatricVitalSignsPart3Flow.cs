@@ -66,9 +66,11 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     [Header("Backend")]
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
-    [SerializeField] private string askMomPreferenceKeywords = "³ßÅw|¶K¯È|ª±¨ã|¬G¨Æ|¥d³q";
-    [SerializeField] private string reassureWithStickerKeywords = "¶K¯È|¤£¥´°w|¤£·|µh|¤@¤U¤l";
-    [SerializeField] private string letYayaListenMomKeywords = "¶ı¶ı|¤ß¸õ|Å¥¶E¾¹|Å¥Å¥";
+    [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
+    [SerializeField] private string askMomPreferenceKeywords = "å–œæ­¡|æƒ³è¦|é¸;è²¼ç´™|ç©å…·|æ•…äº‹|å¡é€š";
+    [SerializeField] private string reassureWithStickerKeywords = "è²¼ç´™|çå‹µ;ä¸æ‰“é‡|ä¸æœƒç—›|ä¸€ä¸‹å­|åˆ¥æ€•";
+    [SerializeField] private string letYayaListenMomKeywords = "èŠ½èŠ½|å¦³|ä½ ;åª½åª½;å¿ƒè·³|è½è¨ºå™¨|è½è½";
+    [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Audio")]
@@ -111,28 +113,28 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     private Coroutine correctRoutine;
     private Coroutine wrongRoutine;
     private const string AskPreferencePrompt =
-        "Å@¥Í¦p¦óª¾¹DªŞªŞ³ßÅw¤°»òªF¦è©O¡H";
+        "è­·ç”Ÿå¦‚ä½•çŸ¥é“èŠ½èŠ½å–œæ­¡ä»€éº¼æ±è¥¿å‘¢ï¼Ÿ";
 
     private const string ReassureWithStickerPrompt =
-        "¥H¶K¯È¹ªÀyªŞªŞ¡A¨Ã§i¶DªŞªŞ¤U¤@­Ó­nÆ[¹îªº¥Í©R¼x¶H¡C";
+        "ä»¥è²¼ç´™é¼“å‹µèŠ½èŠ½ï¼Œä¸¦å‘Šè¨´èŠ½èŠ½ä¸‹ä¸€å€‹è¦è§€å¯Ÿçš„ç”Ÿå‘½å¾µè±¡ã€‚";
 
     private const string StickerStrategyPrompt =
-        "¥H¶K¯È¡A¹ªÀy¯fµ£ªº¥¿¦V¦æ¬°¡C";
+        "ä»¥è²¼ç´™ï¼Œé¼“å‹µç—…ç«¥çš„æ­£å‘è¡Œç‚ºã€‚";
 
     private const string LetYayaListenMomPrompt =
-        "½Ğ¥Î·Å¬Xªº¤è¦¡¦w¼¾ªŞªŞ¡AÅı¦oª¾¹DÅ¥¶E¤£·|µh¡B¤@¤U¤l´N¦n¡A¨Ã¦w±Æ¶ı¶ı¥ı¥Ü½d¡C";
+        "è«‹ç”¨æº«æŸ”çš„æ–¹å¼å®‰æ’«èŠ½èŠ½ï¼Œè®“å¥¹çŸ¥é“è½è¨ºä¸æœƒç—›ã€ä¸€ä¸‹å­å°±å¥½ï¼Œä¸¦å®‰æ’åª½åª½å…ˆç¤ºç¯„ã€‚";
     private const string QuizQuestion =
-        "¦ÒÃD3¡G½Ğ°İÅ@¥Í¨Ï¥Î¤F¤°»ò¤èªk¥H´î¤ÖªŞªŞªº®`©È¡H";
+        "è€ƒé¡Œ3ï¼šè«‹å•è­·ç”Ÿä½¿ç”¨äº†ä»€éº¼æ–¹æ³•ä»¥æ¸›å°‘èŠ½èŠ½çš„å®³æ€•ï¼Ÿ";
 
     private static readonly string[] QuizOptions =
     {
-        "A. ªŞªŞ©MÅ@¥Í¨¤¦â§êºt",
-        "B. ªŞªŞ©M¶ı¶ı¨¤¦â§êºt",
-        "C. Å@¥Í©M¶ı¶ı¨¤¦â§êºt"
+        "A. èŠ½èŠ½å’Œè­·ç”Ÿè§’è‰²æ‰®æ¼”",
+        "B. èŠ½èŠ½å’Œåª½åª½è§’è‰²æ‰®æ¼”",
+        "C. è­·ç”Ÿå’Œåª½åª½è§’è‰²æ‰®æ¼”"
     };
 
-    private const string CorrectFeedback = "µª¹ï¤F¡I";
-    private const string WrongFeedback = "¦A·Q¤@¤U¡A­ş¤@ºØ¨¤¦â§êºt³Ì¯à´î¤ÖªŞªŞ®`©È¡H";
+    private const string CorrectFeedback = "ç­”å°äº†ï¼";
+    private const string WrongFeedback = "å†æƒ³ä¸€ä¸‹ï¼Œå“ªä¸€ç¨®è§’è‰²æ‰®æ¼”æœ€èƒ½æ¸›å°‘èŠ½èŠ½å®³æ€•ï¼Ÿ";
     private void Awake()
     {
         expectedQuizButtonCount = Mathf.Max(expectedQuizButtonCount, 4);
@@ -318,7 +320,11 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
             return;
 
         string keywords = GetKeywords(waitingForNurseAction);
-        if (ContainsAnyKeyword(speechText, keywords))
+        string actionTags = GetActionTags(waitingForNurseAction);
+        AudioAnalysisResponse response;
+        string reason;
+        if (SpeechGateMatcher.TryParseAndMatch(
+            json, keywords, actionTags, out response, out reason, minSemanticConfidence))
         {
             // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
             if (KidEmotionGate.Blocking)
@@ -326,13 +332,12 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
                 Debug.Log("[Part3] Keywords matched, but Yaya must be calmed first.", this);
                 return;
             }
-
-            Debug.Log($"[Part3] Backend matched {waitingForNurseAction}. text={speechText}", this);
+            Debug.Log($"[Part3] Backend matched {waitingForNurseAction} ({reason}). text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
         }
 
-        Debug.Log($"[Part3] Waiting for {waitingForNurseAction}, speech did not match. text={speechText}", this);
+        Debug.Log($"[Part3] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
 
     private string GetKeywords(WaitingForNurseAction action)
@@ -345,6 +350,21 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
                 return reassureWithStickerKeywords;
             case WaitingForNurseAction.LetYayaListenMom:
                 return letYayaListenMomKeywords;
+            default:
+                return string.Empty;
+        }
+    }
+
+    private static string GetActionTags(WaitingForNurseAction action)
+    {
+        switch (action)
+        {
+            case WaitingForNurseAction.AskMomPreference:
+                return "ask_preference";
+            case WaitingForNurseAction.ReassureWithSticker:
+                return "reduce_fear|reassure_child";
+            case WaitingForNurseAction.LetYayaListenMom:
+                return "role_play_demo|practice_before_exam";
             default:
                 return string.Empty;
         }

@@ -52,10 +52,12 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
     [SerializeField] private bool ignoreFirstBackendJson = true;
-    [SerializeField] private string startToyRolePlayKeywords = "§Ú­Ì¨ÓÀ°ºµºµ¶qÅé·Å|ºµºµ¶qÅé·Å|À°ºµºµ¶q|ª±°¸|¶qÅé·Å";
-    [SerializeField] private string askYayaComfortToyKeywords = "¤pºµ|«Ü©È|«ç»ò¿ì|·|¤£·|µh|¦n©È|¤£·|µh|¦B¦B";
-    [SerializeField] private string encourageYayaTemperatureKeywords = "«i´±|¤@¼Ë«i´±|¹Í|¤£·|µh|À°§A¶q";
-    [SerializeField] private string askWhichEarKeywords = "­ş¤@°¦¦Õ¦·|­ş°¦¦Õ¦·|¥k¦Õ|¥ª¦Õ|³o­Ó";
+    [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
+    [SerializeField] private string startToyRolePlayKeywords = "å°ç†Š|ç†Šç†Š|ä½©ä½©è±¬|ç©å¶;é‡é«”æº«|è€³æº«|æ¸¬é‡";
+    [SerializeField] private string askYayaComfortToyKeywords = "å°ç†Š|ç†Šç†Š|ä½©ä½©è±¬|ç©å¶;å¾ˆæ€•|å¥½æ€•|å®³æ€•|æœƒä¸æœƒç—›;æ€éº¼è¾¦|å®‰æ…°|è·Ÿå¥¹èªª";
+    [SerializeField] private string encourageYayaTemperatureKeywords = "èŠ½èŠ½|å¦³|ä½ ;å‹‡æ•¢|ä¸æœƒç—›|å—¶ä¸€è²;é‡é«”æº«|è€³æº«|å¹«ä½ é‡";
+    [SerializeField] private string askWhichEarKeywords = "é‡|æ¸¬é‡;å“ªä¸€éš»è€³æœµ|å“ªéš»è€³æœµ|å³è€³|å·¦è€³";
+    [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
 
     [Header("Audio")]
     [SerializeField] private AudioSource dialogueAudioSource;
@@ -103,33 +105,33 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     private Button promptSkipButton;
     private Coroutine quizCompletionRoutine;
     private const string NurseStartToyRolePlay =
-        "½Ğ¥Î¨¤¦â§êºtªº¤è¦¡ÁÜ½ĞªŞªŞ¤@°_À°ºµºµ¶qÅé·Å¡C";
+        "è«‹ç”¨è§’è‰²æ‰®æ¼”çš„æ–¹å¼é‚€è«‹èŠ½èŠ½ä¸€èµ·å¹«ç†Šç†Šé‡é«”æº«ã€‚";
 
     private const string TherapeuticPlaySubtitle =
-        "Åı¯fµ£©M³ß·Rªºª±°¸¥H¨¤¦â§êºt¤è¦¡¶i¦æªvÀø©Ê¹CÀ¸¡AÅı¯fµ£°t¦X´ú¶q¡C";
+        "è®“ç—…ç«¥å’Œå–œæ„›çš„ç©å¶ä»¥è§’è‰²æ‰®æ¼”æ–¹å¼é€²è¡Œæ²»ç™‚æ€§éŠæˆ²ï¼Œè®“ç—…ç«¥é…åˆæ¸¬é‡ã€‚";
 
     private const string NurseAskYayaComfortToy =
-        "½Ğ¥Î«Ä¤lÅ¥±oÀ´ªº¤è¦¡¤Ş¾ÉªŞªŞ¦w¼¾¤pºµ¡AÅıªŞªŞ¥Î¦Û¤vªº¸Ü§i¶D¤pºµ¦Õ·Å´ú¶qªº·PÄ±¡C";
+        "è«‹ç”¨å­©å­è½å¾—æ‡‚çš„æ–¹å¼å¼•å°èŠ½èŠ½å®‰æ’«å°ç†Šï¼Œè®“èŠ½èŠ½ç”¨è‡ªå·±çš„è©±å‘Šè¨´å°ç†Šè€³æº«æ¸¬é‡çš„æ„Ÿè¦ºã€‚";
 
     private const string NurseEncourageYayaTemperature =
-        "½Ğ¥Î¤pºµ§¹¦¨´ú¶q«áªº«i´±¸gÅç¹ªÀyªŞªŞ¡AÁÜ½ĞªŞªŞ¤]¸ÕµÛ¶q¦Õ·Å¡A¨Ã´£¿ô¦o¹Lµ{«Ü§Ö¡B¹Í¤@Án´N¦n¡C";
+        "è«‹ç”¨å°ç†Šå®Œæˆæ¸¬é‡å¾Œçš„å‹‡æ•¢ç¶“é©—é¼“å‹µèŠ½èŠ½ï¼Œé‚€è«‹èŠ½èŠ½ä¹Ÿè©¦è‘—é‡è€³æº«ï¼Œä¸¦æé†’å¥¹éç¨‹å¾ˆå¿«ã€å—¶ä¸€è²å°±å¥½ã€‚";
 
     private const string NurseAskWhichEar =
-        "½Ğ¸ß°İªŞªŞ·Q¥ı¶q­ş¤@°¦¦Õ¦·¡AÅı¦o¥Î«ü¥X¦Õ¦·ªº¤è¦¡°µ¿ï¾Ü¡C";
+        "è«‹è©¢å•èŠ½èŠ½æƒ³å…ˆé‡å“ªä¸€éš»è€³æœµï¼Œè®“å¥¹ç”¨æŒ‡å‡ºè€³æœµçš„æ–¹å¼åšé¸æ“‡ã€‚";
 
     private const string QuizQuestion =
-        "¦ÒÃD5¡GªŞªŞ¨â·³¥b¡A½Ğ°İ¶q¦Õ·Å®É¡A¸Ó¦p¦óÅı¦Õ·Åºj¶i¤J¦Õ¹D¡H";
+        "è€ƒé¡Œ5ï¼šèŠ½èŠ½å…©æ­²åŠï¼Œè«‹å•é‡è€³æº«æ™‚ï¼Œè©²å¦‚ä½•è®“è€³æº«æ§é€²å…¥è€³é“ï¼Ÿ";
 
     private static readonly string[] QuizOptions =
     {
-        "A. ¦Õ¦·­n¦V¤U¦V«á©Ô",
-        "B. ¦Õ¦·­n¦V¤W¦V«á©Ô",
-        "C. ¦Õ¦·­n¦V¤U¦V«e©Ô",
-        "D. ¦Õ¦·­n¦V¤W¦V«e©Ô"
+        "A. è€³æœµè¦å‘ä¸‹å‘å¾Œæ‹‰",
+        "B. è€³æœµè¦å‘ä¸Šå‘å¾Œæ‹‰",
+        "C. è€³æœµè¦å‘ä¸‹å‘å‰æ‹‰",
+        "D. è€³æœµè¦å‘ä¸Šå‘å‰æ‹‰"
     };
 
-    private const string CorrectFeedback = "µª¹ï¤F¡I";
-    private const string WrongFeedback = "¦A·Q¤@¤U¡A¨â·³¥b¥®¨à¶q¦Õ·Å®É¦Õ¦·¤è¦V­n«ç»ò©Ô¡H";
+    private const string CorrectFeedback = "ç­”å°äº†ï¼";
+    private const string WrongFeedback = "å†æƒ³ä¸€ä¸‹ï¼Œå…©æ­²åŠå¹¼å…’é‡è€³æº«æ™‚è€³æœµæ–¹å‘è¦æ€éº¼æ‹‰ï¼Ÿ";
     private void Awake()
     {
         if (network == null)
@@ -306,7 +308,11 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
             return;
 
         string keywords = GetKeywords(waitingForNurseAction);
-        if (ContainsAnyKeyword(speechText, keywords))
+        string actionTags = GetActionTags(waitingForNurseAction);
+        AudioAnalysisResponse response;
+        string reason;
+        if (SpeechGateMatcher.TryParseAndMatch(
+            json, keywords, actionTags, out response, out reason, minSemanticConfidence))
         {
             // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
             if (KidEmotionGate.Blocking)
@@ -314,13 +320,12 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
                 Debug.Log("[Part5] Keywords matched, but Yaya must be calmed first.", this);
                 return;
             }
-
-            Debug.Log($"[Part5] Backend matched {waitingForNurseAction}. text={speechText}", this);
+            Debug.Log($"[Part5] Backend matched {waitingForNurseAction} ({reason}). text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
         }
 
-        Debug.Log($"[Part5] Waiting for {waitingForNurseAction}, speech did not match. text={speechText}", this);
+        Debug.Log($"[Part5] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
 
     private string GetKeywords(WaitingForNurseAction action)
@@ -335,6 +340,23 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
                 return encourageYayaTemperatureKeywords;
             case WaitingForNurseAction.AskWhichEar:
                 return askWhichEarKeywords;
+            default:
+                return string.Empty;
+        }
+    }
+
+    private static string GetActionTags(WaitingForNurseAction action)
+    {
+        switch (action)
+        {
+            case WaitingForNurseAction.StartToyRolePlay:
+                return "role_play_temp|role_play_demo|practice_before_exam";
+            case WaitingForNurseAction.AskYayaComfortToy:
+                return "coach_comfort_words";
+            case WaitingForNurseAction.EncourageYayaTemperature:
+                return "temp_reassurance|reassure_child";
+            case WaitingForNurseAction.AskWhichEar:
+                return "ask_consent|ask_preference";
             default:
                 return string.Empty;
         }

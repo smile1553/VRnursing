@@ -17,7 +17,10 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
 
     [Header("Backend")]
     [SerializeField] private bool advanceFromBackendJson = true;
-    [SerializeField] private string greetingKeywords = "你好|您好|哈囉|護理師|護生|打招呼|媽媽|芽芽|生命徵象|測量|量體溫";
+    [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
+    [SerializeField] private string greetingKeywords = "你好|您好|哈囉|哈啰|嗨|早安|午安|你們好|大家好;媽媽|芽芽|小朋友|家屬";
+    [SerializeField] private string greetingActionTags = "introduce_bp_exam";
+    [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Events")]
@@ -84,7 +87,17 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
             !string.Equals(response.source, "student_speech", StringComparison.OrdinalIgnoreCase))
             return;
 
-        HandleGreetingText(response.text, true);
+        string reason;
+        if (SpeechGateMatcher.IsMatch(
+            response, greetingKeywords, greetingActionTags, out reason, minSemanticConfidence))
+        {
+            Debug.Log($"[Part0] Greeting matched ({reason}). Opening door. text={response.text}", this);
+            CompleteGreetingAndOpenDoor();
+        }
+        else
+        {
+            Debug.Log($"[Part0] Greeting did not match ({reason}). text={response.text}", this);
+        }
     }
 
     private void Update()
@@ -164,30 +177,25 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
 
         lastProcessedBackendJson = json;
         string speechText = ExtractBackendSpeechText(json);
-        HandleGreetingText(speechText, false);
-    }
-
-    private void HandleGreetingText(string speechText, bool isFreshAudioResponse)
-    {
-        if (string.IsNullOrWhiteSpace(speechText))
-            return;
-
-        if (!isFreshAudioResponse && !string.IsNullOrEmpty(initialBackendSpeechToIgnore) &&
+        if (!string.IsNullOrEmpty(initialBackendSpeechToIgnore) &&
             string.Equals(speechText, initialBackendSpeechToIgnore, StringComparison.Ordinal))
         {
             initialBackendSpeechToIgnore = null;
-            Debug.Log("[Part0] Ignored cached backend speech: " + speechText, this);
             return;
         }
 
-        if (!ContainsAnyKeyword(speechText, greetingKeywords))
+        AudioAnalysisResponse response;
+        string reason;
+        if (SpeechGateMatcher.TryParseAndMatch(
+            json, greetingKeywords, greetingActionTags, out response, out reason, minSemanticConfidence))
         {
-            Debug.Log("[Part0] Waiting for greeting keywords, speech did not match. text=" + speechText, this);
-            return;
+            Debug.Log($"[Part0] Greeting matched ({reason}). Opening door. text={response.text}", this);
+            CompleteGreetingAndOpenDoor();
         }
-
-        Debug.Log("[Part0] Greeting matched. Opening door. text=" + speechText, this);
-        CompleteGreetingAndOpenDoor();
+        else if (response != null)
+        {
+            Debug.Log($"[Part0] Greeting did not match ({reason}). text={response.text}", this);
+        }
     }
 
     private void CompleteGreetingAndOpenDoor()
@@ -353,25 +361,6 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
             initialBackendSpeechToIgnore = ExtractBackendSpeechText(network.LastJson);
             Debug.Log("[Part0] Cached backend speech ignored on gate release (" + reason + "): " + initialBackendSpeechToIgnore, this);
         }
-    }
-
-    private static bool ContainsAnyKeyword(string text, string keywords)
-    {
-        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keywords))
-            return false;
-
-        string[] parts = keywords.Split('|');
-        foreach (string part in parts)
-        {
-            string keyword = part.Trim();
-            if (keyword.Length == 0)
-                continue;
-
-            if (text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-        }
-
-        return false;
     }
 
     private static string ExtractBackendSpeechText(string json)

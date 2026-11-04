@@ -50,10 +50,12 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     [Header("Backend")]
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
-    [SerializeField] private string reassureBeforeApexPulseKeywords = "¤£µh|¦n¨Ä|¶ı¶ıÅ¥§¹|©n©nÅ¥Å¥|¤@¤U¤l";
-    [SerializeField] private string giveStickerBeforeEarTempKeywords = "¶K¯È|¤U¤@­Ó|¥Í©R¼x¶H|¦Õ·Å|Æ[¹î";
-    [SerializeField] private string explainEarTemperatureKeywords = "¦Õ·Å|¦Õ·Åºj|¤£·|µh|¤@¤U¤l|¦Õ¦·";
-    [SerializeField] private string explainFearToMomKeywords = "®`©È|ºò±i|¤£¼ô±x|¥Ü½d|¶K¯È";
+    [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
+    [SerializeField] private string reassureBeforeApexPulseKeywords = "èŠ½èŠ½|å¦³|ä½ ;ä¸ç—›|ä¸æœƒç—›|ä¸€ä¸‹å­|åˆ¥æ€•|å¥½ä¹–;è½å¿ƒè·³|å¿ƒå°–è„ˆ|è½è¨ºå™¨";
+    [SerializeField] private string giveStickerBeforeEarTempKeywords = "è²¼ç´™|çå‹µ;é‡è€³æº«|è€³æº«|é‡é«”æº«";
+    [SerializeField] private string explainEarTemperatureKeywords = "é‡è€³æº«|è€³æº«|é‡é«”æº«;å¹¾åº¦|å“ªéš»è€³æœµ|å“ªä¸€éš»è€³æœµ|å·¦è€³|å³è€³";
+    [SerializeField] private string explainFearToMomKeywords = "åª½åª½|å®¶å±¬;å®³æ€•|ç·Šå¼µ|ä¸èˆ’æœ;æº–ç¢º|é«”æº«|å¿ƒè·³|å‘¼å¸|è¡€å£“";
+    [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Audio")]
@@ -125,33 +127,33 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     private Coroutine quizCompletionRoutine;
     private Button promptSkipButton;
     private const string NurseReassureBeforeApexPulse =
-        "½Ğ¥ı¦w¼¾ªŞªŞ¡A­°§C¦o¹ï¤ß¦y¯ß´ú¶qªººò±i¡C";
+        "è«‹å…ˆå®‰æ’«èŠ½èŠ½ï¼Œé™ä½å¥¹å°å¿ƒå°–è„ˆæ¸¬é‡çš„ç·Šå¼µã€‚";
 
     private const string ApexPulseAction =
-        "½ĞÆ[¹î¤ß¦y¯ß´ú¶q¡A¨Ã°O¿ı¤ß¸õ¦¸¼Æ¡C";
+        "è«‹è§€å¯Ÿå¿ƒå°–è„ˆæ¸¬é‡ï¼Œä¸¦è¨˜éŒ„å¿ƒè·³æ¬¡æ•¸ã€‚";
 
     private const string NurseGiveStickerBeforeEarTemp =
-        "½Ğ¥Î¶K¯È¹ªÀyªŞªŞ¡A¨Ã´£¿ô¦o±µ¤U¨Ó­nÆ[¹î¤U¤@­Ó¥Í©R¼x¶H¡C";
+        "è«‹ç”¨è²¼ç´™é¼“å‹µèŠ½èŠ½ï¼Œä¸¦æé†’å¥¹æ¥ä¸‹ä¾†è¦è§€å¯Ÿä¸‹ä¸€å€‹ç”Ÿå‘½å¾µè±¡ã€‚";
 
     private const string NurseExplainEarTemperature =
-        "½Ğ¥Î«Ä¤lÅ¥±oÀ´ªº¤è¦¡¤¶²Ğ¦Õ·Å´ú¶q¡AÅıªŞªŞª¾¹D¹Lµ{«Ü§Ö¡B¤£·|µh¡A¤]¥i¥H¥ı¥Ü½d¡C";
+        "è«‹ç”¨å­©å­è½å¾—æ‡‚çš„æ–¹å¼ä»‹ç´¹è€³æº«æ¸¬é‡ï¼Œè®“èŠ½èŠ½çŸ¥é“éç¨‹å¾ˆå¿«ã€ä¸æœƒç—›ï¼Œä¹Ÿå¯ä»¥å…ˆç¤ºç¯„ã€‚";
 
     private const string NurseExplainFearToMom =
-        "½Ğ¦V¶ı¶ı»¡©úªŞªŞ®`©È¾¹§÷ªº­ì¦]¡A¨Ã´£¥X¥Ü½d¡BÄ²ºN»P¶K¯È¹ªÀyµ¥°µªk¡C";
+        "è«‹å‘åª½åª½èªªæ˜èŠ½èŠ½å®³æ€•å™¨æçš„åŸå› ï¼Œä¸¦æå‡ºç¤ºç¯„ã€è§¸æ‘¸èˆ‡è²¼ç´™é¼“å‹µç­‰åšæ³•ã€‚";
 
     private const string QuizQuestion =
-        "¦ÒÃD4¡GÅ@¥Í¨Ï¥Î¤F¤°»ò¤èªk¨Ó­°§CªŞªŞªº®`©È¡H";
+        "è€ƒé¡Œ4ï¼šè­·ç”Ÿä½¿ç”¨äº†ä»€éº¼æ–¹æ³•ä¾†é™ä½èŠ½èŠ½çš„å®³æ€•ï¼Ÿ";
 
     private static readonly string[] QuizOptions =
     {
-        "A. ª½±µ­n¨DªŞªŞ°t¦X",
-        "B. ¥ı¥Ü½d¨Ã¥Î¶K¯È¹ªÀy",
-        "C. ©¿²¤ªŞªŞªº®`©È",
-        "D. §i¶DªŞªŞ¤£°t¦X´N¤£¯à¥X°|"
+        "A. ç›´æ¥è¦æ±‚èŠ½èŠ½é…åˆ",
+        "B. å…ˆç¤ºç¯„ä¸¦ç”¨è²¼ç´™é¼“å‹µ",
+        "C. å¿½ç•¥èŠ½èŠ½çš„å®³æ€•",
+        "D. å‘Šè¨´èŠ½èŠ½ä¸é…åˆå°±ä¸èƒ½å‡ºé™¢"
     };
 
-    private const string CorrectFeedback = "µª¹ï¤F¡I";
-    private const string WrongFeedback = "¦A·Q¤@¤U¡A­ş¤@ºØ¤èªk³Ì¯à­°§CªŞªŞªº®`©È¡H";
+    private const string CorrectFeedback = "ç­”å°äº†ï¼";
+    private const string WrongFeedback = "å†æƒ³ä¸€ä¸‹ï¼Œå“ªä¸€ç¨®æ–¹æ³•æœ€èƒ½é™ä½èŠ½èŠ½çš„å®³æ€•ï¼Ÿ";
     private void OnValidate()
     {
         expectedQuizButtonCount = 4;
@@ -382,7 +384,11 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             return;
 
         string keywords = GetKeywords(waitingForNurseAction);
-        if (ContainsAnyKeyword(speechText, keywords))
+        string actionTags = GetActionTags(waitingForNurseAction);
+        AudioAnalysisResponse response;
+        string reason;
+        if (SpeechGateMatcher.TryParseAndMatch(
+            json, keywords, actionTags, out response, out reason, minSemanticConfidence))
         {
             // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
             if (KidEmotionGate.Blocking)
@@ -390,13 +396,12 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
                 Debug.Log("[Part4] Keywords matched, but Yaya must be calmed first.", this);
                 return;
             }
-
-            Debug.Log($"[Part4] Backend matched {waitingForNurseAction}. text={speechText}", this);
+            Debug.Log($"[Part4] Backend matched {waitingForNurseAction} ({reason}). text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
         }
 
-        Debug.Log($"[Part4] Waiting for {waitingForNurseAction}, speech did not match. text={speechText}", this);
+        Debug.Log($"[Part4] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
 
     private string GetKeywords(WaitingForNurseAction action)
@@ -411,6 +416,23 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
                 return explainEarTemperatureKeywords;
             case WaitingForNurseAction.ExplainFearToMom:
                 return explainFearToMomKeywords;
+            default:
+                return string.Empty;
+        }
+    }
+
+    private static string GetActionTags(WaitingForNurseAction action)
+    {
+        switch (action)
+        {
+            case WaitingForNurseAction.ReassureBeforeApexPulse:
+                return "reassure_child|practice_before_exam";
+            case WaitingForNurseAction.GiveStickerBeforeEarTemp:
+                return "praise_child|transition_to_temp|reduce_fear";
+            case WaitingForNurseAction.ExplainEarTemperature:
+                return "temp_reassurance|ask_consent";
+            case WaitingForNurseAction.ExplainFearToMom:
+                return "delay_temp_exam|calm_guidance";
             default:
                 return string.Empty;
         }

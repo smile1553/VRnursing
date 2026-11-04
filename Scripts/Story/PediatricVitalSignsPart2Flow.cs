@@ -42,8 +42,12 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     [Header("Backend")]
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
-    [SerializeField] private string respirationKeywords = "\u89c0\u5bdf\u8d77\u4f0f|\u8a08\u7b97\u547c\u5438\u6b21\u6578|\u89c0\u5bdf|\u8d77\u4f0f|\u547c\u5438\u6b21\u6578";
-    [SerializeField] private string heartbeatKeywords = "\u5fc3\u8df3|\u807d\u8a3a\u5668|\u807d\u8a3a|\u4e0d\u6703\u75db|\u4e0d\u75db|\u6478\u6478|\u6478\u4e00\u4e0b|\u89f8\u6478|\u5148\u6478|\u807d\u807d|\u4e00\u4e0b\u5b50|\u5f88\u5feb";
+    [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
+    [SerializeField] private string respirationKeywords = "觀察|計算|數;呼吸|胸腹|起伏";
+    [SerializeField] private string heartbeatKeywords = "聽|摸|檢查;心跳|心尖脈|聽診器;不會痛|一下子|放心";
+    [SerializeField] private string respirationActionTags = "explain_resp_first";
+    [SerializeField] private string heartbeatActionTags = "reassure_child|practice_before_exam";
+    [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
     [SerializeField] private bool ignoreFirstBackendJson = true;
 
     [Header("Audio")]
@@ -93,7 +97,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         "\u958b\u59cb\u6e2c\u91cf\u547c\u5438\u4e00\u5206\u9418\u3002";
 
     private const string HeartbeatPrompt =
-        "�ХηŬX���覡�w���ުޡA���o���Dť�E�����|�h�B�@�U�l�N�n�A�æw�ƶ������ܽd�C";
+        "請用溫柔的方式安撫芽芽，讓她知道聽診器不會痛、一下子就好，並安排媽媽先示範。";
 
     private const string CorrectFeedback =
         "\u7b54\u5c0d\u4e86\uff01";
@@ -193,8 +197,14 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         string keywords = waitingForNurseAction == WaitingForNurseAction.HeartbeatExplanation
             ? heartbeatKeywords
             : respirationKeywords;
+        string actionTags = waitingForNurseAction == WaitingForNurseAction.HeartbeatExplanation
+            ? heartbeatActionTags
+            : respirationActionTags;
 
-        if (ContainsAnyKeyword(speechText, keywords))
+        AudioAnalysisResponse response;
+        string reason;
+        if (SpeechGateMatcher.TryParseAndMatch(
+            json, keywords, actionTags, out response, out reason, minSemanticConfidence))
         {
             // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
             if (KidEmotionGate.Blocking)
@@ -202,13 +212,12 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
                 Debug.Log("[Part2] Keywords matched, but Yaya must be calmed first.", this);
                 return;
             }
-
-            Debug.Log($"[Part2] Backend matched {waitingForNurseAction}. text={speechText}", this);
+            Debug.Log($"[Part2] Backend matched {waitingForNurseAction} ({reason}). text={speechText}", this);
             waitingForNurseAction = WaitingForNurseAction.None;
             return;
         }
 
-        Debug.Log($"[Part2] Waiting for {waitingForNurseAction}, speech did not match. text={speechText}", this);
+        Debug.Log($"[Part2] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
 
     public void SelectA()

@@ -16,6 +16,7 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
     [Header("Keyword Match")]
     public bool requirePlayerAction = true;
     public bool requireAllKeywords = false;
+    [Min(2)] public int minKeywordMatches = 2;
     public float minIntervalSeconds = 1f;
     public bool enableLlmAssist = true;
     [Range(0f, 1f)] public float defaultLlmConfidence = 0.7f;
@@ -223,7 +224,10 @@ public class ScenarioKeywordAdvancer : MonoBehaviour
 
         if (requireAllKeywords)
             return validKeywordCount > 0 && hitCount >= validKeywordCount;
-        return hitCount > 0;
+        int conceptMatches = SpeechGateMatcher.CountMatchedKeywordGroups(
+            text,
+            string.Join("|", keywords));
+        return conceptMatches >= Mathf.Max(2, minKeywordMatches);
     }
 
     bool IsLlmIntentMatch(ScenarioStep step, EmotionLlmInfo llm)
