@@ -268,11 +268,13 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         visualDemo?.HighlightStethoscope();
         ShowNursePrompt(LetYayaListenMomPrompt, WaitingForNurseAction.LetYayaListenMom);
         momAnimation?.PlayStandingIdle();
-        yayaAnimation?.PlaySittingIdle();
+        // Yaya is still nervous about the stethoscope: she keeps rubbing her arm until
+        // the nurse has explained it (the emotion bar settles to "uneasy", not lower).
+        yayaAnimation?.PlaySittingRubbingArm();
         PlayAudio(nurseLetYayaListenMomClip);
         yield return WaitForNurseActionToComplete(
             () => momAnimation?.PlayStandingIdle(),
-            () => yayaAnimation?.PlaySittingIdle());
+            () => yayaAnimation?.PlaySittingRubbingArm());
 
         ShowDialogueLine(momDoctorLineIndex, momDoctorClip);
         Debug.Log($"[Part3] Starting MomBend/KidListen. mom={(momAnimation != null ? momAnimation.name : "null")}, yaya={(yayaAnimation != null ? yayaAnimation.name : "null")}", this);

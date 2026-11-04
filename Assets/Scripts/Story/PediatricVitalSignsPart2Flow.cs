@@ -33,6 +33,8 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     [Header("Actors")]
     [SerializeField] private MomAnimationPlayer momAnimation;
     [SerializeField] private YayaAnimationPlayer yayaAnimation;
+    [Tooltip("While the nurse counts Yaya's breathing, Mom turns to Yaya and watches too.")]
+    [SerializeField] private bool momWatchesBreathing = true;
 
     [Header("Nurse Prompt Text")]
     [SerializeField] private TMP_Text nursePromptText;
@@ -261,6 +263,9 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         ShowNursePrompt(ObservationPrompt, WaitingForNurseAction.None);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlayLayingSleeping();
+        // Mom turns to Yaya and watches her breathe together with the nurse.
+        if (momWatchesBreathing && momAnimation != null)
+            momAnimation.WatchTarget(GetYayaChest());
         StartRespirationTimer();
         yield return WaitForSecondsOrSkip(Mathf.Max(60f, observationDelay));
         HideRespirationTimer();
@@ -358,8 +363,14 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
     private void HideRespirationTimer()
     {
+        momAnimation?.StopWatching();
         if (respirationTimer != null)
+        {
+            // Stop it too (not only hide it): when the step was skipped it kept running and
+            // its finish sound still rang at the full minute.
+            respirationTimer.ResetTimer();
             respirationTimer.SetVisible(false);
+        }
     }
     private void ShowDialogueLine(int lineIndex, AudioClip clip)
     {
@@ -406,6 +417,20 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             dialogueAudioSource.Stop();
 
         waitingForNurseAction = waitingAction;
+    }
+
+    // Yaya's chest (what Mom looks at while the breathing is counted).
+    private Transform GetYayaChest()
+    {
+        if (yayaAnimation == null)
+            yayaAnimation = FindObjectOfType<YayaAnimationPlayer>();
+        if (yayaAnimation == null)
+            return null;
+        Transform root = yayaAnimation.transform;
+        return MixamoHumanoidAvatarBuilder.FindBone(root, "Spine2")
+            ?? MixamoHumanoidAvatarBuilder.FindBone(root, "Spine1")
+            ?? MixamoHumanoidAvatarBuilder.FindBone(root, "Hips")
+            ?? root;
     }
 
     private IEnumerator WaitForDialogue(AudioClip clip)

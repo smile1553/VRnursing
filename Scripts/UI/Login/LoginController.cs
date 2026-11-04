@@ -179,7 +179,7 @@ public class LoginController : MonoBehaviour
         string studentId = studentIdInput != null ? studentIdInput.text.Trim() : string.Empty;
         if (requireStudentId && string.IsNullOrWhiteSpace(studentId))
         {
-            RuntimeLog.Warning("[LoginController] Student ID is required.");
+            RefuseLogin("請先輸入學號", "Student ID is required.");
             if (studentIdInput != null)
             {
                 studentIdInput.Select();
@@ -190,37 +190,66 @@ public class LoginController : MonoBehaviour
 
         if (sessionClient == null)
         {
-            RuntimeLog.Warning("[LoginController] ExperimentSessionClient is missing.");
+            RefuseLogin("找不到後端連線元件", "ExperimentSessionClient is missing.");
             return;
         }
         if (!sessionClient.ApplicationSessionReady)
         {
-            RuntimeLog.Warning("[LoginController] App startup is not ready. Pending upload recovery and Session creation must finish first.");
+            if (sessionClient.StartupBlocked)
+                RefuseLogin("連不上後端：請確認後端已啟動，再重新按 Play",
+                    "App startup is blocked: " + sessionClient.LastStatusMessage);
+            else
+                RefuseLogin("正在連線後端，請稍候幾秒再按",
+                    "App startup is not ready yet (pending upload recovery / Session creation): " + sessionClient.LastStatusMessage);
             return;
         }
 
         StudentRunContext existingRun = StudentRunContext.Current;
         if (existingRun.HasPendingResult)
         {
-            RuntimeLog.Warning("[LoginController] A frozen result is still pending. Retry that upload before starting another student run.");
+            RefuseLogin("上一筆成績還在上傳，請稍候再按", "A frozen result is still pending. Retrying that upload first.");
             resultUploader?.RetryPendingResult();
             return;
         }
         if (existingRun.HasStudentRun && !existingRun.ResultSubmitted &&
             !string.Equals(existingRun.StudentId, studentId, System.StringComparison.Ordinal))
         {
-            RuntimeLog.Warning("[LoginController] A Student Run already exists. Retry it with the same StudentId before starting another student.");
+            RefuseLogin("上一位學生的練習還沒結束，請用同一個學號登入或重新按 Play",
+                "A Student Run already exists. Retry it with the same StudentId before starting another student.");
             return;
         }
         if (existingRun.StudentRunAccepted && !existingRun.ScenarioCompleted)
         {
-            RuntimeLog.Warning("[LoginController] The current student's Scenario is already running.");
+            RefuseLogin("練習已經在進行中", "The current student's Scenario is already running.");
             return;
         }
 
         loginInProgress = true;
         BeginStudentRun(studentId);
     }
+
+    // Why the login did not go ahead: in the Console AND on the login panel (the line that
+    // normally says "[ SYSTEM READY ]"), so it is never a silent no-op.
+    void RefuseLogin(string forStudent, string detail)
+    {
+        Debug.LogWarning("[LoginController] Login refused: " + detail, this);
+        if (loginStatusLabel == null && loginUIRoot != null)
+        {
+            foreach (TMP_Text label in loginUIRoot.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (label != null && (label.name.IndexOf("System ready", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || label.text.IndexOf("SYSTEM READY", System.StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    loginStatusLabel = label;
+                    break;
+                }
+            }
+        }
+        if (loginStatusLabel != null)
+            loginStatusLabel.text = "[ " + forStudent + " ]";
+    }
+
+    TMP_Text loginStatusLabel;
 
     // Kept for old scene bindings. Session creation is now startup-only.
     public void BeginNewSession()
@@ -269,7 +298,7 @@ public class LoginController : MonoBehaviour
             {
                 if (loginUIRoot != null) loginUIRoot.SetActive(true);
                 if (introPanelRoot != null) introPanelRoot.SetActive(false);
-                RuntimeLog.Warning("[LoginController] Backend did not start the student run. Scenario remains stopped.");
+                RefuseLogin("後端沒有回應，請確認後端已啟動後再按一次", "Backend did not start the student run. Scenario remains stopped.");
             }
         });
     }
@@ -660,13 +689,13 @@ public class LoginController : MonoBehaviour
         hovered = false;
         bool clicked = false;
 #if ENABLE_INPUT_SYSTEM
-        if (cam != null && UnityEngine.InputSystem.Mouse.current != null && !UnityEngine.XR.XRSettings.isDeviceActive)
+        if (cam != null && UnityEngine.InputSystem.Mouse.current != null && (Application.isEditor || !UnityEngine.XR.XRSettings.isDeviceActive))
         {
             hovered |= hits(cam.ScreenPointToRay(UnityEngine.InputSystem.Mouse.current.position.ReadValue()));
             clicked |= UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame;
         }
 #elif ENABLE_LEGACY_INPUT_MANAGER
-        if (cam != null && !UnityEngine.XR.XRSettings.isDeviceActive)
+        if (cam != null && (Application.isEditor || !UnityEngine.XR.XRSettings.isDeviceActive))
         {
             hovered |= hits(cam.ScreenPointToRay(Input.mousePosition));
             clicked |= Input.GetMouseButtonDown(0);
@@ -713,7 +742,7 @@ public class LoginController : MonoBehaviour
                 Vector3 centre = builtInScreenCentre;
                 Vector3 into = Quaternion.Euler(0f, builtInScreenYaw, 0f) * Vector3.forward;
                 if (!TryMeasureComputer(ref centre, ref into))
-                    Debug.LogWarning($"[LoginController] v16 no computer named '{builtInComputerName}' near {FormatVec(builtInScreenCentre)}: using the fixed screen position", this);
+                    Debug.LogWarning($"[LoginController] v17 no computer named '{builtInComputerName}' near {FormatVec(builtInScreenCentre)}: using the fixed screen position", this);
                 builtInScreenPoint.SetPositionAndRotation(centre, Quaternion.LookRotation(into, Vector3.up));
             }
             point = builtInScreenPoint;
@@ -761,7 +790,7 @@ public class LoginController : MonoBehaviour
         Vector3 right = Quaternion.LookRotation(measuredInto, Vector3.up) * Vector3.right;
         measuredRecordPosition = screenCentre - measuredInto * 0.16f + right * 0.595f;
         measuredRecordPosition.y = best.position.y + 0.01f;
-        Debug.Log($"[LoginController] v16 found '{best.name}' at {FormatVec(best.position)}: screen centre {FormatVec(screenCentre)}, " +
+        Debug.Log($"[LoginController] v17 found '{best.name}' at {FormatVec(best.position)}: screen centre {FormatVec(screenCentre)}, " +
             $"into yaw {Mathf.Atan2(measuredInto.x, measuredInto.z) * Mathf.Rad2Deg:0.#}, picture {measuredScreenSize.x:0.###} x {measuredScreenSize.y:0.###} m", this);
         return true;
     }
@@ -924,7 +953,7 @@ public class LoginController : MonoBehaviour
         Vector3 centre = screenPoint.position - into * 0.006f;
         Vector3 right = facing * Vector3.right, up = facing * Vector3.up;
         Vector2 size = ScreenSize(screenPoint);
-        Debug.Log($"[LoginController] v16 screen page {size.x:0.##} x {size.y:0.##} m at {FormatVec(centre)}", this);
+        Debug.Log($"[LoginController] v17 screen page {size.x:0.##} x {size.y:0.##} m at {FormatVec(centre)}", this);
 
         GameObject page = new GameObject("Login_ScreenPage", typeof(RectTransform));
         Canvas pageCanvas = page.AddComponent<Canvas>();
@@ -1303,13 +1332,13 @@ public class LoginController : MonoBehaviour
                 }
 
 #if ENABLE_INPUT_SYSTEM
-                if (UnityEngine.InputSystem.Mouse.current != null && !UnityEngine.XR.XRSettings.isDeviceActive)
+                if (UnityEngine.InputSystem.Mouse.current != null && (Application.isEditor || !UnityEngine.XR.XRSettings.isDeviceActive))
                 {
                     hovered |= Hits(cam.ScreenPointToRay(UnityEngine.InputSystem.Mouse.current.position.ReadValue()));
                     clicked |= UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame;
                 }
 #elif ENABLE_LEGACY_INPUT_MANAGER
-                if (!UnityEngine.XR.XRSettings.isDeviceActive)
+                if ((Application.isEditor || !UnityEngine.XR.XRSettings.isDeviceActive))
                 {
                     hovered |= Hits(cam.ScreenPointToRay(Input.mousePosition));
                     clicked |= Input.GetMouseButtonDown(0);

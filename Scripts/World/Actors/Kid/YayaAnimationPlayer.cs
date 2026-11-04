@@ -134,8 +134,29 @@ public class YayaAnimationPlayer : MonoBehaviour
     [SerializeField] private bool loopFinishedStates = true;
     [SerializeField] private string doNotLoopStates = "lying_down|kicking_out|kid_combine|Scene|KidPointEar";
 
+    [Tooltip("Sitting: move her this far forward toward the bed edge (m) so her legs do not go into the bed frame.")]
+    [SerializeField] private float sitForwardNudge = 0.04f;
+    private Vector3 sitNudge;
+    private bool sitNudgeReady;
+
+    private void ApplySitNudgeOnce()
+    {
+        if (sitNudgeReady || animator == null)
+            return;
+        sitNudgeReady = true;
+        Vector3 forward = Vector3.ProjectOnPlane(PrefabPerformanceRuntime.GetActorPelvisForward(transform), Vector3.up);
+        if (forward.sqrMagnitude < 1e-4f || Mathf.Abs(sitForwardNudge) < 1e-4f)
+            return;
+        sitNudge = forward.normalized * sitForwardNudge;
+        initialSittingPosition += sitNudge;
+        if (!lyingMode)
+            transform.position += sitNudge;
+    }
+
     private void Update()
     {
+        if (!sitNudgeReady && Time.frameCount > 2)
+            ApplySitNudgeOnce();
         if (!loopFinishedStates || animator == null || animator.runtimeAnimatorController == null || animator.IsInTransition(layerIndex))
             return;
 
@@ -151,7 +172,12 @@ public class YayaAnimationPlayer : MonoBehaviour
             return;
         }
 
-        if (info.loop || info.normalizedTime < 1f)
+        if (requestedStateHash == 0 || info.shortNameHash != requestedStateHash)
+            return;
+        // Looping clips loop by themselves, except crying: its loop would drop the hands from
+        // the face and lift them again, so only its middle part is repeated.
+        bool crying = IsCryingHash(info.shortNameHash);
+        if (info.loop && !crying)
             return;
 
         foreach (string raw in doNotLoopStates.Split('|'))
@@ -160,12 +186,105 @@ public class YayaAnimationPlayer : MonoBehaviour
                 return;
         }
 
-        animator.CrossFadeInFixedTime(info.fullPathHash, 0.3f, layerIndex, 0f);
+        // A one-shot pose the story asked for (rubbing her arm, hands on her face...): keep it
+        // going until the story asks for something else. Unity ignores a cross-fade to the same
+        // state, so jump back into the clip and blend over the jump ourselves.
+        float played = crying && info.loop ? info.normalizedTime - Mathf.Floor(info.normalizedTime) : info.normalizedTime;
+        if (crying && info.loop && info.normalizedTime >= 1f)
+            played = 1f;   // already wrapped once: bring it back to the middle part now
+        if (played >= HoldLoopAt(info.shortNameHash))
+            RestartHeldState(info.fullPathHash, info.shortNameHash);
+    }
+
+    [Tooltip("Crying (hands on her face): only this middle part of the clip is repeated, so she keeps her hands on her face instead of dropping them and starting again (0-1).")]
+    [SerializeField, Range(0f, 0.9f)] private float cryingLoopFrom = 0.35f;
+    [SerializeField, Range(0.1f, 1f)] private float cryingLoopAt = 0.7f;
+    [Tooltip("Small sobbing movement of the shoulders and head while she cries (degrees).")]
+    [SerializeField] private float sobAngle = 2.5f;
+    private float sobWeight;
+    private Transform sobChest;
+
+    private bool IsCryingHash(int shortHash)
+    {
+        return shortHash == Animator.StringToHash(sittingDisbeliefState);
+    }
+
+    private float HoldLoopAt(int shortHash)
+    {
+        return IsCryingHash(shortHash) ? Mathf.Max(cryingLoopAt, cryingLoopFrom + 0.1f) : holdLoopAt;
+    }
+
+    private float HoldLoopFrom(int shortHash)
+    {
+        return IsCryingHash(shortHash) ? cryingLoopFrom : holdLoopFrom;
+    }
+
+    // Shoulders heave a little while she cries (also hides the moment the clip is repeated).
+    private void UpdateSob()
+    {
+        bool crying = false;
+        if (animator != null && animator.runtimeAnimatorController != null && !lyingMode)
+            crying = IsCryingHash(animator.GetCurrentAnimatorStateInfo(layerIndex).shortNameHash);
+        sobWeight = Mathf.MoveTowards(sobWeight, crying ? 1f : 0f, Time.deltaTime / 0.4f);
+        if (sobWeight <= 0f || sobAngle <= 0f)
+            return;
+        if (sobChest == null)
+            sobChest = MixamoHumanoidAvatarBuilder.FindBone(transform, "Spine2");
+        if (sobChest == null)
+            return;
+        Vector3 forward = PrefabPerformanceRuntime.GetActorPelvisForward(transform);
+        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+        float t = Time.time * Mathf.PI * 2f;
+        float heave = (Mathf.Max(0f, Mathf.Sin(t * 0.9f)) * 0.7f + Mathf.Sin(t * 2.7f) * 0.3f) * sobAngle * sobWeight;
+        sobChest.rotation = Quaternion.AngleAxis(heave, right) * sobChest.rotation;
+    }
+
+    [Tooltip("A one-shot pose (e.g. rubbing arm) is restarted when it reaches this point of the clip (0-1).")]
+    [SerializeField, Range(0.5f, 1f)] private float holdLoopAt = 0.92f;
+    [Tooltip("...from this point of the clip (0-1); skip the start if the clip begins with her lifting her hand.")]
+    [SerializeField, Range(0f, 0.9f)] private float holdLoopFrom = 0.15f;
+    [Tooltip("Seconds over which the restart is blended, so it does not jump.")]
+    [SerializeField] private float holdLoopBlendSeconds = 0.45f;
+    private int requestedStateHash;
+
+    private void RestartHeldState(int fullPathHash, int shortHash)
+    {
+        bool crying = IsCryingHash(shortHash);
+        BeginPoseBlend(PoseBlendMode.Simple, crying ? Mathf.Max(0.6f, holdLoopBlendSeconds) : holdLoopBlendSeconds);
+        animator.Play(fullPathHash, layerIndex, HoldLoopFrom(shortHash));
+    }
+
+    // The controller may have its own exit transition (e.g. rubbing arm -> idle when the clip
+    // ends). While the story still wants the pose, cancel that and keep the pose going.
+    private void LateHoldCheck()
+    {
+        if (requestedStateHash == 0 || animator == null || animator.runtimeAnimatorController == null)
+            return;
+        if (!animator.IsInTransition(layerIndex))
+            return;
+
+        AnimatorStateInfo current = animator.GetCurrentAnimatorStateInfo(layerIndex);
+        AnimatorStateInfo next = animator.GetNextAnimatorStateInfo(layerIndex);
+        if (current.shortNameHash != requestedStateHash || next.shortNameHash == requestedStateHash)
+            return;
+
+        foreach (string raw in doNotLoopStates.Split('|'))
+        {
+            if (raw.Length > 0 && Animator.StringToHash(raw) == current.shortNameHash)
+                return;
+        }
+
+        if (logEvents)
+            Debug.Log("[YayaAnimationPlayer] Animator tried to leave the requested pose; keeping it.", this);
+        RestartHeldState(current.fullPathHash, current.shortNameHash);
     }
 
     private void LateUpdate()
     {
         UpdateBedPose();
+        UpdatePoseBlend();
+        LateHoldCheck();
+        UpdateSob();
         UpdateMeltdown();
         UpdateBearStroke();
         UpdateEarPain();
@@ -332,16 +451,63 @@ public class YayaAnimationPlayer : MonoBehaviour
         Vector3 side = Vector3.Cross(Vector3.up, forward).normalized * (pointLeftEar ? -1f : 1f);
         float torso = hips != null ? Vector3.Distance(hips.position, head.position) : 0.35f;
 
-        // Wrist just outside and a little below the ear, so the fingers reach the ear; a small
-        // tapping movement shows "this one".
+        // A real "pointing at my ear": the hand comes from in front / below, the index finger
+        // points at the ear (the other fingers curled), with a small tapping movement.
         float w = Mathf.SmoothStep(0f, 1f, pointEarWeight);
         float tap = Mathf.Sin((Time.time - pointEarStartTime) * Mathf.PI * 2f * 1.1f) * 0.012f * pointEarWeight;
         Vector3 ear = head.position + side * (torso * 0.21f) + Vector3.up * (torso * 0.12f);
-        Vector3 wrist = ear + side * (torso * 0.10f + tap) - Vector3.up * (torso * 0.14f) + forward * (torso * 0.05f);
+        string prefix = pointLeftEar ? "Left" : "Right";
+        if (pointFingerPrefix != prefix)
+        {
+            pointFingerPrefix = prefix;
+            for (int f = 0; f < PointFingerNames.Length; f++)
+                for (int j = 0; j < 3; j++)
+                    pointFingers[f, j] = MixamoHumanoidAvatarBuilder.FindBone(transform, prefix + "Hand" + PointFingerNames[f] + (j + 1));
+        }
+        Transform index1 = pointFingers[1, 0];
+        float handToKnuckle = index1 != null ? Vector3.Distance(arm.hand.position, index1.position) : torso * 0.18f;
+        float reach = handToKnuckle * pointEarFingerReach;
+        Vector3 approach = (side * 0.45f + forward * 0.65f - Vector3.up * 0.6f).normalized;
+        Vector3 wrist = ear + approach * (reach + tap);
         ArmReachIK.Solve(arm, wrist, w);
+
+        // Turn the hand so its fingers point at the ear.
+        Transform middle1 = pointFingers[2, 0];
+        if (middle1 != null)
+        {
+            Vector3 fingerDir = middle1.position - arm.hand.position;
+            Vector3 want = ear - arm.hand.position;
+            if (fingerDir.sqrMagnitude > 1e-8f && want.sqrMagnitude > 1e-8f)
+                arm.hand.rotation = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(fingerDir, want), w) * arm.hand.rotation;
+        }
+        CurlFingersForPointing(arm.hand, w);
 
         // Head leans a little toward that hand.
         head.rotation = Quaternion.AngleAxis(7f * w * (pointLeftEar ? 1f : -1f), forward) * head.rotation;
+    }
+
+    private static readonly string[] PointFingerNames = { "Thumb", "Index", "Middle", "Ring", "Pinky" };
+    private readonly Transform[,] pointFingers = new Transform[5, 3];
+    private string pointFingerPrefix;
+    [Tooltip("How far the wrist stays from the ear, in hand lengths (wrist to knuckles). Bigger = the hand further from the ear.")]
+    [SerializeField] private float pointEarFingerReach = 1.9f;
+    [Tooltip("How far the middle, ring and little fingers fold into the palm while pointing (0 = open hand, 1 = soft fist). The index finger stays straight.")]
+    [Range(0f, 1f)] [SerializeField] private float pointEarFingerFold = 0.75f;
+    [Tooltip("Tick if the fingers bend backwards instead of into the palm.")]
+    [SerializeField] private bool pointEarFlipCurl = false;
+
+    // Index finger straight, the others folded softly into the palm. Done by HandGrip, which
+    // starts again from the animated pose every frame: before, the bend was added on top of
+    // last frame's bend whenever the clip did not move the fingers, so they curled up more
+    // and more (the "extremely bent" fingers).
+    private void CurlFingersForPointing(Transform hand, float w)
+    {
+        if (hand == null)
+            return;
+        bool rightHand = !pointLeftEar;
+        if (pointEarFlipCurl)
+            rightHand = !rightHand;
+        HandGrip.Point(hand, rightHand, pointEarFingerFold * w);
     }
 
     public void PlayKidPointEar()
@@ -471,12 +637,24 @@ public class YayaAnimationPlayer : MonoBehaviour
     [Tooltip("Where the bear's ear is, from the middle of the bear: sideways (1 = its edge) and upward (0.5 = its top).")]
     [SerializeField] private float bearEarSide = 0.7f;
     [SerializeField] private float bearEarHeight = 0.36f;
+    [Tooltip("While measuring the bear: how far in front of her hips it sits on her lap (part of her torso length).")]
+    [SerializeField] private float bearOnLapForward = 0.32f;
+    [Tooltip("The thermometer appears in front of the nurse with a sparkle, then floats into Yaya's hand (game style hand-over).")]
+    [SerializeField] private bool presentThermometer = true;
     private Transform heldThermometer;
     private Vector3 thermometerHomePosition;
     private Quaternion thermometerHomeRotation;
     private float thermometerStartTime;
     private Transform thermometerProp;
     private Coroutine thermometerReturnRoutine;
+    private ItemPresentFx thermometerFx;
+
+    private static float EaseOutBack(float t)
+    {
+        const float c1 = 1.70158f;
+        const float c3 = c1 + 1f;
+        return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
+    }
 
     public void PlayHugBearWithThermometer()
     {
@@ -513,8 +691,14 @@ public class YayaAnimationPlayer : MonoBehaviour
 
     private void ReleaseThermometer()
     {
+        if (thermometerFx != null)
+        {
+            thermometerFx.Stop();
+            thermometerFx = null;
+        }
         if (heldThermometer == null)
             return;
+        heldThermometer.localScale = Vector3.one;
         Transform t = heldThermometer;
         heldThermometer = null;
         if (isActiveAndEnabled)
@@ -613,14 +797,21 @@ public class YayaAnimationPlayer : MonoBehaviour
             float bearDepth = Mathf.Clamp(Mathf.Min(hugBearSize.x, hugBearSize.z) * 0.5f, 0.02f, 0.12f);
             // Pressed against her chest (not held out in front of the belly).
             Vector3 held = chestPoint + forward * (torso * 0.11f + bearDepth * 0.85f);
-            if (heldThermometer != null)
-                held -= right * (hugBearHalfWidth * 0.45f);   // a little to her left: room for the thermometer hand
             float lapY = (hips != null ? hips.position.y : chestPoint.y - torso * 0.5f) + torso * 0.15f;
             held.y = Mathf.Max(chestPoint.y - torso * 0.03f, lapY + hugBearSize.y * 0.5f);
+            if (heldThermometer != null)
+            {
+                // Measuring the bear: it sits on her lap in front of her (not squeezed against
+                // her chin), so its ear is at a height her other hand reaches easily.
+                Vector3 lap = (hips != null ? hips.position : chestPoint - Vector3.up * torso * 0.5f)
+                    + forward * (torso * bearOnLapForward + bearDepth * 0.6f) - right * (hugBearHalfWidth * 0.2f);
+                lap.y = lapY + hugBearSize.y * 0.5f;
+                held = lap;
+            }
 
             Vector3 from = hugBearOrigPosition + hugBearCenterOffset;
             Vector3 center = Vector3.Lerp(from, held, lift) + Vector3.up * (Mathf.Sin(lift * Mathf.PI) * hugLiftArc);
-            float rock = lift * Mathf.Sin(t * Mathf.PI * 2f * 0.45f) * hugRockAngle;
+            float rock = lift * Mathf.Sin(t * Mathf.PI * 2f * 0.45f) * hugRockAngle * (heldThermometer != null ? 0.25f : 1f);
             Quaternion spin = Quaternion.AngleAxis(rock, forward);
             hugBear.SetPositionAndRotation(center - spin * hugBearCenterOffset, spin * hugBearOrigRotation);
 
@@ -667,24 +858,47 @@ public class YayaAnimationPlayer : MonoBehaviour
             Vector3 toNurse = nurseHand - shoulder;
             Vector3 reach = shoulder + toNurse.normalized * Mathf.Min(armLength * 0.92f, toNurse.magnitude);
             // Her wrist: out to the side of the bear's ear, the thermometer between hand and ear.
-            Vector3 handAtEar = bearEar + (right + forward * 0.35f).normalized * (EarThermometerProp.TipDistance + 0.03f) - Vector3.up * EarThermometerProp.TipRise;
+            // From outside the bear's head, a little in front and above: forearm about level.
+            Vector3 handAtEar = bearEar + (right * 0.85f + forward * 0.25f + Vector3.up * 0.15f).normalized * (EarThermometerProp.TipDistance + 0.03f) - Vector3.up * EarThermometerProp.TipRise;
 
-            if (p < pick)
+            Quaternion towardYaya = Quaternion.LookRotation((shoulder - nurseHand).normalized, Vector3.up);
+            if (!presentThermometer && p < pick)
             {
                 float k = Mathf.SmoothStep(0f, 1f, p / pick);
                 Vector3 position = Vector3.Lerp(nurseHand - Vector3.up * 0.25f, nurseHand, k);
-                Quaternion aim = Quaternion.LookRotation((shoulder - nurseHand).normalized, Vector3.up);
-                heldThermometer.SetPositionAndRotation(position, Quaternion.Slerp(thermometerHomeRotation, aim, k));
+                heldThermometer.SetPositionAndRotation(position, Quaternion.Slerp(thermometerHomeRotation, towardYaya, k));
+            }
+            else if (p < pick)
+            {
+                // "Item get": it pops up in front of the nurse with a glow, turns a little to
+                // show itself and hovers, instead of rising up from nowhere.
+                float u = p / pick;
+                float pop = EaseOutBack(Mathf.Clamp01(u / 0.45f));
+                float bob = Mathf.Sin(p * 6f) * 0.006f;
+                Quaternion show = Quaternion.AngleAxis(Mathf.Sin(u * Mathf.PI) * 35f, Vector3.up);
+                heldThermometer.SetPositionAndRotation(nurseHand + Vector3.up * bob, show * towardYaya);
+                heldThermometer.localScale = Vector3.one * Mathf.Max(0.01f, pop);
+                if (thermometerFx == null)
+                    thermometerFx = ItemPresentFx.Attach(heldThermometer, 0.07f * thermometerScale + 0.03f, ItemPresentFx.Gold);
             }
             else if (p < pick + give)
             {
+                // It floats over in a soft arc while she reaches out for it.
                 float k = Mathf.SmoothStep(0f, 1f, (p - pick) / give);
                 rightHandTarget = Vector3.Lerp(rightHandTarget, reach, k);
-                heldThermometer.SetPositionAndRotation(Vector3.Lerp(nurseHand, reach, k),
-                    Quaternion.LookRotation((shoulder - nurseHand).normalized, Vector3.up));
+                Vector3 arc = Vector3.up * (Mathf.Sin(k * Mathf.PI) * (presentThermometer ? 0.07f : 0f));
+                heldThermometer.SetPositionAndRotation(Vector3.Lerp(nurseHand, reach, k) + arc, towardYaya);
+                heldThermometer.localScale = Vector3.one;
             }
             else
             {
+                if (thermometerFx != null)
+                {
+                    // Caught: a small sparkle in her hand, and the glow goes away.
+                    thermometerFx.Stop();
+                    thermometerFx = null;
+                    ItemPresentFx.Burst(heldThermometer.position, 0.08f, ItemPresentFx.Gold);
+                }
                 float k = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((p - pick - give) / toBear));
                 rightHandTarget = Vector3.Lerp(reach, handAtEar, k);
                 thermometerInHand = true;
@@ -693,7 +907,10 @@ public class YayaAnimationPlayer : MonoBehaviour
 
         // Elbows down and out to her sides (not crossed in front of the bear).
         ArmReachIK.SolveWithElbow(hugLeftArm, leftHandTarget, (Vector3.down - right * 0.7f - forward * 0.1f).normalized, hugWeight);
-        ArmReachIK.SolveWithElbow(hugRightArm, rightHandTarget, (Vector3.down * 0.7f + right - forward * 0.1f).normalized, hugWeight);
+        Vector3 rightElbow = heldThermometer != null && hugActive
+            ? (Vector3.down + right * 0.8f - forward * 0.15f).normalized   // elbow down at her side, no chicken wing
+            : (Vector3.down * 0.7f + right - forward * 0.1f).normalized;
+        ArmReachIK.SolveWithElbow(hugRightArm, rightHandTarget, rightElbow, hugWeight);
         // Hands softly closed on the bear instead of flat, spread fingers.
         HandGrip.Curl(hugLeftArm.hand, false, 0.45f * hugWeight);
         if (!thermometerInHand)
@@ -761,7 +978,25 @@ public class YayaAnimationPlayer : MonoBehaviour
             : anchor.rotation * Quaternion.Euler(layingAnchorEulerOffset);
 
         bool wasLying = lyingMode;
-        if (!wasLying)
+        if (!wasLying && naturalBedMoves)
+        {
+            // Redesigned: no spinning of the whole body. The current (sitting) pose is kept and
+            // blended into the lying pose bone by bone: she tips sideways onto the bed first,
+            // turns onto her back, and her legs follow onto the bed last.
+            if (bedRoutine != null)
+            {
+                StopCoroutine(bedRoutine);
+                bedRoutine = null;
+            }
+            BeginPoseBlend(PoseBlendMode.LieDown, lieDownSeconds);
+            bedBasePosition = targetPosition;
+            bedBaseRotation = targetRotation;
+            bedLift = 0f;
+            lyingMode = true;
+            transform.SetPositionAndRotation(targetPosition, targetRotation);
+            nextPlayInstant = true;
+        }
+        else if (!wasLying)
         {
             bedBasePosition = transform.position;
             bedBaseRotation = transform.rotation;
@@ -784,14 +1019,168 @@ public class YayaAnimationPlayer : MonoBehaviour
         {
             Vector3 offset = sittingAnchorPositionOffset;
             if (offset.y < 0f) offset.y = 0f;
-            targetPosition = sittingAnchor.position + offset;
+            targetPosition = sittingAnchor.position + offset + sitNudge;
             targetRotation = sittingAnchor.rotation;
         }
 
         if (bedRoutine != null)
+        {
             StopCoroutine(bedRoutine);
+            bedRoutine = null;
+        }
+
+        if (naturalBedMoves)
+        {
+            // Redesigned: she rolls onto her side, swings her legs off the bed and pushes her
+            // upper body up into the sitting pose (bone-by-bone blend, no spinning).
+            BeginPoseBlend(PoseBlendMode.SitUp, sitUpSeconds);
+            lyingMode = false;
+            bedLift = 0f;
+            transform.SetPositionAndRotation(targetPosition, targetRotation);
+            nextPlayInstant = true;
+            return;
+        }
+
         bedRoutine = StartCoroutine(BedTweenRoutine(targetPosition, targetRotation, sitUpDuration, false));
         nextFadeOverride = sitUpDuration * 0.85f;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Pose blend: remember the pose on screen, let the Animator jump to the new pose, and
+    // blend from the remembered pose to it over a few seconds, bone by bone.
+    //   Simple  : every bone together (used to loop a one-shot pose without a jump)
+    //   LieDown : upper body first, hips tip sideways then roll onto the back, legs last
+    //   SitUp   : roll onto the side, legs swing off the bed first, upper body comes up last
+    // ---------------------------------------------------------------------------------
+    [Header("Natural lie down / sit up (redesigned)")]
+    [Tooltip("On: lie down / sit up as a bone-by-bone blend around her hips (no spinning). Off: the old glide.")]
+    [SerializeField] private bool naturalBedMoves = true;
+    [SerializeField] private float lieDownSeconds = 2.4f;
+    [SerializeField] private float sitUpSeconds = 2.2f;
+    [Tooltip("How much the hips rise in the middle of the move (m), so she does not drag through the mattress.")]
+    [SerializeField] private float bedMoveHipArc = 0.05f;
+    [Tooltip("Part of the hip move (0-1) spent tipping sideways before rolling onto the back (or the reverse when sitting up).")]
+    [SerializeField, Range(0.2f, 0.8f)] private float bedMoveTipShare = 0.55f;
+
+    private enum PoseBlendMode { None, Simple, LieDown, SitUp }
+    private PoseBlendMode poseBlendMode;
+    private float poseBlendStart;
+    private float poseBlendDuration;
+    private bool nextPlayInstant;
+    private Transform blendHips;
+    private Transform blendHead;
+    private Transform[] blendBones;
+    private Quaternion[] blendFromLocal;
+    private bool[] blendIsLeg;
+    private Vector3 blendFromHipsPos;
+    private Quaternion blendFromHipsRot;
+    private Vector3 blendFromHipsLocalPos;
+    private Quaternion blendFromHipsLocalRot;
+    private Vector3 blendFromHeadDir;
+
+    private void BeginPoseBlend(PoseBlendMode mode, float duration)
+    {
+        if (blendHips == null)
+        {
+            blendHips = MixamoHumanoidAvatarBuilder.FindBone(transform, "Hips");
+            blendHead = MixamoHumanoidAvatarBuilder.FindBone(transform, "Head");
+        }
+        if (blendHips == null || duration <= 0.01f)
+        {
+            poseBlendMode = PoseBlendMode.None;
+            return;
+        }
+
+        if (blendBones == null)
+        {
+            Transform[] all = blendHips.GetComponentsInChildren<Transform>(true);
+            blendBones = new Transform[all.Length - 1];
+            blendIsLeg = new bool[all.Length - 1];
+            int n = 0;
+            foreach (Transform t in all)
+            {
+                if (t == blendHips)
+                    continue;
+                blendBones[n] = t;
+                string bn = t.name;
+                blendIsLeg[n] = bn.Contains("UpLeg") || bn.Contains("Leg") || bn.Contains("Foot") || bn.Contains("Toe");
+                n++;
+            }
+            blendFromLocal = new Quaternion[blendBones.Length];
+        }
+
+        for (int i = 0; i < blendBones.Length; i++)
+            blendFromLocal[i] = blendBones[i] != null ? blendBones[i].localRotation : Quaternion.identity;
+        blendFromHipsPos = blendHips.position;
+        blendFromHipsRot = blendHips.rotation;
+        blendFromHipsLocalPos = blendHips.localPosition;
+        blendFromHipsLocalRot = blendHips.localRotation;
+        blendFromHeadDir = blendHead != null ? (blendHead.position - blendHips.position).normalized : transform.up;
+
+        poseBlendMode = mode;
+        poseBlendStart = Time.time;
+        poseBlendDuration = duration;
+        if (logEvents && mode != PoseBlendMode.Simple)
+            Debug.Log($"[YayaAnimationPlayer] Pose blend {mode} over {duration:0.0}s", this);
+    }
+
+    private static float Phase(float t, float from, float to)
+    {
+        return Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((t - from) / Mathf.Max(0.01f, to - from)));
+    }
+
+    private void UpdatePoseBlend()
+    {
+        if (poseBlendMode == PoseBlendMode.None || blendHips == null)
+            return;
+
+        float t = (Time.time - poseBlendStart) / poseBlendDuration;
+        if (t >= 1f)
+        {
+            poseBlendMode = PoseBlendMode.None;
+            return;
+        }
+
+        float upper, hips, legs;
+        switch (poseBlendMode)
+        {
+            case PoseBlendMode.LieDown: upper = Phase(t, 0f, 0.65f); hips = Phase(t, 0.05f, 0.85f); legs = Phase(t, 0.35f, 1f); break;
+            case PoseBlendMode.SitUp: legs = Phase(t, 0f, 0.6f); hips = Phase(t, 0.1f, 0.9f); upper = Phase(t, 0.3f, 1f); break;
+            default: upper = hips = legs = Mathf.SmoothStep(0f, 1f, t); break;
+        }
+
+        // Where the Animator has put her this frame (the end pose).
+        Vector3 toHipsPos = blendHips.position;
+        Quaternion toHipsRot = blendHips.rotation;
+        Vector3 toHeadDir = blendHead != null ? (blendHead.position - blendHips.position).normalized : transform.up;
+
+        for (int i = 0; i < blendBones.Length; i++)
+        {
+            Transform b = blendBones[i];
+            if (b == null)
+                continue;
+            b.localRotation = Quaternion.Slerp(blendFromLocal[i], b.localRotation, blendIsLeg[i] ? legs : upper);
+        }
+
+        if (poseBlendMode == PoseBlendMode.Simple)
+        {
+            blendHips.localPosition = Vector3.Lerp(blendFromHipsLocalPos, blendHips.localPosition, hips);
+            blendHips.localRotation = Quaternion.Slerp(blendFromHipsLocalRot, blendHips.localRotation, hips);
+            return;
+        }
+
+        // Hips: two steps instead of one big twist.
+        //  lie down: tip sideways (head goes to where it will lie, chest still faces the nurse),
+        //            then roll onto the back.
+        //  sit up  : the same path backwards.
+        Quaternion mid = poseBlendMode == PoseBlendMode.LieDown
+            ? Quaternion.FromToRotation(blendFromHeadDir, toHeadDir) * blendFromHipsRot
+            : Quaternion.FromToRotation(toHeadDir, blendFromHeadDir) * toHipsRot;
+        Quaternion hipRot = hips < bedMoveTipShare
+            ? Quaternion.Slerp(blendFromHipsRot, mid, Mathf.SmoothStep(0f, 1f, hips / bedMoveTipShare))
+            : Quaternion.Slerp(mid, toHipsRot, Mathf.SmoothStep(0f, 1f, (hips - bedMoveTipShare) / (1f - bedMoveTipShare)));
+        Vector3 hipPos = Vector3.Lerp(blendFromHipsPos, toHipsPos, hips) + Vector3.up * Mathf.Sin(hips * Mathf.PI) * bedMoveHipArc;
+        blendHips.SetPositionAndRotation(hipPos, hipRot);
     }
 
     private IEnumerator BedTweenRoutine(Vector3 targetPosition, Quaternion targetRotation, float duration, bool lyingDown)
@@ -1165,6 +1554,9 @@ public class YayaAnimationPlayer : MonoBehaviour
             return;
         }
 
+        bool instant = nextPlayInstant;
+        nextPlayInstant = false;
+
         int stateHash = Animator.StringToHash(stateName);
         if (!animator.HasState(layerIndex, stateHash))
         {
@@ -1172,7 +1564,8 @@ public class YayaAnimationPlayer : MonoBehaviour
             return;
         }
 
-        if (fixedTimeOffset <= 0f && IsAlreadyPlaying(stateHash))
+        requestedStateHash = stateHash;
+        if (!instant && fixedTimeOffset <= 0f && IsAlreadyPlaying(stateHash))
             return;
 
         StopClipFallback();
@@ -1181,7 +1574,29 @@ public class YayaAnimationPlayer : MonoBehaviour
 
         float fade = nextFadeOverride > 0f ? nextFadeOverride : fadeDuration;
         nextFadeOverride = 0f;
+        if (instant)
+        {
+            // The bed transition blends the pose itself (see UpdatePoseBlend).
+            animator.PlayInFixedTime(stateHash, layerIndex, Mathf.Max(0f, fixedTimeOffset));
+            return;
+        }
+        // Same state that finished (e.g. a one-shot pose asked for again): Unity would ignore a
+        // cross-fade to itself, so restart it with our own blend.
+        if (IsCurrentState(stateHash))
+        {
+            BeginPoseBlend(PoseBlendMode.Simple, Mathf.Max(fade, holdLoopBlendSeconds));
+            animator.PlayInFixedTime(stateHash, layerIndex, Mathf.Max(0f, fixedTimeOffset));
+            return;
+        }
         animator.CrossFadeInFixedTime(stateHash, fade, layerIndex, Mathf.Max(0f, fixedTimeOffset));
+    }
+
+    private bool IsCurrentState(int hash)
+    {
+        if (animator == null || animator.runtimeAnimatorController == null || animator.IsInTransition(layerIndex))
+            return false;
+        AnimatorStateInfo current = animator.GetCurrentAnimatorStateInfo(layerIndex);
+        return current.shortNameHash == hash || current.fullPathHash == hash;
     }
 
     // True when `hash` is already the state playing (or being faded to), so calling it again
@@ -1207,6 +1622,7 @@ public class YayaAnimationPlayer : MonoBehaviour
     private void RestartState(string stateName, float fixedTimeOffset)
     {
         sittingRequestSeverity = -1;
+        requestedStateHash = 0;
         bearStrokeActive = false;
         earPainActive = false;
         EndHug();
@@ -1257,6 +1673,7 @@ public class YayaAnimationPlayer : MonoBehaviour
                 continue;
 
             StopClipFallback();
+            requestedStateHash = 0;
             if (logEvents)
                 Debug.Log($"[YayaAnimationPlayer] Play animation: {stateName}", this);
 
@@ -1271,6 +1688,7 @@ public class YayaAnimationPlayer : MonoBehaviour
     private bool PlayFirstAvailableStateDirect(params string[] stateNames)
     {
         sittingRequestSeverity = -1;
+        requestedStateHash = 0;
         bearStrokeActive = false;
         earPainActive = false;
         EndHug();
@@ -1305,6 +1723,7 @@ public class YayaAnimationPlayer : MonoBehaviour
     private bool PlayClipFallback(ref AnimationClip assignedClip, bool loop, params string[] clipNames)
     {
         sittingRequestSeverity = -1;
+        requestedStateHash = 0;
         bearStrokeActive = false;
         earPainActive = false;
         EndHug();
@@ -1664,7 +2083,7 @@ public class YayaAnimationPlayer : MonoBehaviour
             if (effectiveOffset.y < 0f)
                 effectiveOffset.y = 0f;
 
-            transform.position = anchor.position + effectiveOffset;
+            transform.position = anchor.position + effectiveOffset + sitNudge;
         }
 
         if (snapRotationToAnchors)

@@ -894,6 +894,48 @@ public class MomAnimationPlayer : MonoBehaviour
         ArmReachIK.Solve(comfortArm, target, comfortWeight);
     }
 
+    // ---------------------------------------------------------------------------------
+    // Watching: Mom turns her body toward something (e.g. Yaya while the nurse counts her
+    // breathing) and looks at it. StopWatching() turns her back the way she faced before.
+    // ---------------------------------------------------------------------------------
+    private Transform watchTarget;
+    private bool watchHasSaved;
+    private Quaternion watchSavedRotation;
+    private Vector3 watchSavedForward;
+
+    public Transform WatchFocus => watchTarget;
+
+    public void WatchTarget(Transform target)
+    {
+        if (target == null)
+            return;
+        if (!watchHasSaved)
+        {
+            watchHasSaved = true;
+            watchSavedRotation = transform.rotation;
+            watchSavedForward = IntendedForward;
+        }
+        watchTarget = target;
+        if (IsWalkingNow())
+            return;
+        Vector3 toTarget = Vector3.ProjectOnPlane(target.position - transform.position, Vector3.up);
+        if (toTarget.sqrMagnitude > 0.01f)
+            StartMove(transform.position, RootRotationFacing(toTarget), 0.8f);
+    }
+
+    public void StopWatching()
+    {
+        bool wasWatching = watchTarget != null;
+        watchTarget = null;
+        if (!watchHasSaved)
+            return;
+        watchHasSaved = false;
+        if (!wasWatching || IsWalkingNow())
+            return;
+        intendedForward = watchSavedForward;
+        StartMove(transform.position, watchSavedRotation, 0.8f);
+    }
+
     public void PlayTalking()
     {
         PlayState(talkingState);

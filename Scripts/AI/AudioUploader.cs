@@ -712,6 +712,10 @@ public class AudioUploader : MonoBehaviour
         string scenarioStepId = scenario != null && scenario.CurrentStep != null
             ? scenario.CurrentStep.id ?? string.Empty
             : string.Empty;
+        // The part of the story the student is really in (see ScenarioProgress); the scenario
+        // asset's own step never moves past the first one.
+        if (!string.IsNullOrEmpty(ScenarioProgress.Current))
+            scenarioStepId = ScenarioProgress.Current;
         if (string.IsNullOrWhiteSpace(scenarioStepId) && scenario != null && scenario.EnsureScenarioStarted())
         {
             scenarioStepId = scenario.CurrentStep != null ? scenario.CurrentStep.id ?? string.Empty : string.Empty;

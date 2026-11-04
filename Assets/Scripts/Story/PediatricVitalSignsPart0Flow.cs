@@ -24,6 +24,14 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
     [SerializeField] private UnityEvent onGreetingVoiceGateStarted;
     [SerializeField] private UnityEvent onDoorOpened;
 
+    // Used by the login screen: the nurse starts on this spot, facing this door.
+    public Transform DoorGuidePoint => doorGreetingGuide != null ? doorGreetingGuide.transform : null;
+    public DoorSlideOpener Door => doorOpener;
+    // True once the player has stood on the guide point outside the door.
+    // True once the greeting was accepted and the door was told to open.
+    public bool GreetingCompleted => completed;
+    public bool PlayerArrivedAtDoor => !waitingForGuideArrival && (waitingForGreeting || completed);
+
     private bool waitingForGuideArrival;
     private bool waitingForGreeting;
     private bool completed;
@@ -114,6 +122,7 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
         completed = false;
         waitingForGreeting = false;
         waitingForGuideArrival = true;
+        ScenarioProgress.Enter("part0");
         ResetBackendGate("part0 start");
 
         if (doorGreetingGuide != null)
@@ -187,6 +196,7 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
             return;
 
         completed = true;
+        ScenarioProgress.Enter("part1");
         waitingForGuideArrival = false;
         waitingForGreeting = false;
         doorGreetingGuide?.Hide();

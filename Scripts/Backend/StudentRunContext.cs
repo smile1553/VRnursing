@@ -65,7 +65,8 @@ public sealed class StudentRunContext
         return true;
     }
 
-    public FrozenStudentResult FreezeResult(int correctCount, int toneScore)
+    // questionScore: detailed question score (0-80), or -1 to let the Backend use correctCount x 10.
+    public FrozenStudentResult FreezeResult(int correctCount, int toneScore, int questionScore = -1)
     {
         if (HasPendingResult)
             return PendingResult;
@@ -77,7 +78,9 @@ public sealed class StudentRunContext
             studentId = StudentId,
             loginTime = LoginTime,
             correctCount = correctCount,
-            toneScore = toneScore
+            toneScore = toneScore,
+            hasQuestionScore = questionScore >= 0,
+            questionScore = Math.Max(0, questionScore)
         };
         return PendingResult;
     }
@@ -122,4 +125,8 @@ public sealed class FrozenStudentResult
     public string loginTime;
     public int correctCount;
     public int toneScore;
+    // Detailed question score (0-80) from PartScoreBoard. Only sent when hasQuestionScore is
+    // true; otherwise the Backend uses correctCount x 10 (also for files saved by older builds).
+    public bool hasQuestionScore;
+    public int questionScore;
 }

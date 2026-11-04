@@ -14,6 +14,10 @@ public class PerformanceScoreManager : MonoBehaviour
     public int maxQuizScore = 80;
     [FormerlySerializedAs("maxEmotionScore")]
     public int maxToneScore = 20;
+    [Tooltip("Tone points taken off for every sentence the backend rates as abusive / threatening (intent = threat).")]
+    public int abusiveSpeechPenalty = 2;
+    [Tooltip("Tone points taken off for every sentence the backend rates as forcing the child (intent = force).")]
+    public int forcingSpeechPenalty = 1;
     public int wrongQuizPenalty = 10;
 
     [Header("Report")]
@@ -63,7 +67,10 @@ public class PerformanceScoreManager : MonoBehaviour
         }
 
         if (emotionState != null)
+        {
             emotionState.OnEmotionChanged += OnEmotionChanged;
+            _listeningTo = emotionState;
+        }
     }
 
     void OnDisable()
@@ -76,10 +83,60 @@ public class PerformanceScoreManager : MonoBehaviour
 
         if (emotionState != null)
             emotionState.OnEmotionChanged -= OnEmotionChanged;
+        if (_listeningTo != null && _listeningTo != emotionState)
+            _listeningTo.OnEmotionChanged -= OnEmotionChanged;
+        _listeningTo = null;
+    }
+
+    // The emotion manager can appear after this component was enabled (it is created at
+    // runtime), so keep trying until the tone score is really listening to it.
+    EmotionStateManager _listeningTo;
+
+    void Update()
+    {
+        if (emotionState == null)
+            emotionState = EmotionStateManager.Instance != null ? EmotionStateManager.Instance : FindObjectOfType<EmotionStateManager>();
+        if (emotionState == _listeningTo)
+            return;
+
+        if (_listeningTo != null)
+            _listeningTo.OnEmotionChanged -= OnEmotionChanged;
+        _listeningTo = emotionState;
+        if (_listeningTo != null)
+        {
+            _listeningTo.OnEmotionChanged -= OnEmotionChanged;   // never twice
+            _listeningTo.OnEmotionChanged += OnEmotionChanged;
+            Debug.Log("[PerformanceScore] Tone score is now listening to the emotion manager.", this);
+        }
+    }
+
+    // Quizzes of the part-by-part story (they do not go through ScenarioController).
+    // Only the first answer to each quiz counts, like OnQuizAnswered.
+    public void ReportExternalQuiz(string key, bool correct, string question = null)
+    {
+        if (string.IsNullOrEmpty(key) || !_processedQuizKeys.Add(key))
+            return;
+
+        int penalty = correct ? 0 : wrongQuizPenalty;
+        if (correct)
+            _quizCorrectCount++;
+        else
+            _quizWrongCount++;
+
+        _quizScore = Mathf.Max(0, _quizScore - penalty);
+        AddEvent("quiz", key, penalty, correct ? "correct" : "wrong", question);
+        EmitScoreChanged();
+    }
+
+    // Other things worth keeping in the report (extra wrong attempts, hands-on tasks).
+    public void ReportExternalEvent(string type, string key, int penalty, string reason)
+    {
+        AddEvent(type, key, penalty, reason, null);
     }
 
     public void ResetScores()
     {
+        PartScoreBoard.ResetBoard();
         _startTime = Time.time;
         _quizScore = maxQuizScore;
         _toneScore = maxToneScore;
@@ -124,12 +181,29 @@ public class PerformanceScoreManager : MonoBehaviour
             return;
 
         int penalty = Mathf.Max(0, currentSeverity - previousSeverity);
+
+        // Abusive / threatening or forcing speech costs points on its own, even when Yaya's
+        // state did not get worse (for example she is already in meltdown).
+        string intent = snapshot.llm != null ? snapshot.llm.intent : null;
+        string harshReason = null;
+        if (string.Equals(intent, "threat", StringComparison.OrdinalIgnoreCase))
+        {
+            penalty = Mathf.Max(penalty, abusiveSpeechPenalty);
+            harshReason = "threat";
+        }
+        else if (string.Equals(intent, "force", StringComparison.OrdinalIgnoreCase))
+        {
+            penalty = Mathf.Max(penalty, forcingSpeechPenalty);
+            harshReason = "force";
+        }
+
         if (penalty <= 0)
             return;
 
         _emotionPenaltyTotal += penalty;
         _toneScore = Mathf.Max(0, _toneScore - penalty);
-        AddEvent("emotion", key, penalty, $"{snapshot.previousKidEmotionState}->{snapshot.kidEmotionState}", snapshot.text);
+        string change = $"{snapshot.previousKidEmotionState}->{snapshot.kidEmotionState}";
+        AddEvent("emotion", key, penalty, harshReason != null ? harshReason + " " + change : change, snapshot.text);
         EmitScoreChanged();
     }
 

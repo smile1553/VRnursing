@@ -84,6 +84,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     private float backendListenStartedAt;
     private string lastProcessedBackendJson;
     private bool startupGateReleased;
+    private PediatricVitalSignsPart0Flow part0Gate;
     private float startupGateReleaseAt;
     private bool quizButtonsBound;
 
@@ -234,6 +235,13 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
         bool hasMeasurement = ContainsAnyKeyword(speechText, Part1MeasurementKeywords) || ContainsAnyKeyword(speechText, measurementKeywords);
         if (hasGreeting && hasMeasurement)
         {
+            // Yaya is in meltdown (red): the nurse must calm her before the story moves on.
+            if (KidEmotionGate.Blocking)
+            {
+                Debug.Log("[Part1] Keywords matched, but Yaya must be calmed first.", this);
+                return;
+            }
+
             SkipVoiceAndStartDialogue();
         }
         else
@@ -604,6 +612,14 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
         ResolveStartupGatePanel();
         if (waitUntilPanelHidden != null && waitUntilPanelHidden.activeInHierarchy)
+            return false;
+
+        // Not before the greeting at the door is done: otherwise a sentence said outside the
+        // ward (it mentions "temperature", "blood pressure"...) starts the bedside dialogue
+        // while the door is still closed.
+        if (part0Gate == null)
+            part0Gate = FindObjectOfType<PediatricVitalSignsPart0Flow>();
+        if (part0Gate != null && part0Gate.isActiveAndEnabled && !part0Gate.GreetingCompleted)
             return false;
 
         startupGateReleased = true;

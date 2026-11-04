@@ -3,6 +3,7 @@ using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
+using TMPro;
 using UnityEngine.Events;
 using UnityEngine.XR.Interaction.Toolkit;
 
@@ -102,6 +103,8 @@ public class Part3VisualDemoController : MonoBehaviour
         stickerTemporarilyHiddenForQuiz = false;
         if (stickerObject != null && !stickerObject.activeSelf)
             hudStickerWasSelected = false;
+        if (rewardStyle)
+            return;   // shown by BeginStickerGive, only when a step asks for it
 
         if (stickerRoutine != null)
             StopCoroutine(stickerRoutine);
@@ -111,6 +114,8 @@ public class Part3VisualDemoController : MonoBehaviour
 
     public void HighlightSticker()
     {
+        if (rewardStyle)
+            return;
         if (stickerRoutine != null)
             StopCoroutine(stickerRoutine);
 
@@ -119,6 +124,7 @@ public class Part3VisualDemoController : MonoBehaviour
 
     public void HideSticker()
     {
+        StopRewardReveal();
         stickerHudVisible = false;
         if (stickerRoutine != null)
         {
@@ -132,6 +138,7 @@ public class Part3VisualDemoController : MonoBehaviour
 
     public void TemporarilyHideStickerForQuiz()
     {
+        StopRewardReveal();
         stickerTemporarilyHiddenForQuiz = true;
         if (stickerRoutine != null)
         {
@@ -145,6 +152,8 @@ public class Part3VisualDemoController : MonoBehaviour
     public void RestoreStickerAfterQuiz()
     {
         stickerTemporarilyHiddenForQuiz = false;
+        if (rewardStyle)
+            return;   // not kept in the corner any more
         ResolveReferences();
         stickerHudVisible = true;
         if (keepStickerInCameraCorner)
@@ -159,12 +168,64 @@ public class Part3VisualDemoController : MonoBehaviour
     }
     private void LateUpdate()
     {
-        if (!stickerTemporarilyHiddenForQuiz && !hudStickerAttaching && stickerHudVisible && keepStickerInCameraCorner)
+        if (rewardStyle)
+            UpdateRewardSticker();
+        else if (!stickerTemporarilyHiddenForQuiz && !hudStickerAttaching && stickerHudVisible && keepStickerInCameraCorner)
             PlaceFallbackStickerNearCamera();
 
         UpdateStickerGlow();
         TrimRecordButtonHitArea();
         UpdateVrStickerClick();
+        UpdateMouseStickerClick();
+    }
+
+    // Mouse in the Game view (editor / no headset): clicking the sticker gives it. OnMouseDown
+    // on the sticker does not fire when the project uses the new Input System only.
+    private int lastMouseStickerFrame = -1;
+
+    private void UpdateMouseStickerClick()
+    {
+        bool clicked = false;
+        Vector2 point = Vector2.zero;
+#if ENABLE_INPUT_SYSTEM
+        UnityEngine.InputSystem.Mouse mouse = UnityEngine.InputSystem.Mouse.current;
+        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
+        {
+            clicked = true;
+            point = mouse.position.ReadValue();
+        }
+#elif ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetMouseButtonDown(0))
+        {
+            clicked = true;
+            point = Input.mousePosition;
+        }
+#endif
+        if (!clicked || Time.frameCount == lastMouseStickerFrame)
+            return;
+        if (!stickerGiveEnabled || !stickerHudVisible || hudStickerAttaching || stickerObject == null || !stickerObject.activeInHierarchy)
+            return;
+        Camera cam = Camera.main;
+        if (cam == null)
+            return;
+
+        Ray ray = cam.ScreenPointToRay(point);
+        foreach (RaycastHit hit in Physics.RaycastAll(ray, 50f, ~0, QueryTriggerInteraction.Collide))
+        {
+            if (hit.collider != null && hit.collider.transform.IsChildOf(stickerObject.transform))
+            {
+                lastMouseStickerFrame = Time.frameCount;
+                HandleHudStickerClicked();
+                return;
+            }
+        }
+        // No collider hit: fall back to the sticker's picture on screen.
+        Renderer picture = stickerObject.GetComponentInChildren<Renderer>();
+        if (picture != null && picture.bounds.IntersectRay(ray))
+        {
+            lastMouseStickerFrame = Time.frameCount;
+            HandleHudStickerClicked();
+        }
     }
 
     // The medical-record button's clickable area is a square that is bigger than its icon and
@@ -429,8 +490,305 @@ public class Part3VisualDemoController : MonoBehaviour
     public void EndStickerGive()
     {
         stickerGiveEnabled = false;
+        nextStickerToBear = false;
         if (stickerGlow != null)
             stickerGlow.enabled = false;
+        if (rewardStyle && !hudStickerAttaching)
+            StopRewardReveal();
+    }
+
+    // The next sticker goes on the teddy bear (e.g. "praise the bear and give it a sticker").
+    // Otherwise it goes on Yaya's shirt.
+    public void GiveNextStickerToBear()
+    {
+        nextStickerToBear = true;
+    }
+
+    // ------------------------------------------------------------------------------
+    // Sticker as a game reward: hidden until a step asks for it, then it pops up in front of
+    // the nurse (bounce, glow, turning rays, twinkling stars, a hint below). Clicking it (or
+    // the step being done by voice) makes it fly onto Yaya's shirt / the bear with a sparkle.
+    // ------------------------------------------------------------------------------
+    [Header("Sticker reward (game style)")]
+    [Tooltip("On: the sticker is not kept in the corner. When a step asks for it, it pops up in front of the nurse and is clicked from there.")]
+    [SerializeField] private bool rewardStyle = true;
+    [Tooltip("Where it pops up: x right, y up, z forward from the eyes (m).")]
+    [SerializeField] private Vector3 rewardRevealOffset = new Vector3(0f, -0.10f, 0.85f);
+    [Tooltip("Height of the sticker while it is offered (m).")]
+    [SerializeField] private float rewardRevealHeight = 0.13f;
+    [SerializeField] private string rewardHintForYaya = "\u9EDE\u4E00\u4E0B\uFF0C\u628A\u8CBC\u7D19\u9001\u7D66\u82BD\u82BD";
+    [SerializeField] private string rewardHintForBear = "\u9EDE\u4E00\u4E0B\uFF0C\u628A\u8CBC\u7D19\u9001\u7D66\u5C0F\u718A";
+    [Tooltip("Old landing animation prefab (Bear_Sticker). It put a stray grey triangle in the room, so it is off.")]
+    [SerializeField] private bool useStickerAttachAnimationPrefab = false;
+
+    [Header("Where the sticker lands")]
+    [Tooltip("On Yaya's shirt: from her chest bone, forward (m) to the shirt surface.")]
+    [SerializeField] private float yayaStickerForward = 0.075f;
+    [Tooltip("...up (m) from the chest bone (negative = lower, on the shirt below the neckline).")]
+    [SerializeField] private float yayaStickerUpOnShirt = -0.06f;
+    [Tooltip("...to the side (m); the first sticker goes on her left, the next on her right.")]
+    [SerializeField] private float yayaStickerSide = 0.045f;
+    [SerializeField] private float yayaStickerSize = 0.055f;
+    [SerializeField] private float bearStickerSize = 0.05f;
+
+    private bool nextStickerToBear;
+    private float rewardRevealStart = -1f;
+    private ItemPresentFx rewardFx;
+    private TextMeshPro rewardHintText;
+    private int stickersOnYaya;
+    private int stickersOnBear;
+
+    private void UpdateRewardSticker()
+    {
+        if (stickerObject == null || hudStickerAttaching)
+        {
+            if (rewardHintText != null)
+                rewardHintText.gameObject.SetActive(false);
+            return;
+        }
+
+        bool want = stickerGiveEnabled && !hudStickerWasSelected && !stickerTemporarilyHiddenForQuiz;
+        if (!want)
+        {
+            if (stickerObject.activeSelf)
+                stickerObject.SetActive(false);
+            stickerHudVisible = false;
+            StopRewardReveal();
+            return;
+        }
+
+        if (rewardRevealStart < 0f)
+            StartRewardReveal();
+        PlaceRewardSticker(Time.time - rewardRevealStart);
+    }
+
+    private void StartRewardReveal()
+    {
+        ResolveReferences();
+        if (stickerObject == null)
+            return;
+        rewardRevealStart = Time.time;
+        stickerHudVisible = true;
+        stickerObject.SetActive(true);
+        // Collider sized at full size (not at the start of the pop, when the sticker is tiny).
+        PlaceRewardSticker(10f);
+        EnsureHudStickerInteractable();
+        PlaceRewardSticker(0f);
+        PlayOneShot(popClip);
+        if (rewardFx != null)
+            rewardFx.Stop();
+        rewardFx = ItemPresentFx.Attach(stickerObject.transform, rewardRevealHeight * 0.6f, ItemPresentFx.Gold, true, 18);
+
+        if (rewardHintText == null)
+        {
+            GameObject go = new GameObject("Sticker_RewardHint");
+            go.transform.SetParent(transform, false);
+            rewardHintText = go.AddComponent<TextMeshPro>();
+            TMP_FontAsset font = FindChineseFont();
+            if (font != null)
+                rewardHintText.font = font;
+            rewardHintText.alignment = TextAlignmentOptions.Center;
+            rewardHintText.enableWordWrapping = false;
+            rewardHintText.fontStyle = FontStyles.Bold;
+            rewardHintText.outlineWidth = 0.25f;
+            rewardHintText.outlineColor = new Color32(90, 60, 20, 255);
+            rewardHintText.sortingOrder = 30;
+        }
+        rewardHintText.text = nextStickerToBear ? rewardHintForBear : rewardHintForYaya;
+        rewardHintText.gameObject.SetActive(true);
+        Debug.Log($"[Part3VisualDemoController] Sticker offered (goes to {(nextStickerToBear ? "the bear" : "Yaya")}).", this);
+    }
+
+    private void StopRewardReveal()
+    {
+        rewardRevealStart = -1f;
+        if (rewardFx != null)
+        {
+            rewardFx.Stop();
+            rewardFx = null;
+        }
+        if (rewardHintText != null)
+            rewardHintText.gameObject.SetActive(false);
+    }
+
+    private void PlaceRewardSticker(float age)
+    {
+        Camera cam = Camera.main;
+        if (cam == null || stickerObject == null)
+            return;
+        Transform c = cam.transform;
+        Vector3 offset = HudDepth.Flatten(rewardRevealOffset, out float depthFactor);
+        float pop = EaseOutBack(Mathf.Clamp01(age / 0.45f));
+        float bob = Mathf.Sin(age * 2.4f) * 0.006f;
+        Vector3 position = c.position + c.right * offset.x + c.up * (offset.y + bob) + c.forward * offset.z;
+        stickerObject.transform.SetPositionAndRotation(position, c.rotation * Quaternion.Euler(0f, 0f, Mathf.Sin(age * 1.7f) * 5f));
+        SetStickerWorldHeight(stickerObject.transform, rewardRevealHeight * depthFactor * Mathf.Max(0.02f, pop));
+
+        if (rewardHintText != null && rewardHintText.gameObject.activeSelf)
+        {
+            Transform h = rewardHintText.transform;
+            h.SetPositionAndRotation(position - c.up * (rewardRevealHeight * 0.78f * depthFactor), c.rotation);
+            float pulse = 1f + 0.04f * Mathf.Sin(age * 4f);
+            h.localScale = Vector3.one * 0.0045f * depthFactor * pulse;
+            rewardHintText.fontSize = 8f;
+            Color col = new Color(1f, 0.95f, 0.75f, Mathf.Clamp01((age - 0.35f) / 0.3f));
+            rewardHintText.color = col;
+        }
+    }
+
+    private static TMP_FontAsset FindChineseFont()
+    {
+        foreach (Canvas canvas in FindObjectsOfType<Canvas>(true))
+        {
+            if (canvas == null || !canvas.name.Contains("Instruction_Canvas"))
+                continue;
+            TMP_Text text = canvas.GetComponentInChildren<TMP_Text>(true);
+            if (text != null && text.font != null)
+                return text.font;
+        }
+        TMP_Text any = FindObjectOfType<TMP_Text>(true);
+        return any != null ? any.font : null;
+    }
+
+    // Where the sticker goes: Yaya's shirt (on her chest) or the bear's tummy. Returns the
+    // object it is stuck to (so it moves with it), its position and rotation.
+    private bool GetStickerLanding(bool onBear, out Transform parent, out Vector3 position, out Quaternion rotation, out float size)
+    {
+        parent = null;
+        position = Vector3.zero;
+        rotation = Quaternion.identity;
+        size = onBear ? bearStickerSize : yayaStickerSize;
+        YayaAnimationPlayer yaya = FindObjectOfType<YayaAnimationPlayer>();
+        Camera viewer = Camera.main;
+
+        if (!onBear)
+        {
+            if (yaya == null)
+                return false;
+            Transform chest = MixamoHumanoidAvatarBuilder.FindBone(yaya.transform, "Spine2")
+                ?? MixamoHumanoidAvatarBuilder.FindBone(yaya.transform, "Spine1");
+            if (chest == null)
+                return false;
+            Vector3 forward = PrefabPerformanceRuntime.GetActorPelvisForward(yaya.transform);
+            forward = Vector3.ProjectOnPlane(forward, Vector3.up);
+            if (forward.sqrMagnitude < 1e-4f)
+                forward = yaya.transform.forward;
+            forward.Normalize();
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+            float side = (stickersOnYaya % 2 == 0 ? -1f : 1f) * yayaStickerSide;   // her left first
+            position = chest.position + forward * yayaStickerForward + Vector3.up * yayaStickerUpOnShirt + right * side;
+            // On the real surface of her shirt when the mesh can be read (Read/Write on the model).
+            Vector3 around = chest.position + Vector3.up * yayaStickerUpOnShirt + right * side;
+            float bestOut = float.MinValue;
+            foreach (SkinnedMeshRenderer part in yaya.GetComponentsInChildren<SkinnedMeshRenderer>())
+            {
+                if (part == null || !part.enabled || !part.bounds.Contains(around))
+                    continue;
+                if (TryFindFrontSurface(part, around, forward, 0.025f, out Vector3 shirtPoint))
+                {
+                    float o = Vector3.Dot(shirtPoint - around, forward);
+                    if (o > bestOut && o > 0f && o < 0.2f)
+                    {
+                        bestOut = o;
+                        position = shirtPoint + forward * 0.004f;
+                    }
+                }
+            }
+            // Facing out of her chest (a sprite is seen from the side its forward points away from).
+            rotation = Quaternion.LookRotation(-forward, Vector3.up);
+            parent = chest;
+            return true;
+        }
+
+        Transform bear = yaya != null ? yaya.FindComfortBear() : FindFirstNamedTransform(yayaStickerAttachTargetNames);
+        if (bear == null)
+            return false;
+        Renderer body = null;
+        float biggest = 0f;
+        Vector3 reference = yaya != null ? yaya.transform.position : bear.position;
+        foreach (Renderer r in bear.GetComponentsInChildren<Renderer>())
+        {
+            if (r is SpriteRenderer || r is LineRenderer || r is ParticleSystemRenderer
+                || r.name.StartsWith("Part9_") || r.name.StartsWith("Sticker"))
+                continue;
+            Vector3 e = r.bounds.size;
+            float score = e.x * e.y * e.z / (1f + Vector3.Distance(r.bounds.center, reference));
+            if (score > biggest)
+            {
+                biggest = score;
+                body = r;
+            }
+        }
+        if (body == null)
+            return false;
+
+        Bounds b = body.bounds;
+        Vector3 outward = viewer != null ? Vector3.ProjectOnPlane(viewer.transform.position - b.center, Vector3.up) : Vector3.forward;
+        outward = outward.sqrMagnitude > 1e-4f ? outward.normalized : Vector3.forward;
+        // Tummy height, then the frontmost point of the mesh there (its real surface).
+        Vector3 tummy = b.center - Vector3.up * (b.extents.y * stickerOnBearDrop);
+        position = tummy + outward * (Mathf.Abs(outward.x) * b.extents.x + Mathf.Abs(outward.z) * b.extents.z) * stickerOnBearOut;
+        if (TryFindFrontSurface(body, tummy, outward, b.extents.y * 0.18f, out Vector3 surface))
+            position = surface + outward * 0.004f;
+        rotation = Quaternion.LookRotation(-outward, Vector3.up);
+        parent = body.transform;
+        return true;
+    }
+
+    // The point of the mesh furthest toward `outward` within a band around `around` (needs
+    // Read/Write on the model; returns false otherwise).
+    private static bool TryFindFrontSurface(Renderer body, Vector3 around, Vector3 outward, float band, out Vector3 point)
+    {
+        point = around;
+        Mesh mesh = null;
+        if (body is SkinnedMeshRenderer skinned && skinned.sharedMesh != null && skinned.sharedMesh.isReadable)
+        {
+            mesh = new Mesh();
+            skinned.BakeMesh(mesh);
+        }
+        else
+        {
+            MeshFilter filter = body.GetComponent<MeshFilter>();
+            if (filter != null && filter.sharedMesh != null && filter.sharedMesh.isReadable)
+                mesh = filter.sharedMesh;
+        }
+        if (mesh == null)
+            return false;
+
+        Matrix4x4 toWorld = body is SkinnedMeshRenderer
+            ? Matrix4x4.TRS(body.transform.position, body.transform.rotation, Vector3.one)
+            : body.transform.localToWorldMatrix;
+        Vector3 across = Vector3.Cross(Vector3.up, outward).normalized;
+        float best = float.MinValue;
+        bool found = false;
+        foreach (Vector3 v in mesh.vertices)
+        {
+            Vector3 w = toWorld.MultiplyPoint3x4(v);
+            Vector3 d = w - around;
+            if (Mathf.Abs(d.y) > band || Mathf.Abs(Vector3.Dot(d, across)) > band)
+                continue;
+            float out1 = Vector3.Dot(d, outward);
+            if (out1 > best)
+            {
+                best = out1;
+                point = w;
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    private IEnumerator SquashRoutine(Transform t, Vector3 finalScale)
+    {
+        for (float time = 0f; time < 0.22f && t != null; time += Time.deltaTime)
+        {
+            float k = time / 0.22f;
+            float s = 1f + 0.3f * Mathf.Sin(k * Mathf.PI) * (1f - k);
+            t.localScale = new Vector3(finalScale.x * s, finalScale.y / s, finalScale.z);
+            yield return null;
+        }
+        if (t != null)
+            t.localScale = finalScale;
     }
 
     private void UpdateStickerGlow()
@@ -670,6 +1028,16 @@ public class Part3VisualDemoController : MonoBehaviour
     {
         OnHudStickerSelected(null);
     }
+
+    // From the sticker's own OnMouseDown (legacy input): ignored when the mouse click was
+    // already handled this frame by UpdateMouseStickerClick.
+    internal void HandleHudStickerClickedByMouseDown()
+    {
+        if (Time.frameCount == lastMouseStickerFrame)
+            return;
+        lastMouseStickerFrame = Time.frameCount;
+        HandleHudStickerClicked();
+    }
     private void OnHudStickerSelected(SelectEnterEventArgs args)
     {
         if (hudStickerAttaching)
@@ -693,6 +1061,20 @@ public class Part3VisualDemoController : MonoBehaviour
     private void PlayHudStickerAttachAnimation()
     {
         ResolveReferences();
+        if (rewardStyle)
+        {
+            if (rewardFx != null)
+            {
+                rewardFx.Stop();
+                rewardFx = null;
+            }
+            if (rewardHintText != null)
+                rewardHintText.gameObject.SetActive(false);
+            if (hudStickerAttachRoutine != null)
+                StopCoroutine(hudStickerAttachRoutine);
+            hudStickerAttachRoutine = StartCoroutine(FlyStickerToRecipientRoutine(nextStickerToBear));
+            return;
+        }
         Transform animationTarget = FindFirstNamedTransform(yayaStickerAttachTargetNames) ?? yayaStickerAttachTarget;
 
         // Always the teddy that is next to Yaya, and its body itself (the named object can be a
@@ -727,10 +1109,10 @@ public class Part3VisualDemoController : MonoBehaviour
 
         hudStickerAttachRoutine = StartCoroutine(FlyHudStickerToTargetRoutine(animationTarget));
 
-        if (stickerAttachAnimationPrefab == null)
+        if (useStickerAttachAnimationPrefab && stickerAttachAnimationPrefab == null)
             stickerAttachAnimationPrefab = FindStickerAttachAnimationPrefab();
 
-        if (stickerAttachAnimationPrefab != null && animationTarget != null)
+        if (useStickerAttachAnimationPrefab && stickerAttachAnimationPrefab != null && animationTarget != null)
         {
             GetStickerTargetPose(animationTarget, out Vector3 animationPosition, out Quaternion animationRotation);
             GameObject animationObject = Instantiate(stickerAttachAnimationPrefab, animationPosition, animationRotation);
@@ -780,6 +1162,98 @@ public class Part3VisualDemoController : MonoBehaviour
 #endif
         return null;
     }
+    // Game style: the offered sticker flies in an arc onto Yaya's shirt / the bear's tummy,
+    // shrinking to sticker size and turning flat onto it, then lands with a squash and sparkle.
+    // A copy stays there (moving with her / the bear); the offered one is hidden again.
+    private IEnumerator FlyStickerToRecipientRoutine(bool onBear)
+    {
+        if (stickerObject == null)
+            yield break;
+
+        hudStickerAttaching = true;
+        stickerObject.SetActive(true);
+        if (hudStickerInteractable != null)
+            hudStickerInteractable.enabled = false;
+        SetCollidersEnabled(stickerObject, false);
+        PlayOneShot(popClip);
+
+        Vector3 startPosition = stickerObject.transform.position;
+        Quaternion startRotation = stickerObject.transform.rotation;
+        Vector3 startScale = stickerObject.transform.localScale;
+        bool hasLanding = GetStickerLanding(onBear, out Transform parent, out Vector3 targetPosition, out Quaternion targetRotation, out float size);
+        if (!hasLanding)
+        {
+            targetPosition = startPosition;
+            targetRotation = startRotation;
+        }
+
+        // Little "wind-up" pop, then the flight.
+        for (float t = 0f; t < 0.12f; t += Time.deltaTime)
+        {
+            stickerObject.transform.localScale = startScale * (1f + 0.15f * Mathf.Sin(t / 0.12f * Mathf.PI));
+            yield return null;
+        }
+
+        float duration = 0.55f;
+        SetStickerWorldHeight(stickerObject.transform, size);
+        Vector3 endScale = stickerObject.transform.localScale;
+        for (float elapsed = 0f; elapsed < duration; elapsed += Time.deltaTime)
+        {
+            float t = Mathf.Clamp01(elapsed / duration);
+            float e = t * t * (3f - 2f * t);
+            float arc = Mathf.Sin(t * Mathf.PI) * 0.15f;
+            stickerObject.transform.position = Vector3.Lerp(startPosition, targetPosition, e) + Vector3.up * arc;
+            stickerObject.transform.rotation = Quaternion.Slerp(startRotation, targetRotation, e) * Quaternion.Euler(0f, 0f, (1f - e) * 360f);
+            stickerObject.transform.localScale = Vector3.Lerp(startScale, endScale, e);
+            yield return null;
+        }
+
+        if (hasLanding)
+        {
+            GameObject copy = Instantiate(stickerObject, targetPosition, targetRotation);
+            copy.name = onBear ? "Sticker_OnBear" : "Sticker_OnYaya";
+            foreach (Renderer copyRenderer in copy.GetComponentsInChildren<Renderer>(true))
+                copyRenderer.sortingOrder = -20;
+            XRSimpleInteractable copyInteractable = copy.GetComponent<XRSimpleInteractable>();
+            if (copyInteractable != null)
+                Destroy(copyInteractable);
+            StickerHudClickProxy copyProxy = copy.GetComponent<StickerHudClickProxy>();
+            if (copyProxy != null)
+                Destroy(copyProxy);
+            foreach (Collider copyCollider in copy.GetComponentsInChildren<Collider>(true))
+                Destroy(copyCollider);
+            Transform copyGlow = copy.transform.Find("Sticker_Glow");
+            if (copyGlow != null)
+                Destroy(copyGlow.gameObject);
+            SetStickerWorldHeight(copy.transform, size);
+            if (onBear)
+                copy.transform.SetParent(parent, true);
+            else
+            {
+                // Not a child of Yaya: when Yaya is swapped for an animated copy (listening with
+                // the stethoscope) her own body is hidden, and the sticker went with it. It
+                // follows the same bone on whichever Yaya is visible instead.
+                YayaAnimationPlayer owner = FindObjectOfType<YayaAnimationPlayer>();
+                copy.AddComponent<StickerBoneFollower>().Setup(parent, owner != null ? owner.transform : parent.root);
+            }
+            StartCoroutine(SquashRoutine(copy.transform, copy.transform.localScale));
+            ItemPresentFx.Burst(targetPosition, size * 1.6f, ItemPresentFx.Gold);
+            if (onBear) stickersOnBear++; else stickersOnYaya++;
+            placedStickerCopy = copy;
+            Debug.Log($"[Part3VisualDemoController] Sticker stuck on {(onBear ? "the bear" : "Yaya's shirt")} at {targetPosition:F3}.", copy);
+        }
+
+        stickerObject.SetActive(false);
+        stickerObject.transform.localScale = startScale;
+        SetCollidersEnabled(stickerObject, true);
+        if (hudStickerInteractable != null)
+            hudStickerInteractable.enabled = true;
+        stickerHudVisible = false;
+        hudStickerAttaching = false;
+        hudStickerAttachRoutine = null;
+        StopRewardReveal();
+    }
+
     private IEnumerator FlyHudStickerToTargetRoutine(Transform target)
     {
         if (stickerObject == null)
@@ -1325,6 +1799,115 @@ public class StickerHudClickProxy : MonoBehaviour
 
     private void OnMouseDown()
     {
-        owner?.HandleHudStickerClicked();
+        owner?.HandleHudStickerClickedByMouseDown();
+    }
+}
+
+// Keeps a sticker on a bone of Yaya (her chest). If her body is hidden because an animated
+// copy of her is shown instead, it follows the bone with the same name on that copy.
+public class StickerBoneFollower : MonoBehaviour
+{
+    private Transform bone;
+    private Transform owner;
+    private string boneName;
+    private Vector3 offset;
+    private Quaternion turn;
+    private Renderer ownerBody;
+    private Transform standIn;
+    private float nextScan;
+    private Renderer[] own;
+
+    public void Setup(Transform followBone, Transform ownerRoot)
+    {
+        bone = followBone;
+        owner = ownerRoot;
+        boneName = followBone != null ? followBone.name : string.Empty;
+        if (bone != null)
+        {
+            offset = Quaternion.Inverse(bone.rotation) * (transform.position - bone.position);
+            turn = Quaternion.Inverse(bone.rotation) * transform.rotation;
+        }
+        float biggest = 0f;
+        if (owner != null)
+        {
+            foreach (SkinnedMeshRenderer r in owner.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                float size = r.bounds.size.sqrMagnitude;
+                if (size > biggest)
+                {
+                    biggest = size;
+                    ownerBody = r;
+                }
+            }
+        }
+        own = GetComponentsInChildren<Renderer>(true);
+    }
+
+    private void LateUpdate()
+    {
+        if (bone == null)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Transform follow = bone;
+        bool ownerVisible = ownerBody == null || (ownerBody.enabled && ownerBody.gameObject.activeInHierarchy);
+        if (!ownerVisible)
+        {
+            if ((standIn == null || !standIn.gameObject.activeInHierarchy) && Time.time >= nextScan)
+            {
+                nextScan = Time.time + 0.5f;
+                standIn = FindStandIn();
+            }
+            follow = standIn;
+        }
+
+        bool show = follow != null;
+        foreach (Renderer r in own)
+        {
+            if (r != null && r.enabled != show)
+                r.enabled = show;
+        }
+        if (!show)
+            return;
+        transform.SetPositionAndRotation(follow.position + follow.rotation * offset, follow.rotation * turn);
+    }
+
+    // The visible character (not Yaya herself) that has a bone with the same name, nearest to her.
+    private Transform FindStandIn()
+    {
+        Transform best = null;
+        float bestDistance = 2f;
+        foreach (SkinnedMeshRenderer r in FindObjectsOfType<SkinnedMeshRenderer>())
+        {
+            if (r == null || !r.enabled || (owner != null && r.transform.IsChildOf(owner)))
+                continue;
+            Transform found = FindDeep(r.transform.root, boneName);
+            if (found == null || (owner != null && found.IsChildOf(owner)))
+                continue;
+            float d = Vector3.Distance(found.position, bone.position);
+            if (d < bestDistance)
+            {
+                bestDistance = d;
+                best = found;
+            }
+        }
+        return best;
+    }
+
+    private static Transform FindDeep(Transform root, string name)
+    {
+        if (root == null || string.IsNullOrEmpty(name))
+            return null;
+        if (root.name == name)
+            return root;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform hit = FindDeep(root.GetChild(i), name);
+            if (hit != null)
+                return hit;
+        }
+        return null;
     }
 }

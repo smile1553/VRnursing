@@ -259,8 +259,16 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         ShowNursePrompt(ApexPulseAction, WaitingForNurseAction.None);
         ShowHeartbeatEffect(true);
         momAnimation?.PlayStandingIdle();
-        yayaAnimation?.PlaySittingIdle();
-        yield return new WaitForSeconds(Mathf.Max(0.1f, heartbeatEffectDuration));
+        // Still a little nervous while the nurse listens: she keeps rubbing her arm (not idle).
+        yayaAnimation?.PlaySittingRubbingArm();
+        // One full minute to count the apex pulse; Skip (F8) ends it early.
+        SetPromptSkipButtonsVisible(true);
+        stickerStepSkipped = false;
+        float heartbeatEnd = Time.time + HeartbeatSeconds;
+        while (Time.time < heartbeatEnd && !stickerStepSkipped)
+            yield return null;
+        stickerStepSkipped = false;
+        SetPromptSkipButtonsVisible(false);
         ShowHeartbeatEffect(false);
 
         ShowNursePrompt(NurseGiveStickerBeforeEarTemp, WaitingForNurseAction.GiveStickerBeforeEarTemp);
@@ -899,6 +907,10 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         if (heartbeatEffectVisibleScale <= 0f || Mathf.Abs(heartbeatEffectVisibleScale - 0.22f) < 0.001f || Mathf.Abs(heartbeatEffectVisibleScale - 0.35f) < 0.001f || Mathf.Abs(heartbeatEffectVisibleScale - 0.16f) < 0.001f)
             heartbeatEffectVisibleScale = 0.10f;
     }
+    [Tooltip("Seconds the nurse listens to / counts the apex pulse (at least 60).")]
+    [SerializeField] private float apexPulseSeconds = 60f;
+    private float HeartbeatSeconds => Mathf.Max(60f, Mathf.Max(apexPulseSeconds, heartbeatEffectDuration));
+
     private void ShowHeartbeatEffect(bool visible)
     {
         GameObject effect = heartbeatEffectInstance != null ? heartbeatEffectInstance : heartbeatEffect;
@@ -993,7 +1005,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         }
 
         float elapsed = 0f;
-        while (effect != null && effect.activeInHierarchy && elapsed < heartbeatEffectDuration)
+        while (effect != null && effect.activeInHierarchy && elapsed < HeartbeatSeconds)
         {
             elapsed += Time.deltaTime;
             float cycle = Mathf.Repeat(elapsed, 1f);

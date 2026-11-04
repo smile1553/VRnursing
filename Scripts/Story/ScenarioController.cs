@@ -431,6 +431,7 @@ public class ScenarioController : MonoBehaviour
         if (quizUi.root)
             quizUi.root.SetActive(true);
         AlignQuizUi(quizUi.root);
+        QuizPanelRuntimeHelper.BeginQuiz(quizUi.root, quizUi.root != null ? quizUi.root.name : string.Empty);
         MoveRigToQuizSpawn();
         if (quizUi.questionText)
             quizUi.questionText.text = quiz.question;
@@ -458,6 +459,7 @@ public class ScenarioController : MonoBehaviour
     void HideQuiz()
     {
         _activeQuiz = null;
+        QuizPanelRuntimeHelper.EndQuiz();
         if (ui == null) return;
         var quizUi = _activeQuizUi != null ? _activeQuizUi : ui.quiz;
         if (quizUi == null) return;
@@ -526,7 +528,10 @@ public class ScenarioController : MonoBehaviour
             return;
         }
         if (legacyQuiz.currentQuizPanel != null)
+        {
             legacyQuiz.currentQuizPanel.SetActive(true);
+            QuizPanelRuntimeHelper.BeginQuiz(legacyQuiz.currentQuizPanel, legacyQuiz.currentQuizPanel.name);
+        }
         MoveRigToQuizSpawn();
     }
 

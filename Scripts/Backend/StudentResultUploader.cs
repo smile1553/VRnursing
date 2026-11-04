@@ -28,6 +28,13 @@ public class StudentResultUploader : MonoBehaviour
     public int maxAutomaticRetries = 0;
     public float firstRetryDelaySeconds = 2f;
 
+    [Header("When the last speech requests never finish")]
+    [Tooltip("The result normally waits until every /audio request is done. If that has not happened this many seconds after the story ended (a request failed, or the microphone loop never stopped), the result is sent anyway with the scores as they are. 0 = wait for ever.")]
+    public float sendAnywayAfterSeconds = 10f;
+
+    float completedAt = -1f;
+    bool ignoreAudioGuards;
+
     public string LastStatusMessage { get; private set; }
     public long LastResponseCode { get; private set; }
     public event Action ResultUploadSucceeded;
@@ -108,8 +115,26 @@ public class StudentResultUploader : MonoBehaviour
         StartCoroutine(UploadFrozenResult());
     }
 
+    void Update()
+    {
+        if (completedAt < 0f || ignoreAudioGuards || sendAnywayAfterSeconds <= 0f)
+            return;
+        StudentRunContext context = StudentRunContext.Current;
+        if (!context.ScenarioCompleted || context.ResultSubmitted || context.IsSubmitting || context.HasPendingResult)
+            return;
+        if (Time.unscaledTime - completedAt < sendAnywayAfterSeconds)
+            return;
+
+        ignoreAudioGuards = true;
+        Debug.LogWarning("[StudentResultUploader] The /audio requests did not settle within " + sendAnywayAfterSeconds +
+            " s after the story ended (" + LastStatusMessage + "). Sending the result with the current scores.", this);
+        TryFreezeAndUpload();
+    }
+
     void HandleScenarioCompleted()
     {
+        completedAt = Time.unscaledTime;
+        ignoreAudioGuards = false;
         audioUploader?.StopCaptureAndFlush();
         StudentRunContext.Current.ScenarioCompleted = true;
         TryFreezeAndUpload();
@@ -139,13 +164,13 @@ public class StudentResultUploader : MonoBehaviour
             return;
         }
 
-        if (audioUploader != null && audioUploader.HasBlockingAudioFailure)
+        if (!ignoreAudioGuards && audioUploader != null && audioUploader.HasBlockingAudioFailure)
         {
             SetStatus("Final result is blocked because an /audio request failed permanently: " +
                 audioUploader.LastUploadError, true);
             return;
         }
-        if (audioUploader != null && !audioUploader.IsAudioProcessingIdle)
+        if (!ignoreAudioGuards && audioUploader != null && !audioUploader.IsAudioProcessingIdle)
         {
             SetStatus($"Scenario is complete; waiting for {audioUploader.OutstandingRequestCount} /audio request(s) before freezing ToneScore.", false);
             return;
@@ -173,7 +198,13 @@ public class StudentResultUploader : MonoBehaviour
                 return;
             }
 
-            FrozenStudentResult frozen = context.FreezeResult(correctCount, toneScore);
+            // Detailed question score of the part-by-part story (wrong answers and the hands-on
+            // tasks taken into account); -1 when that story did not finish.
+            int questionScore = PartScoreBoard.LastDetailedScore;
+            if (questionScore > 80)
+                questionScore = 80;
+
+            FrozenStudentResult frozen = context.FreezeResult(correctCount, toneScore, questionScore);
             string persistenceError;
             if (!PendingResultStore.TrySaveNew(frozen, out persistenceError))
             {
@@ -230,14 +261,36 @@ public class StudentResultUploader : MonoBehaviour
         }
 
         FrozenStudentResult frozen = context.PendingResult;
-        StudentResultRequest payload = new StudentResultRequest
+        // questionScore is only sent when there is one (the Backend rejects out-of-range values).
+        string payloadJson;
+        if (frozen.hasQuestionScore)
         {
-            studentId = frozen.studentId,
-            loginTime = frozen.loginTime,
-            correctCount = frozen.correctCount,
-            toneScore = frozen.toneScore
-        };
-        byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
+            payloadJson = JsonUtility.ToJson(new StudentDetailedResultRequest
+            {
+                studentId = frozen.studentId,
+                loginTime = frozen.loginTime,
+                correctCount = frozen.correctCount,
+                toneScore = frozen.toneScore,
+                questionScore = frozen.questionScore,
+                // Per-question details for the Backend's feedback report. Only when they
+                // belong to this result (a result recovered after a restart has none).
+                items = PartScoreBoard.LastItems != null && PartScoreBoard.LastDetailedScore == frozen.questionScore
+                    ? PartScoreBoard.LastItems
+                    : new PartScoreBoard.Item[0],
+                steps = StepsFor(frozen)
+            });
+        }
+        else
+        {
+            payloadJson = JsonUtility.ToJson(new StudentResultRequest
+            {
+                studentId = frozen.studentId,
+                loginTime = frozen.loginTime,
+                correctCount = frozen.correctCount,
+                toneScore = frozen.toneScore
+            });
+        }
+        byte[] body = Encoding.UTF8.GetBytes(payloadJson);
         string url = string.Format("{0}/api/sessions/{1}/results/{2}",
             baseUrl.TrimEnd('/'),
             Uri.EscapeDataString(frozen.sessionId),
@@ -269,7 +322,7 @@ public class StudentResultUploader : MonoBehaviour
                 }
 
                 StudentResultResponse response = ParseResponse(responseJson);
-                int expectedQuestionScore = frozen.correctCount * 10;
+                int expectedQuestionScore = frozen.hasQuestionScore ? frozen.questionScore : frozen.correctCount * 10;
                 if (response == null || !response.ok ||
                     response.sessionId != frozen.sessionId ||
                     response.resultId != frozen.resultId ||
@@ -352,6 +405,22 @@ public class StudentResultUploader : MonoBehaviour
         catch { return null; }
     }
 
+    // Time spent in each part of the story, taken once per result (a retry sends the same
+    // numbers; a result recovered after a restart has none).
+    static string stepsResultId;
+    static ScenarioProgress.StepTime[] stepsSnapshot;
+
+    static ScenarioProgress.StepTime[] StepsFor(FrozenStudentResult frozen)
+    {
+        if (stepsResultId != frozen.resultId)
+        {
+            stepsResultId = frozen.resultId;
+            bool thisRun = PartScoreBoard.LastItems != null && PartScoreBoard.LastDetailedScore == frozen.questionScore;
+            stepsSnapshot = thisRun ? ScenarioProgress.Snapshot() : new ScenarioProgress.StepTime[0];
+        }
+        return stepsSnapshot;
+    }
+
     [Serializable]
     public class StudentResultRequest
     {
@@ -359,6 +428,18 @@ public class StudentResultUploader : MonoBehaviour
         public string loginTime;
         public int correctCount;
         public int toneScore;
+    }
+
+    [Serializable]
+    public class StudentDetailedResultRequest
+    {
+        public string studentId;
+        public string loginTime;
+        public int correctCount;
+        public int toneScore;
+        public int questionScore;
+        public PartScoreBoard.Item[] items;
+        public ScenarioProgress.StepTime[] steps;
     }
 
     [Serializable]

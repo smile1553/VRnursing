@@ -74,6 +74,32 @@ public static class PendingResultStore
         }
     }
 
+    // Moves a result that could not be uploaded out of the way (it is kept, not deleted), so a
+    // new practice can start. The file lands next to the pending file, named with the time.
+    public static bool TrySetAside(out string keptAt, out string error)
+    {
+        keptAt = string.Empty;
+        error = string.Empty;
+        try
+        {
+            string source = File.Exists(FilePath) ? FilePath : FilePath + TempSuffix;
+            if (!File.Exists(source))
+                return true;
+            keptAt = Path.Combine(Path.GetDirectoryName(FilePath),
+                "unsent_student_result_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".json");
+            File.Move(source, keptAt);
+            string tempPath = FilePath + TempSuffix;
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            error = "Could not move the unsent result aside: " + exception.Message;
+            return false;
+        }
+    }
+
     public static bool TryDelete(out string error)
     {
         error = string.Empty;
@@ -101,6 +127,7 @@ public static class PendingResultStore
             !string.IsNullOrWhiteSpace(result.studentId) &&
             !string.IsNullOrWhiteSpace(result.loginTime) &&
             result.correctCount >= 0 && result.correctCount <= 8 &&
-            result.toneScore >= 0 && result.toneScore <= 20;
+            result.toneScore >= 0 && result.toneScore <= 20 &&
+            result.questionScore >= 0 && result.questionScore <= 80;
     }
 }

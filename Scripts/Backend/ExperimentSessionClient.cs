@@ -17,6 +17,8 @@ public class ExperimentSessionClient : MonoBehaviour
     public bool IsBusy { get; private set; }
     public bool ApplicationSessionReady { get; private set; }
     public bool StartupBlocked { get; private set; }
+    [Tooltip("Seconds to keep retrying an earlier unsent result at start before setting it aside.")]
+    [SerializeField] float pendingUploadWaitSeconds = 15f;
 
     public event Action<string> StatusChanged;
     public event Action<string> SessionChanged;
@@ -54,8 +56,29 @@ public class ExperimentSessionClient : MonoBehaviour
         if (restored)
         {
             uploader.RetryPendingResult();
-            while (StudentRunContext.Current.HasPendingResult)
+            // An old result can be refused for good (its Session was closed when the Backend
+            // restarted, or the Backend rejected its data). Waiting for it forever used to block
+            // every login without any message. After a while it is kept in a separate file and
+            // the app goes on.
+            float giveUpAt = Time.realtimeSinceStartup + Mathf.Max(5f, pendingUploadWaitSeconds);
+            while (StudentRunContext.Current.HasPendingResult && Time.realtimeSinceStartup < giveUpAt)
                 yield return null;
+            if (StudentRunContext.Current.HasPendingResult)
+            {
+                if (PendingResultStore.TrySetAside(out string keptAt, out string setAsideError))
+                {
+                    Debug.LogWarning("[ExperimentSessionClient] An earlier result could not be uploaded and was kept at " + keptAt +
+                        ". Starting a new Session so students can log in.", this);
+                    StudentRunContext.Current.ClearStudentRun();
+                }
+                else
+                {
+                    StartupBlocked = true;
+                    SetStatus(setAsideError);
+                    Debug.LogWarning("[ExperimentSessionClient] " + setAsideError, this);
+                    yield break;
+                }
+            }
         }
 
         SessionResponse previousCurrentSession = null;
