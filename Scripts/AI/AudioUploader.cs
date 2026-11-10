@@ -32,7 +32,7 @@ public class AudioUploader : MonoBehaviour
     [Min(1)] public int uploadTimeoutSeconds = 30;
     [Tooltip("0 retries transient /audio failures until the same request succeeds.")]
     public int maxUploadRetries = 0;
-    [Min(0.1f)] public float uploadRetryDelaySeconds = 2f;
+    [Min(0.1f)] public float uploadRetryDelaySeconds = 1f;
 
     [Header("Complete Utterance")]
     [Min(3f)] public float maxUtteranceSeconds = 20f;
