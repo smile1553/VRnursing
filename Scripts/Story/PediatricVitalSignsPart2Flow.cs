@@ -195,8 +195,8 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
             return;
 
         string keywords = waitingForNurseAction == WaitingForNurseAction.HeartbeatExplanation
-            ? heartbeatKeywords
-            : respirationKeywords;
+            ? heartbeatKeywords + "||" + NewerHeartbeatKeywords
+            : respirationKeywords + "||" + NewerRespirationKeywords;
         string actionTags = waitingForNurseAction == WaitingForNurseAction.HeartbeatExplanation
             ? heartbeatActionTags
             : respirationActionTags;
@@ -219,6 +219,11 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
         Debug.Log($"[Part2] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
+
+    // The scene still holds older keyword lists. "||" lets a sentence pass with either the
+    // scene's list or this newer one (see SpeechGateMatcher.CountMatchedKeywordGroups).
+    private const string NewerRespirationKeywords = "觀察|計算|數|看;呼吸|胸腹|起伏|肚子";
+    private const string NewerHeartbeatKeywords = "聽|摸|檢查;心跳|心尖脈|聽診器;不會痛|一下子|一下下|放心|不用怕|示範";
 
     public void SelectA()
     {

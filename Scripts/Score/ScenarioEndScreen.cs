@@ -78,6 +78,9 @@ public class ScenarioEndScreen : MonoBehaviour
     private XRRayInteractor[] rayInteractors;
     private readonly List<UnityEngine.XR.InputDevice> xrDevices = new List<UnityEngine.XR.InputDevice>();
 
+    // True from the moment the end screen is asked for until "try again" / "finish" is pressed.
+    public static bool IsShowing => instance != null && instance.shown && !instance.restarting;
+
     // Called by PartScoreBoard when the story is finished.
     public static void Show()
     {

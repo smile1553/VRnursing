@@ -497,6 +497,27 @@ public class Part3VisualDemoController : MonoBehaviour
             StopRewardReveal();
     }
 
+    // Only SHOW the sticker (it pops up in front of the nurse, but cannot be given yet): the
+    // nurse takes it out and asks Yaya if she likes it.
+    public void ShowStickerOffer()
+    {
+        stickerShowOnly = true;
+        stickerTemporarilyHiddenForQuiz = false;
+    }
+
+    public void HideStickerOffer()
+    {
+        stickerShowOnly = false;
+        if (!stickerGiveEnabled && !hudStickerAttaching)
+        {
+            StopRewardReveal();
+            if (stickerObject != null)
+                stickerObject.SetActive(false);
+            stickerHudVisible = false;
+        }
+    }
+    private bool stickerShowOnly;
+
     // The next sticker goes on the teddy bear (e.g. "praise the bear and give it a sticker").
     // Otherwise it goes on Yaya's shirt.
     public void GiveNextStickerToBear()
@@ -516,6 +537,8 @@ public class Part3VisualDemoController : MonoBehaviour
     [SerializeField] private Vector3 rewardRevealOffset = new Vector3(0f, -0.10f, 0.85f);
     [Tooltip("Height of the sticker while it is offered (m).")]
     [SerializeField] private float rewardRevealHeight = 0.13f;
+    [Tooltip("Small line under the offered sticker ('click to give it'). Off: the glow alone says it can be clicked.")]
+    [SerializeField] private bool showRewardHint = false;
     [SerializeField] private string rewardHintForYaya = "\u9EDE\u4E00\u4E0B\uFF0C\u628A\u8CBC\u7D19\u9001\u7D66\u82BD\u82BD";
     [SerializeField] private string rewardHintForBear = "\u9EDE\u4E00\u4E0B\uFF0C\u628A\u8CBC\u7D19\u9001\u7D66\u5C0F\u718A";
     [Tooltip("Old landing animation prefab (Bear_Sticker). It put a stray grey triangle in the room, so it is off.")]
@@ -547,7 +570,7 @@ public class Part3VisualDemoController : MonoBehaviour
             return;
         }
 
-        bool want = stickerGiveEnabled && !hudStickerWasSelected && !stickerTemporarilyHiddenForQuiz;
+        bool want = (stickerGiveEnabled || stickerShowOnly) && !hudStickerWasSelected && !stickerTemporarilyHiddenForQuiz;
         if (!want)
         {
             if (stickerObject.activeSelf)
@@ -559,6 +582,16 @@ public class Part3VisualDemoController : MonoBehaviour
 
         if (rewardRevealStart < 0f)
             StartRewardReveal();
+
+        // Glow / rays / stars only while the sticker can really be given. When it is only
+        // shown ("do you like this sticker?") it stays plain, so it does not look clickable.
+        if (stickerGiveEnabled && rewardFx == null && stickerObject.activeInHierarchy)
+            rewardFx = ItemPresentFx.Attach(stickerObject.transform, rewardRevealHeight * 0.6f, ItemPresentFx.Gold, true, 18);
+        else if (!stickerGiveEnabled && rewardFx != null)
+        {
+            rewardFx.Stop();
+            rewardFx = null;
+        }
         PlaceRewardSticker(Time.time - rewardRevealStart);
     }
 
@@ -577,9 +610,16 @@ public class Part3VisualDemoController : MonoBehaviour
         PlayOneShot(popClip);
         if (rewardFx != null)
             rewardFx.Stop();
-        rewardFx = ItemPresentFx.Attach(stickerObject.transform, rewardRevealHeight * 0.6f, ItemPresentFx.Gold, true, 18);
+        rewardFx = stickerGiveEnabled
+            ? ItemPresentFx.Attach(stickerObject.transform, rewardRevealHeight * 0.6f, ItemPresentFx.Gold, true, 18)
+            : null;
 
-        if (rewardHintText == null)
+        if (!showRewardHint)
+        {
+            if (rewardHintText != null)
+                rewardHintText.gameObject.SetActive(false);
+        }
+        else if (rewardHintText == null)
         {
             GameObject go = new GameObject("Sticker_RewardHint");
             go.transform.SetParent(transform, false);
@@ -594,8 +634,11 @@ public class Part3VisualDemoController : MonoBehaviour
             rewardHintText.outlineColor = new Color32(90, 60, 20, 255);
             rewardHintText.sortingOrder = 30;
         }
-        rewardHintText.text = nextStickerToBear ? rewardHintForBear : rewardHintForYaya;
-        rewardHintText.gameObject.SetActive(true);
+        if (showRewardHint && stickerGiveEnabled && rewardHintText != null)
+        {
+            rewardHintText.text = nextStickerToBear ? rewardHintForBear : rewardHintForYaya;
+            rewardHintText.gameObject.SetActive(true);
+        }
         Debug.Log($"[Part3VisualDemoController] Sticker offered (goes to {(nextStickerToBear ? "the bear" : "Yaya")}).", this);
     }
 
@@ -619,9 +662,11 @@ public class Part3VisualDemoController : MonoBehaviour
         Transform c = cam.transform;
         Vector3 offset = HudDepth.Flatten(rewardRevealOffset, out float depthFactor);
         float pop = EaseOutBack(Mathf.Clamp01(age / 0.45f));
-        float bob = Mathf.Sin(age * 2.4f) * 0.006f;
+        // Bobbing / wobbling says "pick me": only while it can be given.
+        float motion = stickerGiveEnabled ? 1f : 0f;
+        float bob = Mathf.Sin(age * 2.4f) * 0.006f * motion;
         Vector3 position = c.position + c.right * offset.x + c.up * (offset.y + bob) + c.forward * offset.z;
-        stickerObject.transform.SetPositionAndRotation(position, c.rotation * Quaternion.Euler(0f, 0f, Mathf.Sin(age * 1.7f) * 5f));
+        stickerObject.transform.SetPositionAndRotation(position, c.rotation * Quaternion.Euler(0f, 0f, Mathf.Sin(age * 1.7f) * 5f * motion));
         SetStickerWorldHeight(stickerObject.transform, rewardRevealHeight * depthFactor * Mathf.Max(0.02f, pop));
 
         if (rewardHintText != null && rewardHintText.gameObject.activeSelf)

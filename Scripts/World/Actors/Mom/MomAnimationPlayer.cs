@@ -27,6 +27,8 @@ public class MomAnimationPlayer : MonoBehaviour
     [Header("Comfort / Walk")]
     [Tooltip("Horizontal distance (m) from Yaya's head to Mom when comforting.")]
     [SerializeField] private float comfortApproachDistance = 0.38f;
+    [Tooltip("When Mom walks up to Yaya, she stands beside her, not between Yaya and the nurse (player).")]
+    [SerializeField] private bool avoidBlockingNurseView = true;
     [SerializeField] private float comfortMoveDuration = 0.6f;
     [SerializeField] private float comfortPatAmplitude = 0.025f;
     [SerializeField] private float comfortPatSpeed = 1.6f;
@@ -229,6 +231,8 @@ public class MomAnimationPlayer : MonoBehaviour
     [SerializeField] private float bodyRadius = 0.2f;
     [Tooltip("Minimum horizontal distance (m) between Mom and Yaya's hips / legs / feet.")]
     [SerializeField] private float minDistanceFromYaya = 0.3f;
+    [Tooltip("When comforting, Mom stays on her own side of Yaya: how far round Yaya she may go (degrees from where she stands).")]
+    [SerializeField] private float comfortMaxTurnAround = 50f;
     [SerializeField] private LayerMask obstacleLayers = ~0;
 
     // Spot around Yaya's head at comfort distance where Mom's body does not overlap the bed,
@@ -250,6 +254,7 @@ public class MomAnimationPlayer : MonoBehaviour
             MixamoHumanoidAvatarBuilder.FindBone(yaya, "RightFoot")
         };
 
+        Transform viewer = Camera.main != null ? Camera.main.transform : null;
         Vector3 best = headFlat + awayFromKid * comfortApproachDistance;
         float bestScore = float.MaxValue;
         bool foundFree = false;
@@ -258,11 +263,28 @@ public class MomAnimationPlayer : MonoBehaviour
         {
             for (int a = -150; a <= 150; a += 15)
             {
+                // Stay on her own side of Yaya: never walk round the bed to the other side
+                // (she ended up behind Yaya, in front of the machine / quiz).
+                if (Mathf.Abs(a) > comfortMaxTurnAround)
+                    continue;
                 Vector3 candidate = headFlat + Quaternion.AngleAxis(a, Vector3.up) * awayFromKid * radius;
                 if (!IsSpotFree(candidate, yaya, kidBones))
                     continue;
 
                 float score = Vector3.Distance(from, candidate) + Mathf.Abs(a) * 0.002f + (radius - comfortApproachDistance) * 2f;
+                // Not between the nurse and Yaya: standing there she hides Yaya and the
+                // thermometer from the player. Beside Yaya is best.
+                if (avoidBlockingNurseView && viewer != null)
+                {
+                    Vector3 toViewer = Vector3.ProjectOnPlane(viewer.position - headFlat, Vector3.up);
+                    Vector3 toSpot = Vector3.ProjectOnPlane(candidate - headFlat, Vector3.up);
+                    if (toViewer.sqrMagnitude > 1e-4f && toSpot.sqrMagnitude > 1e-4f)
+                    {
+                        float facingViewer = Vector3.Dot(toViewer.normalized, toSpot.normalized);
+                        if (facingViewer > 0.2f)
+                            score += 8f * facingViewer;
+                    }
+                }
                 if (!IsPathFree(from, candidate, yaya))
                     score += 5f;
                 if (score < bestScore)
@@ -819,6 +841,18 @@ public class MomAnimationPlayer : MonoBehaviour
         animator.CrossFadeInFixedTime(info.fullPathHash, 0.3f, layerIndex, 0f);
     }
 
+    // Stop patting Yaya and walk back to where Mom stood before (e.g. before a quiz appears,
+    // so she is not standing between the nurse and Yaya / in front of the quiz).
+    public void ReturnFromComfort()
+    {
+        comfortActive = false;
+        if (displacedFromHome)
+        {
+            displacedFromHome = false;
+            StartWalk(homePosition, homeForward, false);
+        }
+    }
+
     private void EndComfort()
     {
         if (suppressComfortEnd)
@@ -1319,4 +1353,4 @@ public class MomAnimationPlayer : MonoBehaviour
         return null;
     }
 #endif
-}
+}

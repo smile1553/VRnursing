@@ -51,6 +51,8 @@ public class InteractRaycaster : MonoBehaviour
         EmitPoint();
     }
 
+    public Transform RayOrigin => rayOrigin;
+
     public void SetRayOrigin(Transform origin)
     {
         rayOrigin = origin;

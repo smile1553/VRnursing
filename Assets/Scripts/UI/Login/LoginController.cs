@@ -36,6 +36,23 @@ public class LoginController : MonoBehaviour
     [SerializeField] bool startCloseToScreen = true;
     [Tooltip("Eyes this far from the screen at the start (m). Smaller = the screen looks bigger.")]
     [SerializeField] float screenStandDistance = 0.95f;
+    [Tooltip("Start eye height compared with the middle of the screen (m). Negative = view lower.")]
+    [SerializeField] float startEyeHeightOffset = -0.03f;
+    bool startEyeOffsetApplied;
+
+    // The lower eye height is only for the start view at the computer. Once the student leaves
+    // the desk, the normal height comes back, so the rest of the game is not seen from lower.
+    void RestoreStartEyeHeight()
+    {
+        if (!startEyeOffsetApplied || xrRig == null || Camera.main == null)
+            return;
+        startEyeOffsetApplied = false;
+        // Only in the editor without a headset (with a headset the floor decides the height).
+        if (Camera.main.transform.position.y - xrRig.position.y > 0.5f)
+            return;
+        xrRig.position -= Vector3.up * startEyeHeightOffset;
+        Debug.Log($"[LoginController] Start view done: eye height back up by {-startEyeHeightOffset:0.000} m.", this);
+    }
     [SerializeField] string screenLoginLabel = "點選螢幕登入";
     [Tooltip("After the screen is clicked, the login and introduction panels are this far in front of the eyes (m), like the medical record. Closer when the computer is nearer than that.")]
     [SerializeField] float eyePanelDistance = 0.95f;
@@ -76,6 +93,12 @@ public class LoginController : MonoBehaviour
     [SerializeField] float walkHintHeight = 0.09f;
     [Tooltip("Hint when the student already stands at the desk (start at the nurses' station).")]
     [SerializeField] string deskHintText = "請點選桌上發光的病歷";
+    [Tooltip("Show the walk hint on the computer screen at the reception (when there is one) instead of floating in front of the eyes.")]
+    [SerializeField] bool walkHintOnScreen = true;
+    [Tooltip("How far the hint sits in front of the screen glass (m). Larger if it flickers or is hidden by the glass.")]
+    [SerializeField] float walkHintScreenGap = 0.01f;
+    [Tooltip("Text size of the hint on the screen (the screen is 820 units wide).")]
+    [SerializeField] float walkHintScreenTextSize = 44f;
     [Tooltip("Empty object ON the reception desk where the small glowing record lies. Not in the scene = guessed from the reception point and Desk Height.")]
     [SerializeField] string recordPointName = "Record_Point";
     [Tooltip("Height of the desk top above the floor (m); only used when there is no Record_Point.")]
@@ -359,7 +382,10 @@ public class LoginController : MonoBehaviour
     {
         loginCompleted = false;
         wardEntered = false;
-        if (loginUIRoot != null)
+        // While the end screen (score) is up, keep the login screen hidden: it used to pop up
+        // for a few seconds before the score appeared. "Try again" on the end screen reloads
+        // the scene, which brings the login screen back anyway.
+        if (loginUIRoot != null && !ScenarioEndScreen.IsShowing)
             loginUIRoot.SetActive(true);
         if (studentIdInput != null)
             studentIdInput.text = string.Empty;
@@ -556,7 +582,8 @@ public class LoginController : MonoBehaviour
                     {
                         walkFacing = into.normalized;
                         standAt = screenPoint.position - walkFacing * Mathf.Max(0.25f, clickScreen ? screenStandDistance : loginScreenViewDistance);
-                        editorEyeHeight = screenPoint.position.y + 0.00f;
+                        editorEyeHeight = screenPoint.position.y + startEyeHeightOffset;
+                        startEyeOffsetApplied = true;
                     }
                 }
 
@@ -1254,6 +1281,9 @@ public class LoginController : MonoBehaviour
         // Already standing at the desk: no walk, just "pick up the record".
         bool alreadyThere = Vector3.ProjectOnPlane(target - route[0], Vector3.up).magnitude < 1.5f;
         GameObject hint = CreateWalkHint(alreadyThere ? deskHintText : receptionHintText, out RectTransform hintRoot);
+        Transform hintScreen = walkHintOnScreen && usingScreenLogin ? ScreenPoint() : null;
+        if (hintScreen != null)
+            SetupHintOnScreen(hintRoot, hintScreen);
 
         Transform card = null, cardGlow = null;
         Vector3 cardRest = Vector3.zero;
@@ -1305,7 +1335,10 @@ public class LoginController : MonoBehaviour
             }
             Transform head = cam.transform;
 
-            FollowHint(hintRoot, head);
+            if (hintScreen != null)
+                PlaceHintOnScreen(hintRoot, hintScreen);
+            else
+                FollowHint(hintRoot, head);
             trail.Tick(head.position);
             trail.PointTheWay(head);
 
@@ -1417,6 +1450,7 @@ public class LoginController : MonoBehaviour
                 yield return null;
             if (recordFollower != null)
                 recordFollower.SetCloseUp(0f);
+            RestoreStartEyeHeight();
             PediatricVitalSignsPart0Flow part0 = FindObjectOfType<PediatricVitalSignsPart0Flow>(true);
             Transform doorGuide = part0 != null ? part0.DoorGuidePoint : null;
             if (doorGuide == null)
@@ -1564,6 +1598,154 @@ public class LoginController : MonoBehaviour
         float k = 1f - Mathf.Exp(-6f * Time.unscaledDeltaTime);
         hintRoot.position = Vector3.Lerp(hintRoot.position, wanted, k);
         hintRoot.rotation = Quaternion.Slerp(hintRoot.rotation, Quaternion.LookRotation(head.forward, Vector3.up), k);
+    }
+
+    // The hint shown by the reception computer itself, in the same look as the screen login
+    // page: soft gradient, a small header with the time, a breathing record icon, the hint and
+    // a bouncing arrow toward the desk. Hidden by things in front of the screen like a real one.
+    TextMeshProUGUI hintScreenClock, hintScreenText;
+    UnityEngine.UI.Image hintScreenRing, hintScreenGlow;
+    RectTransform hintScreenArrow;
+
+    void SetupHintOnScreen(RectTransform hintRoot, Transform screenPoint)
+    {
+        if (hintRoot == null || screenPoint == null)
+            return;
+        Vector2 size = ScreenSize(screenPoint);
+        const float width = 820f;
+        float height = width * Mathf.Clamp(size.y / Mathf.Max(0.01f, size.x), 0.3f, 1f);
+        hintRoot.sizeDelta = new Vector2(width, height);
+        hintRoot.localScale = Vector3.one * (size.x / width);
+        Canvas canvas = hintRoot.GetComponent<Canvas>();
+        if (canvas != null)
+            canvas.sortingOrder = 6;   // just above the screen page
+        UnityEngine.UI.CanvasScaler scaler = hintRoot.GetComponent<UnityEngine.UI.CanvasScaler>();
+        if (scaler != null)
+            scaler.dynamicPixelsPerUnit = 6f;
+
+        // The plain floating card is not used on the screen.
+        string text = "";
+        Transform oldLabel = hintRoot.Find("Label");
+        if (oldLabel != null)
+        {
+            TMP_Text t = oldLabel.GetComponent<TMP_Text>();
+            if (t != null) text = t.text;
+            oldLabel.gameObject.SetActive(false);
+        }
+        Transform oldBack = hintRoot.Find("Background");
+        if (oldBack != null)
+            oldBack.gameObject.SetActive(false);
+
+        TMP_FontAsset font = FindPromptFont();
+        Color soft = new Color(0.82f, 0.88f, 0.95f, 0.85f);
+        float top = height * 0.5f;
+
+        NewPageImage(hintRoot, "ScreenBackground", MakeGradientSprite(
+            new Color(0.10f, 0.20f, 0.33f, 1f), new Color(0.04f, 0.07f, 0.13f, 1f)), Vector2.zero, hintRoot.sizeDelta);
+        hintScreenGlow = NewPageImage(hintRoot, "Glow", MakeDiscSprite(0f), new Vector2(0f, 40f), new Vector2(620f, 620f));
+        hintScreenGlow.color = new Color(trailColor.r, trailColor.g, trailColor.b, 0.10f);
+
+        TextMeshProUGUI brand = NewLabel(hintRoot, font, "FJUN　護理資訊系統", 22f, soft, new Vector2(-190f, top - 30f), new Vector2(400f, 34f));
+        brand.alignment = TextAlignmentOptions.Left;
+        hintScreenClock = NewLabel(hintRoot, font, System.DateTime.Now.ToString("HH:mm"), 22f, soft, new Vector2(250f, top - 30f), new Vector2(260f, 34f));
+        hintScreenClock.alignment = TextAlignmentOptions.Right;
+        UnityEngine.UI.Image divider = NewPageImage(hintRoot, "Divider", null, new Vector2(0f, top - 56f), new Vector2(width - 60f, 2f));
+        divider.color = new Color(1f, 1f, 1f, 0.12f);
+
+        hintScreenRing = NewPageImage(hintRoot, "Ring", MakeDiscSprite(0.88f), new Vector2(0f, 58f), new Vector2(150f, 150f));
+        UnityEngine.UI.Image disc = NewPageImage(hintRoot, "IconDisc", MakeDiscSprite(0.001f), new Vector2(0f, 58f), new Vector2(128f, 128f));
+        disc.color = new Color(1f, 1f, 1f, 0.08f);
+        NewPageImage(hintRoot, "RecordIcon", MakeRecordIconSprite(), new Vector2(0f, 58f), new Vector2(96f, 96f));
+
+        hintScreenText = NewLabel(hintRoot, font, text, walkHintScreenTextSize, Color.white, new Vector2(0f, -62f), new Vector2(width - 60f, 80f));
+        hintScreenText.enableWordWrapping = true;
+
+        // A soft "v" that bounces toward the desk.
+        GameObject arrow = new GameObject("Arrow", typeof(RectTransform));
+        arrow.transform.SetParent(hintRoot, false);
+        hintScreenArrow = (RectTransform)arrow.transform;
+        hintScreenArrow.anchoredPosition = new Vector2(0f, -138f);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            UnityEngine.UI.Image bar = NewPageImage(hintScreenArrow, side < 0 ? "Left" : "Right", MakePillSprite(), new Vector2(side * 11f, 0f), new Vector2(34f, 8f));
+            bar.type = UnityEngine.UI.Image.Type.Sliced;
+            bar.color = trailColor;
+            bar.rectTransform.localRotation = Quaternion.Euler(0f, 0f, side * 35f);
+        }
+
+        PlaceHintOnScreen(hintRoot, screenPoint);
+        Debug.Log($"[LoginController] Walk hint shown on the screen '{screenPoint.name}' ({size.x:0.##} x {size.y:0.##} m)", this);
+    }
+
+    // Every frame, so walkHintScreenGap / walkHintScreenTextSize can be tuned in Play.
+    void PlaceHintOnScreen(RectTransform hintRoot, Transform screenPoint)
+    {
+        if (hintRoot == null || screenPoint == null)
+            return;
+        Vector3 into = screenPoint.forward.sqrMagnitude > 1e-4f ? screenPoint.forward.normalized : Vector3.forward;
+        hintRoot.SetPositionAndRotation(screenPoint.position - into * Mathf.Max(0.001f, walkHintScreenGap),
+            Quaternion.LookRotation(into, screenPoint.up));
+
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 2.6f);
+        if (hintScreenClock != null)
+            hintScreenClock.text = System.DateTime.Now.ToString("HH:mm");
+        if (hintScreenText != null && !Mathf.Approximately(hintScreenText.fontSize, walkHintScreenTextSize))
+            hintScreenText.fontSize = walkHintScreenTextSize;
+        if (hintScreenRing != null)
+        {
+            Color ring = trailColor;
+            ring.a = 0.35f + 0.55f * pulse;
+            hintScreenRing.color = ring;
+            hintScreenRing.rectTransform.localScale = Vector3.one * (1f + 0.04f * pulse);
+        }
+        if (hintScreenGlow != null)
+            hintScreenGlow.color = new Color(trailColor.r, trailColor.g, trailColor.b, 0.07f + 0.06f * pulse);
+        if (hintScreenArrow != null)
+        {
+            float bounce = Mathf.Abs(Mathf.Sin(Time.unscaledTime * 3f));
+            hintScreenArrow.anchoredPosition = new Vector2(0f, -138f - 10f * bounce);
+        }
+    }
+
+    // A small medical record: a sheet on a clipboard with a few lines of writing.
+    static Sprite MakeRecordIconSprite()
+    {
+        const int size = 128;
+        Color32[] pixels = new Color32[size * size];
+        Color board = new Color(0.36f, 0.48f, 0.62f, 1f), paper = new Color(0.94f, 0.96f, 1f, 1f);
+        Color clip = new Color(0.78f, 0.86f, 0.95f, 1f), line = new Color(0.55f, 0.64f, 0.76f, 1f);
+        Color cross = new Color(0.93f, 0.38f, 0.42f, 1f);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float u = (x + 0.5f) / size, v = (y + 0.5f) / size;
+                Color c = new Color(1f, 1f, 1f, 0f);
+                float boardEdge = RoundRect(u, v, 0.20f, 0.08f, 0.80f, 0.88f, 0.07f, size);
+                if (boardEdge > 0f) { c = board; c.a = boardEdge; }
+                float paperEdge = RoundRect(u, v, 0.27f, 0.14f, 0.73f, 0.78f, 0.03f, size);
+                if (paperEdge > 0f) c = Color.Lerp(c, paper, paperEdge);
+                if (u > 0.32f && u < 0.68f && ((Mathf.Abs(v - 0.58f) < 0.018f) || (Mathf.Abs(v - 0.47f) < 0.018f) ||
+                    (u < 0.56f && Mathf.Abs(v - 0.36f) < 0.018f)))
+                    c = line;
+                if ((Mathf.Abs(u - 0.62f) < 0.018f && Mathf.Abs(v - 0.23f) < 0.055f) || (Mathf.Abs(v - 0.23f) < 0.018f && Mathf.Abs(u - 0.62f) < 0.055f))
+                    c = cross;
+                float clipEdge = RoundRect(u, v, 0.38f, 0.76f, 0.62f, 0.92f, 0.04f, size);
+                if (clipEdge > 0f) c = Color.Lerp(c, clip, clipEdge);
+                if (clipEdge > 0f && RoundRect(u, v, 0.46f, 0.84f, 0.54f, 0.885f, 0.02f, size) > 0.5f)
+                    c = board;
+                pixels[y * size + x] = c;
+            }
+        }
+        return SpriteFrom(pixels, size, size, Vector4.zero);
+    }
+
+    // 1 inside a rounded rectangle, 0 outside, soft over about one pixel.
+    static float RoundRect(float u, float v, float x0, float y0, float x1, float y1, float radius, int size)
+    {
+        float cx = Mathf.Clamp(u, x0 + radius, x1 - radius), cy = Mathf.Clamp(v, y0 + radius, y1 - radius);
+        float d = Mathf.Sqrt((u - cx) * (u - cx) + (v - cy) * (v - cy)) - radius;
+        return Mathf.Clamp01(0.5f - d * size);
     }
 
     // Optional corners of a route: empty objects named <prefix>1, <prefix>2, ... (up to 9).
@@ -1854,6 +2036,14 @@ public class LoginController : MonoBehaviour
         tmp.color = Color.white;
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.raycastTarget = false;
+
+        // Drawn on top of the room: it is placed ~0.7 m in front of the eyes, so a monitor or a
+        // wall closer than that (the iMac at the reception) used to hide it.
+        image.material = new Material(UnityEngine.UI.Graphic.defaultGraphicMaterial);
+        image.material.SetInt("unity_GUIZTestMode", (int)UnityEngine.Rendering.CompareFunction.Always);
+        Material textMaterial = tmp.fontMaterial;   // own copy for this label
+        if (textMaterial != null && textMaterial.HasProperty("unity_GUIZTestMode"))
+            textMaterial.SetFloat("unity_GUIZTestMode", (float)UnityEngine.Rendering.CompareFunction.Always);
 
         Camera cam = Camera.main;
         if (cam != null)

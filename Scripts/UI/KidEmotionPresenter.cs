@@ -55,10 +55,14 @@ public class KidEmotionPresenter : MonoBehaviour
     [Tooltip("Height of the whole badge (name tab to state chip, m).")]
     [SerializeField] private float meterHeight = 0.21f;
     [Tooltip("Strip behind the floating reason line and the '請先安撫芽芽' line.")]
-    [SerializeField] private Color cardColor = new Color(1f, 1f, 1f, 0.92f);
+    [SerializeField] private Color cardColor = new Color(1f, 1f, 1f, 0.58f);
+    [Tooltip("How strong the colour of the not-yet-filled part of the bar is (0-1). Higher = the four colour zones stand out more.")]
+    [Range(0f, 1f)] [SerializeField] private float zoneBackAlpha = 0.6f;
     [Tooltip("Pink name tab above the badge (same as the speaker tab on the dialogue box).")]
     [SerializeField] private Color nameTabColor = new Color(1f, 0.84f, 0.87f, 1f);
     [SerializeField] private Color nameTabTextColor = new Color(0.55f, 0.25f, 0.32f, 1f);
+    [Tooltip("Show why the value changed (e.g. 溫柔安撫) under the +N / -N pop-out.")]
+    [SerializeField] private bool showReasonText = true;
     [Tooltip("Badge pops (and shakes when she gets more upset) whenever the state changes.")]
     [SerializeField] private bool animateBadge = true;
     [SerializeField] private float reasonSeconds = 2.5f;
@@ -71,10 +75,10 @@ public class KidEmotionPresenter : MonoBehaviour
     private static readonly string[] StateNames = { "平靜", "不安", "哭泣", "崩潰" };
     private static readonly Color[] StateColors =
     {
-        new Color(0.42f, 0.78f, 0.55f),
-        new Color(0.97f, 0.76f, 0.28f),
-        new Color(0.96f, 0.56f, 0.30f),
-        new Color(0.91f, 0.34f, 0.36f)
+        new Color(0.30f, 0.76f, 0.45f),   // green
+        new Color(0.98f, 0.80f, 0.16f),   // yellow
+        new Color(0.97f, 0.50f, 0.14f),   // orange
+        new Color(0.89f, 0.22f, 0.25f)    // red
     };
 
     private static readonly Dictionary<string, string> IntentLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -105,8 +109,17 @@ public class KidEmotionPresenter : MonoBehaviour
     private GameObject meter;
     private RectTransform badge;
     private Image faceImage;
-    private Image ringFill;
     private Image glow;
+    private readonly Image[] zoneFill = new Image[4];
+    private RectTransform knob;
+    private Image knobRing;
+    private RectTransform ghost;
+    private Image ghostImage;
+    private float ghostValue;
+    private RectTransform deltaGroup;
+    private Image deltaArrow;
+    private TMP_Text deltaText;
+    private float deltaShowTime = -10f;
     private RectTransform reasonGroup;
     private float reasonShowTime;
     private int badgeLevel = -1;
@@ -392,9 +405,11 @@ public class KidEmotionPresenter : MonoBehaviour
         t.position = c.position + c.right * offset.x + c.up * offset.y + c.forward * offset.z;
         // Parallel to the view (same as the other HUD panels) so it stays level, not skewed.
         t.rotation = c.rotation;
-        t.localScale = Vector3.one * (meterHeight / BarHeight) * depthFactor;
+        t.localScale = Vector3.one * (meterHeight / ScaleRef) * depthFactor;
 
-        displayValue = Mathf.MoveTowards(displayValue, emotionValue, 60f * Time.deltaTime);
+        displayValue = Mathf.MoveTowards(displayValue, emotionValue, 45f * Time.deltaTime);
+        // The "ghost" lags behind, so the part that just went up / down shows for a moment.
+        ghostValue = Mathf.MoveTowards(ghostValue, displayValue, (Mathf.Abs(ghostValue - displayValue) > 0.5f && Time.time - deltaShowTime < 0.5f ? 0f : 30f) * Time.deltaTime);
         UpdateBadge();
 
         bool gated = KidEmotionGate.Blocking;
@@ -405,35 +420,9 @@ public class KidEmotionPresenter : MonoBehaviour
             float pulse = 1f + 0.05f * Mathf.Sin(Time.time * 6f);
             gateBack.transform.localScale = new Vector3(pulse, pulse, 1f);
         }
-
-        // Floating reason line: pops in under the chip, drifts down a little and fades out.
-        bool reasonOn = reasonGroup != null && reasonGroup.gameObject.activeSelf;
-        if (reasonOn)
-        {
-            float u = Mathf.Clamp01((Time.time - reasonShowTime) / Mathf.Max(0.3f, reasonSeconds));
-            if (u >= 1f)
-            {
-                reasonGroup.gameObject.SetActive(false);
-            }
-            else
-            {
-                float pop = u < 0.12f ? Mathf.SmoothStep(0.6f, 1f, u / 0.12f) : 1f;
-                reasonGroup.localScale = new Vector3(pop, pop, 1f);
-                reasonGroup.anchoredPosition = new Vector2(0f, ReasonY - 10f * u);
-                float a = 1f - Mathf.SmoothStep(0f, 1f, (u - 0.7f) / 0.3f);
-                reasonText.alpha = a;
-                if (reasonBack != null)
-                {
-                    Image back = reasonBack.GetComponent<Image>();
-                    Color strip = cardColor;
-                    strip.a *= a;
-                    back.color = strip;
-                }
-            }
-        }
     }
 
-    // Face, ring, chip and the little pop / shake / sob animations.
+    // Face, state chip, the tension bar (fill + knob + ghost) and the +N / -N pop-out.
     private void UpdateBadge()
     {
         if (badge == null)
@@ -451,9 +440,70 @@ public class KidEmotionPresenter : MonoBehaviour
             stateChip.color = StateColors[level];
         }
 
-        ringFill.fillAmount = Mathf.Clamp01(displayValue / 100f);
-        ringFill.color = StateColors[level];
+        // Bar: each colour zone fills from the bottom up to the current value.
+        for (int i = 0; i < 4; i++)
+        {
+            if (zoneFill[i] != null)
+                zoneFill[i].fillAmount = Mathf.Clamp01((displayValue - i * 25f) / 25f);
+        }
+        float bottom = BarBottom, top = BarBottom + BarLength;
+        float y = Mathf.Lerp(bottom, top, Mathf.Clamp01(displayValue / 100f));
+        if (knob != null)
+        {
+            knob.anchoredPosition = new Vector2(BarX, y);
+            knobRing.color = StateColors[level];
+        }
 
+        // Ghost: the stretch between where it was and where it is now, flashing white.
+        if (ghost != null)
+        {
+            float gy = Mathf.Lerp(bottom, top, Mathf.Clamp01(ghostValue / 100f));
+            float lo = Mathf.Min(gy, y), hi = Mathf.Max(gy, y);
+            bool show = hi - lo > 1f;
+            if (ghost.gameObject.activeSelf != show)
+                ghost.gameObject.SetActive(show);
+            if (show)
+            {
+                ghost.anchoredPosition = new Vector2(BarX, (lo + hi) * 0.5f);
+                ghost.sizeDelta = new Vector2(BarWidth + 4f, hi - lo);
+                bool rising = ghostValue < displayValue;
+                Color gc = rising ? new Color(1f, 0.45f, 0.45f) : new Color(0.75f, 1f, 0.8f);
+                gc.a = 0.55f + 0.35f * Mathf.Sin(Time.time * 18f);
+                ghostImage.color = gc;
+            }
+        }
+
+        // Pop-out beside the bar: arrow + amount (+ the reason), floats and fades.
+        if (deltaGroup != null && deltaGroup.gameObject.activeSelf)
+        {
+            float u = (Time.time - deltaShowTime) / Mathf.Max(0.5f, reasonSeconds);
+            if (u >= 1f)
+            {
+                deltaGroup.gameObject.SetActive(false);
+            }
+            else
+            {
+                float pop = u < 0.1f ? Mathf.SmoothStep(0.5f, 1.15f, u / 0.1f) : Mathf.Lerp(1.15f, 1f, Mathf.Clamp01((u - 0.1f) / 0.1f));
+                bool up = deltaArrow.rectTransform.localEulerAngles.z < 90f;
+                deltaGroup.anchoredPosition = new Vector2(DeltaX, y + (up ? 18f : -18f) * u);
+                deltaGroup.localScale = new Vector3(pop, pop, 1f);
+                float a = 1f - Mathf.SmoothStep(0f, 1f, (u - 0.75f) / 0.25f);
+                Color ac = deltaArrow.color; ac.a = a; deltaArrow.color = ac;
+                deltaText.alpha = a;
+                if (reasonText != null)
+                    reasonText.alpha = a;
+                if (reasonBack != null)
+                {
+                    Image back = reasonBack.GetComponent<Image>();
+                    Color strip = cardColor;
+                    strip.a *= a;
+                    back.color = strip;
+                }
+            }
+        }
+
+        // Face: pops when the state changes (shakes when it gets worse) and keeps a small
+        // movement for each state.
         float t = Time.time;
         float scale = 1f;
         Vector2 shift = Vector2.zero;
@@ -466,20 +516,20 @@ public class KidEmotionPresenter : MonoBehaviour
                 float u = since / 0.4f;
                 scale += 0.2f * Mathf.Sin(u * Mathf.PI) * (1f - u * 0.4f);
                 if (badgeChangedUp)
-                    shift.x += Mathf.Sin(since * 55f) * 5f * (1f - u);
+                    shift.x += Mathf.Sin(since * 55f) * 4f * (1f - u);
             }
 
             switch (level)
             {
-                case 0: scale *= 1f + 0.015f * Mathf.Sin(t * 2.2f); break;              // calm breathing
-                case 1: tilt = Mathf.Sin(t * 3f) * 3f; break;                             // fidgeting
-                case 2: shift.y += Mathf.Abs(Mathf.Sin(t * 5f)) * 3f; break;              // sobbing
-                case 3: shift.x += Mathf.Sin(t * 38f) * 2.5f; tilt = Mathf.Sin(t * 19f) * 4f; break; // wailing
+                case 0: scale *= 1f + 0.015f * Mathf.Sin(t * 2.2f); break;
+                case 1: tilt = Mathf.Sin(t * 3f) * 3f; break;
+                case 2: shift.y += Mathf.Abs(Mathf.Sin(t * 5f)) * 2f; break;
+                case 3: shift.x += Mathf.Sin(t * 38f) * 2f; tilt = Mathf.Sin(t * 19f) * 4f; break;
             }
         }
 
         badge.localScale = new Vector3(scale, scale, 1f);
-        badge.anchoredPosition = new Vector2(0f, BadgeY) + shift;
+        badge.anchoredPosition = new Vector2(0f, FaceY) + shift;
         badge.localRotation = Quaternion.Euler(0f, 0f, tilt);
 
         if (glow != null)
@@ -509,7 +559,7 @@ public class KidEmotionPresenter : MonoBehaviour
             return spotSolved ? solvedOffset : meterOffset;
 
         float z = Mathf.Max(0.3f, meterOffset.z);
-        float unit = meterHeight / BarHeight / z;          // one canvas unit in view units
+        float unit = meterHeight / ScaleRef / z;           // one canvas unit in view units
         float halfHeight = CardHeight * 0.5f * unit;       // the card: bar + state word above it
         float halfWidth = CardWidth * 0.5f * unit;
         float centerShift = CardCenterY * unit;             // the word makes the block top-heavy
@@ -560,34 +610,79 @@ public class KidEmotionPresenter : MonoBehaviour
 
     private void ShowReason(string reason, float delta)
     {
-        if (reasonText == null)
+        if (deltaGroup == null)
         {
             if (!showMeter || Camera.main == null)
                 return;
             BuildMeter();
         }
+        if (Mathf.Abs(delta) < 0.5f && string.IsNullOrEmpty(reason))
+            return;
 
-        string change = Mathf.Abs(delta) >= 0.5f ? (delta > 0f ? " +" : " -") + Mathf.Abs(delta).ToString("0") : string.Empty;
-        string label = string.IsNullOrEmpty(reason) ? "緊張值" : reason;
-        reasonText.text = label + change;
-        reasonText.color = delta > 0.5f ? new Color(0.85f, 0.25f, 0.28f) : delta < -0.5f ? new Color(0.20f, 0.62f, 0.38f) : new Color(0.35f, 0.35f, 0.40f);
-        reasonGroup.gameObject.SetActive(true);
+        bool up = delta > 0.5f;
+        bool down = delta < -0.5f;
+        Color col = up ? new Color(0.90f, 0.28f, 0.30f) : down ? new Color(0.22f, 0.66f, 0.40f) : new Color(0.45f, 0.45f, 0.50f);
+        deltaArrow.gameObject.SetActive(up || down);
+        deltaArrow.color = col;
+        deltaArrow.rectTransform.localRotation = Quaternion.Euler(0f, 0f, down ? 180f : 0f);
+        deltaText.text = up || down ? (up ? "+" : "-") + Mathf.Abs(delta).ToString("0") : string.Empty;
+        deltaText.color = col;
+        if (reasonText != null)
+        {
+            bool showWhy = showReasonText && !string.IsNullOrEmpty(reason);
+            reasonText.gameObject.SetActive(showWhy);
+            if (reasonBack != null)
+                reasonBack.SetActive(showWhy);
+            reasonText.text = showWhy ? reason : string.Empty;
+            reasonText.color = col;
+        }
+        deltaGroup.gameObject.SetActive(true);
+        deltaShowTime = Time.time;
         reasonShowTime = Time.time;
         reasonHideTime = Time.time + reasonSeconds;
     }
 
-    // Layout in canvas units. BarHeight is only the scale reference: Meter Height (m) = 200 units.
-    private const float BarHeight = 200f;
-    // Block used to keep the badge clear of other panels (centre relative to the canvas centre).
-    private const float CardWidth = 140f;
-    private const float CardHeight = 206f;
+    // Layout in canvas units. Meter Height (m) = ScaleRef units, so the whole card
+    // (about 200 units) is about 0.16 m at the default Meter Height.
+    private const float ScaleRef = 215f;
+    private const float BarHeight = 200f;   // kept for older code paths
+    private const float CardWidth = 96f;
+    private const float CardHeight = 270f;
     private const float CardCenterY = 0f;
-    private const float BadgeY = 6f;
-    private const float BadgeSize = 124f;
-    private const float TabY = 84f;
-    private const float ChipY = -78f;
-    private const float ReasonY = -116f;
-    private const float GateY = -154f;
+    private const float FaceY = 104f;
+    private const float FaceSize = 58f;
+    private const float ChipY = 62f;
+    private const float BarX = 0f;
+    private const float BarWidth = 22f;
+    private const float BarBottom = -118f;
+    private const float BarLength = 160f;
+    private const float DeltaX = -70f;      // pop-out on the left of the card (toward the middle of the view)
+    private const float GateY = -158f;
+
+    // Small upward triangle (the arrow of the pop-out).
+    private static Sprite triangleSprite;
+    private static Sprite TriangleSprite()
+    {
+        if (triangleSprite != null)
+            return triangleSprite;
+        const int n = 64;
+        Texture2D tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        Color32[] px = new Color32[n * n];
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float fy = (y + 0.5f) / n;            // 0 bottom .. 1 top
+                float half = (1f - fy) * 0.5f;        // half width at this height
+                float d = Mathf.Abs((x + 0.5f) / n - 0.5f) - half;
+                float a = Mathf.Clamp01(0.5f - d * n) * Mathf.Clamp01(fy * n) * Mathf.Clamp01((1f - fy) * n * 0.5f + 0.5f);
+                px[y * n + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+            }
+        tex.SetPixels32(px);
+        tex.Apply();
+        triangleSprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f);
+        return triangleSprite;
+    }
 
     // One white circle texture; drawn 9-sliced it gives rounded rectangles and pills of any size.
     private static Sprite roundSprite;
@@ -674,11 +769,11 @@ public class KidEmotionPresenter : MonoBehaviour
         return image;
     }
 
-    //   [ 芽芽 ]          pink name tab (like the speaker tab of the dialogue box)
-    //   ( face )          white-bordered sticker with Yaya's face, ring = how upset she is
-    //   [ 平靜 ]          chip in the state colour
-    //   命令口氣 +15       floating reason line
-    //   請先安撫芽芽        only while the scenario waits for her to calm down
+    //  ( face )        Yaya's face (expression = state)
+    //  [ 不安 ]        state chip
+    //    ||  <- knob    tension bar: green at the bottom, red at the top, filled up to the
+    //    ||             value; a flashing "ghost" shows the part that just went up / down
+    //  ▲ +8           pop-out on the left whenever the nurse's words move the value
     private void BuildMeter()
     {
         if (meter != null)
@@ -690,60 +785,94 @@ public class KidEmotionPresenter : MonoBehaviour
         canvas.sortingOrder = 40;
         meter.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 4f;
         RectTransform root = (RectTransform)meter.transform;
-        root.sizeDelta = new Vector2(CardWidth + 60f, CardHeight + 140f);
+        root.sizeDelta = new Vector2(CardWidth + 200f, CardHeight + 80f);
 
         TMP_FontAsset font = FindChineseFont();
 
-        // Badge (everything inside moves / pops together).
-        badge = (RectTransform)new GameObject("Badge", typeof(RectTransform)).transform;
+        // Card.
+        NewRound(root, "Shadow", new Color(0f, 0f, 0f, 0.22f), new Vector2(0f, CardCenterY - 3f), new Vector2(CardWidth + 4f, CardHeight + 4f), 20f);
+        NewRound(root, "Card", cardColor, new Vector2(0f, CardCenterY), new Vector2(CardWidth, CardHeight), 18f);
+
+        // Face.
+        badge = (RectTransform)new GameObject("Face", typeof(RectTransform)).transform;
         badge.SetParent(root, false);
-        badge.anchoredPosition = new Vector2(0f, BadgeY);
-        badge.sizeDelta = new Vector2(BadgeSize, BadgeSize);
-
-        glow = NewDisc(badge, "Glow", DiscSprite(), new Color(StateColors[3].r, StateColors[3].g, StateColors[3].b, 0.4f), Vector2.zero, BadgeSize + 22f);
+        badge.anchoredPosition = new Vector2(0f, FaceY);
+        badge.sizeDelta = new Vector2(FaceSize, FaceSize);
+        glow = NewDisc(badge, "Glow", DiscSprite(), new Color(StateColors[3].r, StateColors[3].g, StateColors[3].b, 0.4f), Vector2.zero, FaceSize + 14f);
         glow.gameObject.SetActive(false);
-        NewDisc(badge, "Shadow", DiscSprite(), new Color(0f, 0f, 0f, 0.22f), new Vector2(0f, -4f), BadgeSize + 2f);
-        NewDisc(badge, "Border", DiscSprite(), Color.white, Vector2.zero, BadgeSize);
-        NewDisc(badge, "RingTrack", RingSprite(), new Color(0.90f, 0.90f, 0.92f, 1f), Vector2.zero, BadgeSize - 10f);
-        ringFill = NewDisc(badge, "RingFill", RingSprite(), StateColors[0], Vector2.zero, BadgeSize - 10f);
-        ringFill.type = Image.Type.Filled;
-        ringFill.fillMethod = Image.FillMethod.Radial360;
-        ringFill.fillOrigin = (int)Image.Origin360.Bottom;
-        ringFill.fillClockwise = true;
-        ringFill.fillAmount = 0f;
-        NewDisc(badge, "Inner", DiscSprite(), new Color(1f, 0.97f, 0.93f, 1f), Vector2.zero, BadgeSize - 30f);
-        faceImage = NewDisc(badge, "Face", FaceSprite(0), Color.white, Vector2.zero, BadgeSize - 34f);
-
-        // Name tab.
-        NewRound(root, "NameTabShadow", new Color(0f, 0f, 0f, 0.15f), new Vector2(0f, TabY - 2f), new Vector2(78f, 30f), 15f);
-        NewRound(root, "NameTab", nameTabColor, new Vector2(0f, TabY), new Vector2(76f, 28f), 14f);
-        TMP_Text nameText = NewText(root, "Name", font, "芽芽", 18f, nameTabTextColor, new Vector2(0f, TabY), new Vector2(76f, 28f));
-        nameText.outlineWidth = 0f;
+        NewDisc(badge, "Border", DiscSprite(), new Color(0.93f, 0.90f, 0.88f, 1f), Vector2.zero, FaceSize);
+        NewDisc(badge, "Inner", DiscSprite(), new Color(1f, 0.97f, 0.93f, 1f), Vector2.zero, FaceSize - 5f);
+        faceImage = NewDisc(badge, "FaceImage", FaceSprite(0), Color.white, Vector2.zero, FaceSize - 7f);
 
         // State chip.
-        NewRound(root, "StateChipShadow", new Color(0f, 0f, 0f, 0.18f), new Vector2(0f, ChipY - 3f), new Vector2(92f, 34f), 17f);
-        stateChip = NewRound(root, "StateChip", StateColors[0], new Vector2(0f, ChipY), new Vector2(90f, 32f), 16f);
-        stateText = NewText(root, "State", font, StateNames[0], 21f, Color.white, new Vector2(0f, ChipY), new Vector2(90f, 32f));
+        stateChip = NewRound(root, "StateChip", StateColors[0], new Vector2(0f, ChipY), new Vector2(76f, 28f), 14f);
+        stateText = NewText(root, "State", font, StateNames[0], 18f, Color.white, new Vector2(0f, ChipY), new Vector2(76f, 28f));
         stateText.outlineWidth = 0.12f;
         stateText.outlineColor = new Color32(0, 0, 0, 70);
 
-        // Floating reason line.
-        reasonGroup = (RectTransform)new GameObject("ReasonGroup", typeof(RectTransform)).transform;
-        reasonGroup.SetParent(root, false);
-        reasonGroup.anchoredPosition = new Vector2(0f, ReasonY);
-        reasonGroup.sizeDelta = new Vector2(180f, 32f);
-        reasonBack = NewRound(reasonGroup, "ReasonBack", cardColor, Vector2.zero, new Vector2(170f, 32f), 16f).gameObject;
-        reasonText = NewText(reasonGroup, "Reason", font, string.Empty, 19f, Color.white, Vector2.zero, new Vector2(220f, 30f));
+        // Tension bar: dim zones behind, bright zones filling from the bottom.
+        float zone = BarLength / 4f;
+        NewRound(root, "Track", new Color(0f, 0f, 0f, 0.14f), new Vector2(BarX, BarBottom + BarLength * 0.5f), new Vector2(BarWidth + 6f, BarLength + 6f), (BarWidth + 6f) * 0.5f);
+        for (int i = 0; i < 4; i++)
+        {
+            Vector2 at = new Vector2(BarX, BarBottom + zone * (i + 0.5f));
+            Color dim = StateColors[i];
+            dim.a = zoneBackAlpha;
+            NewImage(root, "ZoneBack" + i, dim, at, new Vector2(BarWidth, zone - 2f));
+            Image fill = NewImage(root, "Zone" + i, StateColors[i], at, new Vector2(BarWidth, zone - 2f));
+            fill.type = Image.Type.Filled;
+            fill.sprite = WhiteSprite();
+            fill.fillMethod = Image.FillMethod.Vertical;
+            fill.fillOrigin = (int)Image.OriginVertical.Bottom;
+            fill.fillAmount = 0f;
+            zoneFill[i] = fill;
+        }
+        ghostImage = NewImage(root, "Ghost", Color.white, new Vector2(BarX, BarBottom), new Vector2(BarWidth + 4f, 1f));
+        ghost = ghostImage.rectTransform;
+        ghost.gameObject.SetActive(false);
+
+        // Knob: white disc with a ring in the state colour.
+        knob = (RectTransform)NewDisc(root, "Knob", DiscSprite(), new Color(0f, 0f, 0f, 0.25f), new Vector2(BarX, BarBottom), 32f).transform;
+        knobRing = NewDisc(knob, "Ring", DiscSprite(), StateColors[0], new Vector2(0f, 1f), 29f);
+        NewDisc(knob, "Dot", DiscSprite(), Color.white, new Vector2(0f, 1f), 17f);
+
+        // Pop-out: arrow + amount, and (optionally) the reason on a small strip.
+        deltaGroup = (RectTransform)new GameObject("Delta", typeof(RectTransform)).transform;
+        deltaGroup.SetParent(root, false);
+        deltaGroup.sizeDelta = new Vector2(80f, 40f);
+        deltaArrow = NewImage(deltaGroup, "Arrow", Color.white, new Vector2(-22f, 0f), new Vector2(16f, 14f));
+        deltaArrow.sprite = TriangleSprite();
+        deltaText = NewText(deltaGroup, "Amount", font, string.Empty, 20f, Color.white, new Vector2(8f, 0f), new Vector2(50f, 26f));
+        deltaText.outlineWidth = 0.2f;
+        deltaText.outlineColor = new Color32(255, 255, 255, 230);
+        reasonBack = NewRound(deltaGroup, "ReasonBack", cardColor, new Vector2(-4f, -22f), new Vector2(96f, 20f), 10f).gameObject;
+        reasonText = NewText(deltaGroup, "Reason", font, string.Empty, 13f, Color.white, new Vector2(-4f, -22f), new Vector2(110f, 20f));
         reasonText.outlineWidth = 0f;
-        reasonGroup.gameObject.SetActive(false);
+        deltaGroup.gameObject.SetActive(false);
 
         // "Please calm Yaya first".
-        gateBack = NewRound(root, "GateBack", StateColors[3], new Vector2(0f, GateY), new Vector2(170f, 34f), 17f).gameObject;
-        gateText = NewText((RectTransform)gateBack.transform, "Gate", font, "請先安撫芽芽", 19f, Color.white, Vector2.zero, new Vector2(200f, 30f));
+        gateBack = NewRound(root, "GateBack", StateColors[3], new Vector2(0f, GateY), new Vector2(130f, 28f), 14f).gameObject;
+        gateText = NewText((RectTransform)gateBack.transform, "Gate", font, "請先安撫芽芽", 16f, Color.white, Vector2.zero, new Vector2(150f, 26f));
         gateText.outlineWidth = 0f;
         gateBack.SetActive(false);
 
         badgeLevel = -1;
+    }
+
+    private static Sprite whiteSprite;
+    private static Sprite WhiteSprite()
+    {
+        if (whiteSprite == null)
+        {
+            Texture2D tex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            Color32[] px = new Color32[16];
+            for (int i = 0; i < 16; i++)
+                px[i] = new Color32(255, 255, 255, 255);
+            tex.SetPixels32(px);
+            tex.Apply();
+            whiteSprite = Sprite.Create(tex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 100f);
+        }
+        return whiteSprite;
     }
 
     // ---- Yaya's face, painted once per state into a small texture ----

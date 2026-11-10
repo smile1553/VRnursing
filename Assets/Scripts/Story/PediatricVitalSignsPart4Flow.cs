@@ -92,6 +92,13 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
     [SerializeField] private float heartbeatEffectExtraHeight = 0.12f;
     [Min(0.1f)] [SerializeField] private float heartbeatEffectDuration = 3.2f;
     [SerializeField] private AudioClip heartbeatEffectClip;
+    [Header("Apex pulse: a real stethoscope on Yaya's chest")]
+    [Tooltip("On: during the apex pulse a stethoscope chest piece goes from the nurse's hand onto Yaya's chest (apex, left of the breastbone), with its tube up to the nurse's ears, and the heartbeat is heard. Off: the old floating heart effect.")]
+    [SerializeField] private bool realisticApexPulse = true;
+    [Tooltip("Where the chest piece sits, from Yaya's upper chest bone (m): x = toward HER left, y = up (negative = lower), z = out of the chest. Can be changed while playing.")]
+    [SerializeField] private Vector3 apexChestSpot = new Vector3(0.045f, -0.04f, 0.075f);
+    [Tooltip("Diameter of the chest piece (m).")]
+    [SerializeField] private float apexChestPieceSize = 0.038f;
     [Min(0f)] [SerializeField] private float heartbeatEffectVolume = 1.5f;
     [Tooltip("How many times louder than the clip itself (1 = as recorded).")]
     [Range(1f, 5f)] [SerializeField] private float heartbeatLoudness = 3f;
@@ -259,10 +266,17 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
             () => yayaAnimation?.PlaySittingDisbelief());
 
         ShowNursePrompt(ApexPulseAction, WaitingForNurseAction.None);
-        ShowHeartbeatEffect(true);
+        if (realisticApexPulse)
+            StartApexStethoscope();
+        else
+            ShowHeartbeatEffect(true);
         momAnimation?.PlayStandingIdle();
-        // Still a little nervous while the nurse listens: she keeps rubbing her arm (not idle).
-        yayaAnimation?.PlaySittingRubbingArm();
+        // With the stethoscope on her chest she sits up still (rubbing her arm made her lean
+        // forward over it: the chest piece was hidden and her hair went through her shoulder).
+        if (realisticApexPulse)
+            yayaAnimation?.PlaySittingIdle();
+        else
+            yayaAnimation?.PlaySittingRubbingArm();
         // One full minute to count the apex pulse; Skip (F8) ends it early.
         SetPromptSkipButtonsVisible(true);
         stickerStepSkipped = false;
@@ -272,6 +286,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         stickerStepSkipped = false;
         SetPromptSkipButtonsVisible(false);
         ShowHeartbeatEffect(false);
+        StopApexStethoscope();
 
         ShowNursePrompt(NurseGiveStickerBeforeEarTemp, WaitingForNurseAction.GiveStickerBeforeEarTemp);
         yield return WaitForStickerClickOrNurseAction();
@@ -306,6 +321,20 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         momAnimation?.PlayComfortToward(yayaAnimation != null ? yayaAnimation.transform : null);
         yayaAnimation?.PlaySittingDisbelief();
         yield return WaitForDialogue(momComfortClip);
+
+        // Mom walks back to her place before Quiz 4, so she is not standing in front of it.
+        if (momAnimation != null)
+        {
+            momAnimation.ReturnFromComfort();
+            float waited = 0f;
+            yield return null;
+            while (momAnimation.IsWalking && waited < 3f)
+            {
+                waited += Time.deltaTime;
+                yield return null;
+            }
+            momAnimation.PlayStandingIdle();
+        }
 
         ShowQuiz();
         routine = null;
@@ -404,18 +433,25 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         Debug.Log($"[Part4] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
 
+    // The scene still holds older keyword lists. "||" lets a sentence pass with either the
+    // scene's list or this newer one (see SpeechGateMatcher.CountMatchedKeywordGroups).
+    private const string NewerReassureKeywords = "芽芽|妳|你;不痛|不會痛|別怕|不要怕|不用怕|不用緊張|不要緊張|好乖;一下子|一下下|一下就好|很快|馬上就好;聽心跳|心尖脈|聽診器|姊姊聽";
+    private const string NewerStickerKeywords = "貼紙|獎勵;好棒|很棒|好乖|厲害;量耳溫|耳溫|量體溫|體溫";
+    private const string NewerExplainEarKeywords = "量耳溫|耳溫槍|耳溫|量體溫|體溫;幾度|哪隻耳朵|哪一隻耳朵|左耳|右耳|耳朵|嗶一聲|一下下|一下子|不會痛|不痛";
+    private const string NewerFearToMomKeywords = "媽媽|家屬;害怕|緊張|不舒服|會怕|比較怕|很怕|正常;準確|體溫|心跳|呼吸|血壓|示範|貼紙|鼓勵|陪";
+
     private string GetKeywords(WaitingForNurseAction action)
     {
         switch (action)
         {
             case WaitingForNurseAction.ReassureBeforeApexPulse:
-                return reassureBeforeApexPulseKeywords;
+                return reassureBeforeApexPulseKeywords + "||" + NewerReassureKeywords;
             case WaitingForNurseAction.GiveStickerBeforeEarTemp:
-                return giveStickerBeforeEarTempKeywords;
+                return giveStickerBeforeEarTempKeywords + "||" + NewerStickerKeywords;
             case WaitingForNurseAction.ExplainEarTemperature:
-                return explainEarTemperatureKeywords;
+                return explainEarTemperatureKeywords + "||" + NewerExplainEarKeywords;
             case WaitingForNurseAction.ExplainFearToMom:
-                return explainFearToMomKeywords;
+                return explainFearToMomKeywords + "||" + NewerFearToMomKeywords;
             default:
                 return string.Empty;
         }
@@ -644,6 +680,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
         StopQuizCompletionRoutine();
         SetPromptSkipButtonsVisible(false);
         ShowHeartbeatEffect(false);
+        StopApexStethoscope(true);
     }
 
     private void StartNextPartFlow()
@@ -871,6 +908,7 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
 
     private static bool ContainsAnyKeyword(string text, string keywords)
     {
+        text = SpeechGateMatcher.FixMishearings(text);
         if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keywords))
             return false;
 
@@ -1010,6 +1048,200 @@ public class PediatricVitalSignsPart4Flow : MonoBehaviour
                 AudioBoost.Stop(source);
             }
         }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Apex pulse with a real-looking stethoscope: the chest piece comes from the nurse's hand,
+    // rests on Yaya's chest at the apex, its tube goes up to the nurse's ears (just below the
+    // view), and the heartbeat is heard while the nurse counts for a minute.
+    // ---------------------------------------------------------------------------------
+    private GameObject apexStethoscope;
+    private LineRenderer apexTube;
+    private AudioSource apexAudio;
+    private Coroutine apexRoutine;
+    private bool apexLeaving;
+
+    private void StartApexStethoscope()
+    {
+        StopApexStethoscope(true);
+        if (yayaAnimation == null)
+            return;
+        apexStethoscope = BuildChestPiece();
+        apexLeaving = false;
+        apexRoutine = StartCoroutine(ApexStethoscopeRoutine());
+
+        if (heartbeatEffectClip == null)
+            heartbeatEffectClip = FindAudioClipByName("heartbeat") ?? FindAudioClipByName("Heartbeat") ?? FindAudioClipByName("heartbeat-sound") ?? Resources.Load<AudioClip>("heartbeat-sound");
+        if (heartbeatEffectClip != null)
+        {
+            if (apexAudio == null)
+                apexAudio = gameObject.AddComponent<AudioSource>();
+            apexAudio.clip = heartbeatEffectClip;
+            apexAudio.loop = true;
+            apexAudio.spatialBlend = 0f;   // heard "in the ears", not from the room
+            apexAudio.volume = Mathf.Clamp01(heartbeatEffectVolume);
+            apexAudio.playOnAwake = false;
+        }
+    }
+
+    private void StopApexStethoscope(bool immediate = false)
+    {
+        if (apexAudio != null && apexAudio.isPlaying)
+        {
+            apexAudio.Stop();
+            AudioBoost.Stop(apexAudio);
+        }
+        if (immediate || apexStethoscope == null)
+        {
+            if (apexRoutine != null)
+                StopCoroutine(apexRoutine);
+            apexRoutine = null;
+            if (apexStethoscope != null)
+                Destroy(apexStethoscope);
+            apexStethoscope = null;
+            apexTube = null;
+            return;
+        }
+        apexLeaving = true;   // the routine moves it back to the hand, then removes it
+    }
+
+    // Chest piece: steel bell, black diaphragm ring, short stem; plus the tube (a line).
+    private GameObject BuildChestPiece()
+    {
+        GameObject root = new GameObject("Apex_Stethoscope");
+        float d = Mathf.Max(0.01f, apexChestPieceSize);
+        GameObject ring = Piece(root.transform, PrimitiveType.Cylinder, Vector3.zero, new Vector3(d * 1.06f, d * 0.08f, d * 1.06f), new Color(0.08f, 0.08f, 0.09f), 0.6f);
+        ring.name = "Diaphragm";
+        Piece(root.transform, PrimitiveType.Cylinder, new Vector3(0f, d * 0.12f, 0f), new Vector3(d * 0.95f, d * 0.12f, d * 0.95f), new Color(0.78f, 0.8f, 0.83f), 0.85f).name = "Bell";
+        Piece(root.transform, PrimitiveType.Cylinder, new Vector3(0f, d * 0.32f, 0f), new Vector3(d * 0.35f, d * 0.12f, d * 0.35f), new Color(0.7f, 0.72f, 0.75f), 0.85f).name = "Neck";
+        Transform stemEnd = new GameObject("StemEnd").transform;
+        stemEnd.SetParent(root.transform, false);
+        stemEnd.localPosition = new Vector3(0f, d * 0.45f, 0f);
+
+        apexTube = root.AddComponent<LineRenderer>();
+        apexTube.useWorldSpace = true;
+        apexTube.positionCount = 16;
+        apexTube.widthMultiplier = 0.0075f;
+        apexTube.numCapVertices = 3;
+        apexTube.numCornerVertices = 2;
+        Shader shader = Shader.Find("Standard") ?? Shader.Find("Sprites/Default");
+        apexTube.material = new Material(shader);
+        apexTube.material.color = new Color(0.12f, 0.12f, 0.14f);
+        apexTube.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        return root;
+    }
+
+    private static GameObject Piece(Transform parent, PrimitiveType type, Vector3 localPosition, Vector3 localScale, Color color, float smoothness)
+    {
+        GameObject go = GameObject.CreatePrimitive(type);
+        Collider c = go.GetComponent<Collider>();
+        if (c != null)
+            Destroy(c);
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = localPosition;
+        go.transform.localScale = localScale;
+        Renderer r = go.GetComponent<Renderer>();
+        r.material.color = color;
+        if (r.material.HasProperty("_Glossiness"))
+            r.material.SetFloat("_Glossiness", smoothness);
+        if (r.material.HasProperty("_Metallic"))
+            r.material.SetFloat("_Metallic", smoothness > 0.7f ? 0.8f : 0f);
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        return go;
+    }
+
+    // Where the chest piece rests, and which way is "out of the chest".
+    private bool GetApexPose(out Vector3 position, out Vector3 outward)
+    {
+        position = Vector3.zero;
+        outward = Vector3.forward;
+        if (yayaAnimation == null)
+            return false;
+        Transform yaya = yayaAnimation.transform;
+        Transform chest = MixamoHumanoidAvatarBuilder.FindBone(yaya, "Spine2") ?? MixamoHumanoidAvatarBuilder.FindBone(yaya, "Spine1");
+        if (chest == null)
+            return false;
+        Vector3 forward = Vector3.ProjectOnPlane(PrefabPerformanceRuntime.GetActorPelvisForward(yaya), Vector3.up);
+        if (forward.sqrMagnitude < 1e-6f)
+            forward = Vector3.ProjectOnPlane(yaya.forward, Vector3.up);
+        forward.Normalize();
+        Vector3 herLeft = -Vector3.Cross(Vector3.up, forward).normalized;
+        outward = forward;
+        position = chest.position + herLeft * apexChestSpot.x + Vector3.up * apexChestSpot.y + forward * apexChestSpot.z;
+        return true;
+    }
+
+    private static Vector3 NurseHand()
+    {
+        Camera cam = Camera.main;
+        return cam != null ? cam.transform.position + cam.transform.forward * 0.4f - cam.transform.up * 0.22f : Vector3.zero;
+    }
+
+    // The tube goes from the stem up to just under the nurse's chin (her ears are above,
+    // out of view), sagging a little.
+    private void UpdateApexTube()
+    {
+        if (apexTube == null || apexStethoscope == null)
+            return;
+        Camera cam = Camera.main;
+        Transform stem = apexStethoscope.transform.Find("StemEnd");
+        if (cam == null || stem == null)
+            return;
+        Vector3 a = stem.position;
+        Vector3 b = cam.transform.position - cam.transform.up * 0.28f + cam.transform.forward * 0.08f;
+        float sag = Mathf.Clamp(Vector3.Distance(a, b) * 0.25f, 0.03f, 0.25f);
+        for (int i = 0; i < apexTube.positionCount; i++)
+        {
+            float t = i / (float)(apexTube.positionCount - 1);
+            apexTube.SetPosition(i, Vector3.Lerp(a, b, t) + Vector3.down * (sag * 4f * t * (1f - t)));
+        }
+    }
+
+    private IEnumerator ApexStethoscopeRoutine()
+    {
+        Transform piece = apexStethoscope.transform;
+        // 1) From the nurse's hand onto the chest.
+        const float moveIn = 0.9f;
+        for (float t = 0f; t < moveIn && apexStethoscope != null; t += Time.deltaTime)
+        {
+            if (!GetApexPose(out Vector3 spot, out Vector3 outward))
+                break;
+            float k = Mathf.SmoothStep(0f, 1f, t / moveIn);
+            Vector3 hand = NurseHand();
+            piece.position = Vector3.Lerp(hand, spot + outward * 0.002f, k) + Vector3.up * (Mathf.Sin(k * Mathf.PI) * 0.04f);
+            piece.rotation = Quaternion.Slerp(Quaternion.LookRotation(Vector3.up, -outward), Quaternion.FromToRotation(Vector3.up, outward), k);
+            UpdateApexTube();
+            yield return null;
+        }
+
+        // 2) Resting on the chest (moves with her breathing / rubbing), the heartbeat is heard.
+        if (apexAudio != null && apexAudio.clip != null)
+        {
+            apexAudio.Play();
+            AudioBoost.Play(apexAudio, heartbeatLoudness);
+        }
+        while (apexStethoscope != null && !apexLeaving)
+        {
+            if (GetApexPose(out Vector3 spot, out Vector3 outward))
+                piece.SetPositionAndRotation(spot + outward * 0.002f, Quaternion.FromToRotation(Vector3.up, outward));
+            UpdateApexTube();
+            yield return null;
+        }
+
+        // 3) Back to the nurse's hand, then gone.
+        const float moveOut = 0.6f;
+        Vector3 from = piece != null ? piece.position : Vector3.zero;
+        for (float t = 0f; t < moveOut && apexStethoscope != null; t += Time.deltaTime)
+        {
+            piece.position = Vector3.Lerp(from, NurseHand(), Mathf.SmoothStep(0f, 1f, t / moveOut));
+            UpdateApexTube();
+            yield return null;
+        }
+        if (apexStethoscope != null)
+            Destroy(apexStethoscope);
+        apexStethoscope = null;
+        apexTube = null;
+        apexRoutine = null;
     }
 
     private IEnumerator HeartbeatRuntimeRoutine(GameObject effect)

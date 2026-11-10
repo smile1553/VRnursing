@@ -117,6 +117,10 @@ public class MomSkinSwap : MonoBehaviour
     private int supportFrame = -100;
     private Vector3 supportTarget;
     private float supportWeight;
+    [Tooltip("Patting Yaya's head: how high Mom's hand is, as a part of Yaya's head size (smaller = lower, onto her hair). Can be changed while playing.")]
+    [SerializeField] private float patHeadHeight = 0.8f;
+    [Tooltip("Patting Yaya's head: extra shift of Mom's hand (m, world x/y/z). Can be changed while playing.")]
+    [SerializeField] private Vector3 patHandNudge = Vector3.zero;
     [Tooltip("How far her wrist may bend to point what she holds at its target (degrees).")]
     [SerializeField] private float holdMaxWristBend = 70f;
 
@@ -647,7 +651,7 @@ public class MomSkinSwap : MonoBehaviour
             Transform head = oldMom.ComfortHead;
             Vector3 towardMom = Vector3.ProjectOnPlane(newRoot.position - head.position, Vector3.up).normalized;
             float pat = Mathf.Abs(Mathf.Sin((Time.time - patStartTime) * Mathf.PI * 1.6f)) * 0.025f;
-            Vector3 target = head.position + Vector3.up * (oldMom.ComfortHeadSize + pat) + towardMom * 0.03f;
+            Vector3 target = head.position + Vector3.up * (oldMom.ComfortHeadSize * patHeadHeight + pat) + towardMom * 0.03f + patHandNudge;
             ArmReachIK.Solve(patUsesRight ? rightArm : leftArm, target, patWeight);
         }
 

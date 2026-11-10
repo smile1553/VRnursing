@@ -11,7 +11,9 @@ using UnityEngine;
 public static class HudDepth
 {
     // Metres in front of the eyes. Change this one number to move the whole display.
-    public static float Distance = 1.1f;
+    // 0.95 = where the medical record is held (close enough not to go into walls); the record
+    // itself also uses this number, so everything is on the same plane.
+    public static float Distance = 0.95f;
     public static bool Enabled = true;
 
     // offset = x right, y up, z forward (camera space).

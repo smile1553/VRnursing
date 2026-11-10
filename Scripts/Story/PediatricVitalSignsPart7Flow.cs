@@ -831,6 +831,7 @@ public class PediatricVitalSignsPart7Flow : MonoBehaviour
 
     private static bool ContainsAnyKeyword(string text, string keywords)
     {
+        text = SpeechGateMatcher.FixMishearings(text);
         if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keywords))
             return false;
         foreach (string part in keywords.Split('|'))

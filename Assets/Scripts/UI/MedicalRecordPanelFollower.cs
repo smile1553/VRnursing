@@ -15,6 +15,8 @@ public class MedicalRecordPanelFollower : MonoBehaviour
     [SerializeField] bool keepInFrontWhileOpen = true;
     [Tooltip(">0: distance in front of the head (m), overrides Local Offset Z. Closer = less chance to clip into walls.")]
     [SerializeField] float overrideDistance = 0.95f;
+    [Tooltip("On: use the shared HUD distance (HudDepth.Distance), so the record is on the same plane as the prompt, dialogue box, sticker, emotion bar... Off: use Override Distance.")]
+    [SerializeField] bool useSharedHudDistance = true;
     [SerializeField] float followLerp = 10f;
     [Tooltip("Keep the same apparent size as before when moved closer (scale x overrideDistance / original distance), times this.")]
     [SerializeField] float sizeMultiplier = 1f;
@@ -123,7 +125,7 @@ public class MedicalRecordPanelFollower : MonoBehaviour
         if (scaleApplied)
             return;
         scaleApplied = true;
-        float distance = closeUpDistance > 0f ? closeUpDistance : overrideDistance;
+        float distance = closeUpDistance > 0f ? closeUpDistance : NormalDistance();
         if (distance > 0f && localOffset.z > 0.01f)
             transform.localScale = originalScale * (distance / localOffset.z) * Mathf.Max(0.01f, sizeMultiplier);
     }
@@ -170,8 +172,15 @@ public class MedicalRecordPanelFollower : MonoBehaviour
         Vector3 offset = localOffset;
         if (closeUpDistance > 0f)
             offset.z = closeUpDistance;
-        else if (overrideDistance > 0f)
-            offset.z = overrideDistance;
+        else if (NormalDistance() > 0f)
+            offset.z = NormalDistance();
         return offset;
+    }
+
+    float NormalDistance()
+    {
+        if (useSharedHudDistance && HudDepth.Enabled && HudDepth.Distance > 0.05f)
+            return HudDepth.Distance;
+        return overrideDistance;
     }
 }

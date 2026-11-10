@@ -843,6 +843,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
 
     private static bool ContainsAnyKeyword(string text, string[] keywords)
     {
+        text = SpeechGateMatcher.FixMishearings(text);
         if (string.IsNullOrEmpty(text) || keywords == null)
             return false;
 
@@ -859,6 +860,7 @@ public class PediatricVitalSignsPart1Flow : MonoBehaviour
     }
     private static bool ContainsAnyKeyword(string text, string keywords)
     {
+        text = SpeechGateMatcher.FixMishearings(text);
         if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keywords))
             return false;
 

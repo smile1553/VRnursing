@@ -29,6 +29,16 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
     [SerializeField] private string quizPanelChildName = "Quiz_Panel_6";
     [Tooltip("Seconds the ear-direction hint is shown before the first prompt.")]
     [SerializeField] private float earDirectionHintSeconds = 3.5f;
+    [Header("Ear-pull tip card (instead of the grey hint bar)")]
+    [Tooltip("Show the picture card (under 3: pull down and back / 3 and over: up and back, Yaya 4 years) instead of the grey hint text.")]
+    [SerializeField] private bool useEarPullCard = true;
+    [SerializeField] private string earPullCardResource = "Part6_EarPullCard";
+    [Tooltip("How long the card stays (s); the orange bar at the bottom counts down.")]
+    [SerializeField] private float earPullCardSeconds = 4.5f;
+    [Tooltip("Width of the card in front of the eyes (m, at the shared HUD distance).")]
+    [SerializeField] private float earPullCardWidth = 0.62f;
+    [Tooltip("x right, y up, z forward from the eyes (m).")]
+    [SerializeField] private Vector3 earPullCardOffset = new Vector3(0f, -0.02f, 1.0f);
 
     [Header("Actors")]
     [SerializeField] private MomAnimationPlayer momAnimation;
@@ -53,6 +63,15 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
     [SerializeField] private bool measureLeftEar = false;
     [Tooltip("Size of the thermometer (1 = real size).")]
     [SerializeField] private float momThermometerSize = 0.8f;
+    [Tooltip("New script: Mom holds Yaya and the NURSE takes the ear temperature (the thermometer goes from the nurse's hand to the ear). Off = Mom measures.")]
+    [SerializeField] private bool nurseMeasures = true;
+    [Tooltip("On: Mom's own hand holds the thermometer at Yaya's ear (her other hand steadies Yaya's head), even when Nurse Measures is on. Off: the thermometer goes from the nurse to the ear by itself.")]
+    [SerializeField] private bool momHandHoldsThermometer = true;
+    private bool NurseMeasuresNow => nurseMeasures && !momHandHoldsThermometer;
+    [Tooltip("Where Yaya's ear opening is, from her head bone (m): x = out to the side, y = up, z = toward her face. Can be changed while playing.")]
+    [SerializeField] private Vector3 nurseEarSpot = new Vector3(0.075f, 0.055f, 0.01f);
+    [Tooltip("Gap (m) between the probe tip and the ear when the nurse measures.")]
+    [SerializeField] private float nurseProbeGap = 0.005f;
     [Tooltip("Seconds the thermometer shows itself in front of the nurse (pop + glow) before it is handed to Mom.")]
     [SerializeField] private float handOverPresentSeconds = 0.6f;
     [Tooltip("Seconds it floats from the nurse to Mom's hand.")]
@@ -65,6 +84,20 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
     [SerializeField] private float momGripGap = 0.03f;
     [Tooltip("Mom rests her other hand on top of Yaya's head while measuring.")]
     [SerializeField] private bool momSupportsHead = true;
+    [Tooltip("New hold: Mom measures the ear on HER side with the hand nearest to it; her other arm stays relaxed (no hand on Yaya's head, so her arms never cross). Off = the older hold.")]
+    [SerializeField] private bool momSimpleEarHold = true;
+    [Header("Mom's ear-thermometer hold: one fixed pose")]
+    [Tooltip("Mom always walks to the same spot beside Yaya and holds the thermometer at the same ear, straight in from the side. Does not depend on where she was standing (that made her walk through Yaya / the bed).")]
+    [SerializeField] private bool momFixedEarHold = true;
+    [Tooltip("On = Mom stands at Yaya's LEFT side and measures her left ear (Mom's usual side). Off = right side.")]
+    [SerializeField] private bool momFixedOnYayasLeft = true;
+    [Tooltip("Mom's spot, from Yaya's hips (m): x = out to the side, z = toward the front (negative = back). Can be changed between runs.")]
+    [SerializeField] private Vector2 momFixedSpot = new Vector2(0.58f, 0.10f);
+    [Tooltip("How far her hand (the thermometer grip) is out from the ear (m).")]
+    [SerializeField] private float momFixedGripOut = 0.02f;
+    private Vector3 momFixedHome;
+    private Vector3 momFixedHomeForward;
+    private bool momFixedWalked;
     [Tooltip("Mom measures the ear Yaya pointed at (off = always the ear on Mom's side).")]
     [SerializeField] private bool measurePointedEar = true;
     [SerializeField] private float measureDuration = 3.2f;
@@ -210,8 +243,21 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
         momAnimation?.PlayStandingIdle();
 
         // 0) Short hint (no Skip), then move on by itself.
-        ShowNursePrompt(SubtitleEarDirection, WaitingForNurseAction.None);
-        yield return new WaitForSeconds(Mathf.Max(0.5f, earDirectionHintSeconds));
+        Texture2D earCard = useEarPullCard ? Resources.Load<Texture2D>(earPullCardResource) : null;
+        if (earCard != null)
+        {
+            // The grey hint bar is not used here: the picture card says it instead.
+            SetPanelVisible(nursePromptPanel, false, "TopHint_Panel");
+            SetPromptSkipButtonsVisible(false);
+            yield return ShowEarPullCard(earCard);
+        }
+        else
+        {
+            if (useEarPullCard)
+                Debug.LogWarning($"[Part6] Resources/{earPullCardResource}.png not found: showing the text hint instead.", this);
+            ShowNursePrompt(SubtitleEarDirection, WaitingForNurseAction.None);
+            yield return new WaitForSeconds(Mathf.Max(0.5f, earDirectionHintSeconds));
+        }
 
         // 1) Nurse explains pulling the ear (keywords or Skip).
         ShowNursePrompt(PromptPullEar, WaitingForNurseAction.PullEarAndExplain);
@@ -219,11 +265,28 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
 
         // 2) Mom holds Yaya, the nurse measures; reading animation on screen.
         ShowNursePrompt(PromptMeasuring, WaitingForNurseAction.None);
-        momAnimation?.PlayComfortToward(yayaAnimation != null ? yayaAnimation.transform : null);
         yayaAnimation?.PlaySittingIdle();
-        yield return new WaitForSeconds(1.2f); // Mom walks over first
+        if (momFixedEarHold && momAnimation != null && yayaAnimation != null && FixedMomSpot(out Vector3 momSpot, out Vector3 momFace))
+        {
+            // Always the same: Mom walks to her spot beside Yaya and faces Yaya's head.
+            momFixedHome = momAnimation.transform.position;
+            momFixedHomeForward = momAnimation.IntendedForward;
+            momFixedWalked = true;
+            yield return momAnimation.WalkTo(momSpot, momFace);
+            momAnimation.PlayStandingIdle();
+        }
+        else
+        {
+            momAnimation?.PlayComfortToward(yayaAnimation != null ? yayaAnimation.transform : null);
+            yield return new WaitForSeconds(1.2f); // Mom walks over first
+        }
         yield return MeasureEarTemperature();
         onYayaTemperatureMeasured?.Invoke();
+        if (momFixedWalked && momAnimation != null)
+        {
+            momFixedWalked = false;
+            StartCoroutine(momAnimation.WalkTo(momFixedHome, momFixedHomeForward));
+        }
 
         // 3) Nurse reports the result and introduces the blood-pressure cuff (keywords or Skip).
         ShowNursePrompt(PromptReportAndBp, WaitingForNurseAction.ReportTemperatureAndIntroduceBp);
@@ -257,7 +320,9 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
         }
         MoveThermometerToEar();
         // The nurse hands the thermometer to Mom, who brings it to the ear.
-        if (momHoldsThermometer && MomSkinSwap.Active != null && MomSkinSwap.Active.IsShown)
+        if (NurseMeasuresNow)
+            yield return new WaitForSeconds(handOverPresentSeconds + handOverFlySeconds + 0.3f);
+        else if (momHoldsThermometer && MomSkinSwap.Active != null && MomSkinSwap.Active.IsShown)
             yield return new WaitForSeconds(handOverPresentSeconds + handOverFlySeconds + 0.9f);
         ShowReadingCard();
         PlayBeep(1);
@@ -316,19 +381,50 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
         StartCoroutine(MoveThermometerRoutine(best, head));
     }
 
+    // Yaya's forward (horizontal) and the side Mom stands on (her left by default).
+    private void YayaAxes(out Vector3 forward, out Vector3 momSide)
+    {
+        forward = Vector3.ProjectOnPlane(PrefabPerformanceRuntime.GetActorPelvisForward(yayaAnimation.transform), Vector3.up);
+        if (forward.sqrMagnitude < 1e-6f)
+            forward = Vector3.ProjectOnPlane(yayaAnimation.transform.forward, Vector3.up);
+        forward.Normalize();
+        Vector3 yayaRight = Vector3.Cross(Vector3.up, forward).normalized;
+        momSide = momFixedOnYayasLeft ? -yayaRight : yayaRight;
+    }
+
+    private bool FixedMomSpot(out Vector3 spot, out Vector3 face)
+    {
+        spot = Vector3.zero;
+        face = Vector3.forward;
+        Transform hips = MixamoHumanoidAvatarBuilder.FindBone(yayaAnimation.transform, "Hips");
+        if (hips == null)
+            return false;
+        YayaAxes(out Vector3 forward, out Vector3 side);
+        spot = hips.position + side * momFixedSpot.x + forward * momFixedSpot.y;
+        spot.y = momAnimation.transform.position.y;
+        face = -side;
+        return true;
+    }
+
     // Yaya hands the thermometer to Mom; Mom holds it to Yaya's ear (the ear on Mom's side).
     private IEnumerator MoveThermometerRoutine(Transform thermometer, Transform head)
     {
         Vector3 forward = PrefabPerformanceRuntime.GetActorPelvisForward(yayaAnimation.transform);
         Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
         MomSkinSwap mom = MomSkinSwap.Active;
-        bool momHolds = momHoldsThermometer && mom != null && mom.IsShown;
+        bool momHolds = !NurseMeasuresNow && momHoldsThermometer && mom != null && mom.IsShown;
 
-        if (momHolds)
-            right *= measurePointedEar
+        if (momHolds && momFixedEarHold)
+        {
+            YayaAxes(out Vector3 f, out Vector3 side);
+            forward = f;
+            right = side;   // the ear on Mom's (fixed) side
+        }
+        else if (momHolds)
+            right *= (measurePointedEar && !momSimpleEarHold)
                 ? (yayaAnimation.PointsLeftEar ? -1f : 1f)
                 : (Vector3.Dot(mom.ChestPosition - head.position, right) >= 0f ? 1f : -1f);
-        else if (measureLeftEar)
+        else if (measurePointedEar ? yayaAnimation.PointsLeftEar : measureLeftEar)
             right = -right;
 
         Vector3 from = thermometer.position;
@@ -352,7 +448,11 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
                 thermometer.SetPositionAndRotation(NurseHandPoint(from) + Vector3.up * (Mathf.Sin(t * 6f) * 0.006f),
                     Quaternion.AngleAxis(Mathf.Sin(u * Mathf.PI) * 35f, Vector3.up) * lying);
                 thermometer.localScale = Vector3.one * Mathf.Max(0.01f, pop);
-                mom.ReachTo(Vector3.Lerp(mom.ChestPosition - Vector3.up * 0.25f, meet, u), null, meet);
+                // Her open hand points toward the thermometer (the nurse), not back at herself.
+                // The very first frame decides which arm she uses: the one nearest Yaya's ear, so
+                // the same arm takes it and brings it to the ear (no arm crossing over / twisting).
+                Vector3 aim = (t <= 0f && momFixedEarHold) ? head.position + right * 0.085f : thermometer.position;
+                mom.ReachTo(Vector3.Lerp(mom.ChestPosition - Vector3.up * 0.25f, meet, u), null, aim);
                 yield return null;
             }
             if (thermometer == null)
@@ -365,7 +465,7 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
             {
                 float k = Mathf.SmoothStep(0f, 1f, t / Mathf.Max(0.05f, handOverFlySeconds));
                 thermometer.SetPositionAndRotation(Vector3.Lerp(flyFrom, meet, k) + Vector3.up * (Mathf.Sin(k * Mathf.PI) * 0.08f), lying);
-                mom.ReachTo(meet, null, meet);
+                mom.ReachTo(meet, null, meet + towardNurse * 0.4f + Vector3.up * 0.05f);
                 yield return null;
             }
             if (fx != null)
@@ -387,32 +487,67 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
                 // Close to the ear and a little in front of it (toward Yaya's face), so the
                 // probe goes straight into the ear canal instead of slanting in from behind.
                 Vector3 toMom = Vector3.ProjectOnPlane(mom.ChestPosition - ear, Vector3.up).normalized;
-                Vector3 away = (right + forward * momHandInFront + toMom * momHandTowardMom).normalized;
-                Vector3 grip = ear + away * (tipDistance + momGripGap) - Vector3.up * EarThermometerProp.TipRise;
+                // Simple hold: the hand straight out from the ear toward Mom, so the probe goes
+                // straight in and her arm comes from her own side.
+                Vector3 away = momFixedEarHold
+                    ? right
+                    : momSimpleEarHold
+                    ? (right + toMom * 0.35f).normalized
+                    : (right + forward * momHandInFront + toMom * momHandTowardMom).normalized;
+                Vector3 grip = ear + away * (tipDistance + (momFixedEarHold ? momFixedGripOut : momGripGap)) - Vector3.up * EarThermometerProp.TipRise;
                 Vector3 hand = Vector3.Lerp(meet, grip, k) + Vector3.up * (Mathf.Sin(k * Mathf.PI) * 0.05f);
                 mom.ReachTo(hand, thermometer, ear);
-                if (momSupportsHead && k > 0.3f)
+                if (momSupportsHead && !momSimpleEarHold && k > 0.3f)
                     mom.SupportWith(head.position + Vector3.up * 0.10f - right * 0.02f - forward * 0.03f);
                 yield return null;
             }
             yield break;
         }
 
-        for (float t = 0f; t < 0.6f && thermometer == movedThermometer; t += Time.deltaTime)
+        // The nurse measures (new script: Mom holds Yaya, the nurse takes the temperature).
+        // The thermometer appears in the nurse's hand, then goes to the ear, the probe
+        // pointing straight into it, and stays there while it measures.
+        ItemPresentFx nurseFx = ItemPresentFx.Attach(thermometer, 0.07f * momThermometerSize + 0.03f, ItemPresentFx.Gold);
+        for (float t = 0f; t < handOverPresentSeconds && thermometer == movedThermometer; t += Time.deltaTime)
         {
-            Vector3 ear = head.position + right * (0.085f + tipDistance) + Vector3.up * 0.05f;
-            Quaternion toRotation = Quaternion.LookRotation(-right, Vector3.up);
-            float k = Mathf.SmoothStep(0f, 1f, t / 0.6f);
-            thermometer.SetPositionAndRotation(Vector3.Lerp(from, ear, k), Quaternion.Slerp(fromRotation, toRotation, k));
+            float u = t / Mathf.Max(0.05f, handOverPresentSeconds);
+            thermometer.SetPositionAndRotation(NurseHandPoint(from), Quaternion.Slerp(fromRotation, Quaternion.LookRotation(-right, Vector3.up), u));
+            thermometer.localScale = Vector3.one * Mathf.Max(0.01f, EaseOutBack(Mathf.Clamp01(u / 0.5f)));
+            yield return null;
+        }
+        if (thermometer == null)
+            yield break;
+        thermometer.localScale = Vector3.one;
+        if (nurseFx != null)
+            nurseFx.Stop();
+
+        Vector3 start = thermometer.position;
+        Quaternion startRotation = thermometer.rotation;
+        float fly = Mathf.Max(0.2f, handOverFlySeconds + 0.2f);
+        for (float t = 0f; t < fly && thermometer == movedThermometer; t += Time.deltaTime)
+        {
+            Vector3 ear = EarGrip(head, right, tipDistance);
+            float k = Mathf.SmoothStep(0f, 1f, t / fly);
+            thermometer.SetPositionAndRotation(Vector3.Lerp(start, ear, k) + Vector3.up * (Mathf.Sin(k * Mathf.PI) * 0.04f),
+                Quaternion.Slerp(startRotation, Quaternion.LookRotation(-right, Vector3.up), k));
             yield return null;
         }
 
         while (thermometer == movedThermometer && readingCard != null && readingCard.activeSelf)
         {
-            Vector3 ear = head.position + right * (0.085f + tipDistance) + Vector3.up * 0.05f;
-            thermometer.SetPositionAndRotation(ear, Quaternion.LookRotation(-right, Vector3.up));
+            thermometer.SetPositionAndRotation(EarGrip(head, right, tipDistance), Quaternion.LookRotation(-right, Vector3.up));
             yield return null;
         }
+    }
+
+    // Where the thermometer's grip goes so that its probe tip just touches the ear opening.
+    private Vector3 EarGrip(Transform head, Vector3 side, float tipDistance)
+    {
+        Vector3 forward = Vector3.Cross(side, Vector3.up).normalized;
+        if (Vector3.Dot(forward, PrefabPerformanceRuntime.GetActorPelvisForward(yayaAnimation.transform)) < 0f)
+            forward = -forward;
+        Vector3 ear = head.position + side * nurseEarSpot.x + Vector3.up * nurseEarSpot.y + forward * nurseEarSpot.z;
+        return ear + side * (tipDistance + nurseProbeGap) - Vector3.up * EarThermometerProp.TipRise;
     }
 
     // A little below and in front of the player's eyes: where the nurse "holds out" a thing.
@@ -420,6 +555,108 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
     {
         Camera cam = Camera.main;
         return cam != null ? cam.transform.position + cam.transform.forward * 0.42f - cam.transform.up * 0.16f : fallback;
+    }
+
+    // Picture card in front of the eyes: pops up, the orange bar counts down, then it closes.
+    private IEnumerator ShowEarPullCard(Texture2D texture)
+    {
+        const float cardW = 900f, cardH = 560f;
+        GameObject card = new GameObject("Part6_EarPullCard", typeof(RectTransform));
+        Canvas canvas = card.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.sortingOrder = 60;
+        card.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 4f;
+        RectTransform root = (RectTransform)card.transform;
+        root.sizeDelta = new Vector2(cardW, cardH);
+
+        GameObject pictureObject = new GameObject("Picture", typeof(RectTransform));
+        pictureObject.transform.SetParent(root, false);
+        RawImage picture = pictureObject.AddComponent<RawImage>();
+        picture.texture = texture;
+        picture.raycastTarget = false;
+        ((RectTransform)pictureObject.transform).sizeDelta = new Vector2(cardW, cardH);
+
+        // Animated layers: the "✓ 芽芽" chip pops in a moment later, the orange arrow then keeps
+        // tugging the ear up and back (same layout as the picture, 900 x 560).
+        RawImage check = NewLayer(root, "Check", earPullCardResource + "_Check", new Vector2(783f, 173f));
+        RawImage arrowLayer = NewLayer(root, "Arrow", earPullCardResource + "_Arrow", new Vector2(667f, 285f));
+        Vector2 pullDir = new Vector2(751.2f - 667.2f, -(209.2f - 285.2f)).normalized;   // up and back (canvas y up)
+        Vector2 arrowHome = arrowLayer != null ? arrowLayer.rectTransform.anchoredPosition : Vector2.zero;
+        if (check != null) check.rectTransform.localScale = Vector3.zero;
+        if (arrowLayer != null) arrowLayer.color = new Color(1f, 1f, 1f, 0f);
+
+        // Count-down bar where the card has room for it (bottom of the card).
+        Image track = NewBar(root, "BarTrack", new Color(0.90f, 0.88f, 0.86f, 1f));
+        Image fill = NewBar(root, "BarFill", new Color(1f, 0.67f, 0.24f, 1f));
+        RectTransform fillRect = fill.rectTransform;
+
+        float seconds = Mathf.Max(1f, earPullCardSeconds);
+        const float popIn = 0.35f, popOut = 0.25f;
+        float total = popIn + seconds + popOut;
+        for (float t = 0f; t < total; t += Time.deltaTime)
+        {
+            float pop = t < popIn ? EaseOutBack(Mathf.Clamp01(t / popIn))
+                : t > popIn + seconds ? 1f - Mathf.SmoothStep(0f, 1f, (t - popIn - seconds) / popOut)
+                : 1f;
+            float left = 1f - Mathf.Clamp01((t - popIn) / seconds);
+            fillRect.sizeDelta = new Vector2(820f * left, 10f);
+
+            float shown = t - popIn - 0.5f;   // half a second after the card is up
+            if (check != null)
+                check.rectTransform.localScale = Vector3.one * (shown <= 0f ? 0f : EaseOutBack(Mathf.Clamp01(shown / 0.3f)));
+            if (arrowLayer != null)
+            {
+                arrowLayer.color = new Color(1f, 1f, 1f, Mathf.Clamp01(shown / 0.25f));
+                // A tug: slides out along the arrow, holds a moment, snaps back; again and again.
+                float phase = Mathf.Repeat(Mathf.Max(0f, shown) * 0.9f, 1f);
+                float pull = phase < 0.6f ? Mathf.SmoothStep(0f, 1f, phase / 0.6f) : 1f - Mathf.SmoothStep(0f, 1f, (phase - 0.6f) / 0.4f);
+                arrowLayer.rectTransform.anchoredPosition = arrowHome + pullDir * (16f * pull);
+            }
+
+            Camera cam = Camera.main;
+            if (cam != null)
+            {
+                Transform c = cam.transform;
+                Vector3 offset = HudDepth.Flatten(earPullCardOffset, out float depthFactor);
+                card.transform.SetPositionAndRotation(c.position + c.right * offset.x + c.up * offset.y + c.forward * offset.z, c.rotation);
+                card.transform.localScale = Vector3.one * (earPullCardWidth / cardW) * depthFactor * Mathf.Max(0.01f, pop);
+            }
+            yield return null;
+        }
+        Destroy(card);
+    }
+
+    // A full-card transparent picture layer, turning / growing around `pivotOnCard`
+    // (a point on the 900 x 560 card, measured from its top-left corner).
+    private static RawImage NewLayer(RectTransform parent, string name, string resource, Vector2 pivotOnCard)
+    {
+        Texture2D texture = Resources.Load<Texture2D>(resource);
+        if (texture == null)
+            return null;
+        GameObject go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        RectTransform rt = (RectTransform)go.transform;
+        rt.sizeDelta = new Vector2(900f, 560f);
+        rt.pivot = new Vector2(pivotOnCard.x / 900f, 1f - pivotOnCard.y / 560f);
+        rt.anchoredPosition = new Vector2((rt.pivot.x - 0.5f) * 900f, (rt.pivot.y - 0.5f) * 560f);
+        RawImage image = go.AddComponent<RawImage>();
+        image.texture = texture;
+        image.raycastTarget = false;
+        return image;
+    }
+
+    private static Image NewBar(RectTransform parent, string name, Color color)
+    {
+        GameObject go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        RectTransform rt = (RectTransform)go.transform;
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.anchoredPosition = new Vector2(-410f, -219f);
+        rt.sizeDelta = new Vector2(820f, 10f);
+        Image image = go.AddComponent<Image>();
+        image.color = color;
+        image.raycastTarget = false;
+        return image;
     }
 
     private static float EaseOutBack(float t)
@@ -683,8 +920,8 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
         if (string.IsNullOrWhiteSpace(speechText))
             return;
 
-        string keywords = waitingForNurseAction == WaitingForNurseAction.PullEarAndExplain ? pullEarKeywords
-            : waitingForNurseAction == WaitingForNurseAction.ReportTemperatureAndIntroduceBp ? reportTemperatureKeywords + TemperatureWords()
+        string keywords = waitingForNurseAction == WaitingForNurseAction.PullEarAndExplain ? pullEarKeywords + "|耳朵|耳道"
+            : waitingForNurseAction == WaitingForNurseAction.ReportTemperatureAndIntroduceBp ? reportTemperatureKeywords + "|耳溫|發燒" + TemperatureWords()
             : string.Empty;
 
         if (ContainsAnyKeyword(speechText, keywords))
@@ -816,6 +1053,7 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
 
     private static bool ContainsAnyKeyword(string text, string keywords)
     {
+        text = SpeechGateMatcher.FixMishearings(text);
         if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keywords))
             return false;
         foreach (string part in keywords.Split('|'))

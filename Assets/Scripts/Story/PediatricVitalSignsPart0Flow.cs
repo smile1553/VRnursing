@@ -80,6 +80,11 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
         audioUploader.AudioResponseAccepted += HandleAudioResponse;
     }
 
+    // The scene still holds older keyword lists. "||" lets a sentence pass with either the
+    // scene's list or this newer one (see SpeechGateMatcher.CountMatchedKeywordGroups).
+    private const string NewerGreetingKeywords = "你好|您好|哈囉|嗨|早安|午安|你們好|大家好|媽媽好|芽芽好;護理師|護生|我是;請問|可以進來|打擾|方便;媽媽|芽芽|小朋友|家屬";
+    private string GreetingKeywordsAll => greetingKeywords + "||" + NewerGreetingKeywords;
+
     private void HandleAudioResponse(AudioAnalysisResponse response, string rawJson)
     {
         if (!advanceFromBackendJson || !waitingForGreeting || completed ||
@@ -89,7 +94,7 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
 
         string reason;
         if (SpeechGateMatcher.IsMatch(
-            response, greetingKeywords, greetingActionTags, out reason, minSemanticConfidence))
+            response, GreetingKeywordsAll, greetingActionTags, out reason, minSemanticConfidence))
         {
             Debug.Log($"[Part0] Greeting matched ({reason}). Opening door. text={response.text}", this);
             CompleteGreetingAndOpenDoor();
@@ -187,7 +192,7 @@ public class PediatricVitalSignsPart0Flow : MonoBehaviour
         AudioAnalysisResponse response;
         string reason;
         if (SpeechGateMatcher.TryParseAndMatch(
-            json, greetingKeywords, greetingActionTags, out response, out reason, minSemanticConfidence))
+            json, GreetingKeywordsAll, greetingActionTags, out response, out reason, minSemanticConfidence))
         {
             Debug.Log($"[Part0] Greeting matched ({reason}). Opening door. text={response.text}", this);
             CompleteGreetingAndOpenDoor();

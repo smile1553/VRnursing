@@ -85,6 +85,8 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
     [SerializeField] private float choiceRadius = 0.06f;
 
     [Header("Blood pressure measurement")]
+    [Tooltip("Yaya's cuff on her right arm (off = left arm).")]
+    [SerializeField] private bool yayaCuffOnRightArm = true;
     [Tooltip("Where the toy cuff sits on the bear. Across: sideways from its middle (1 = its edge; negative = the arm the nurse sees on her LEFT, away from Yaya's hand). Up: part of its height above its middle. Front: towards the nurse (part of its half depth).")]
     [SerializeField] private float bearCuffAcross = -0.74f;
     [SerializeField] private float bearCuffUp = 0.08f;
@@ -95,11 +97,17 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
     [Tooltip("Find the bear's arm from its mesh (the part sticking out sideways at chest height) and put the cuff on it. Off = use Across / Up / Front above.")]
     [SerializeField] private bool bearCuffFindArm = true;
     [Tooltip("Where along the arm (0 = where it leaves the body, 1 = the paw).")]
-    [Range(0f, 1f)] [SerializeField] private float bearCuffAlongArm = 0.45f;
+    [Range(0f, 1f)] [SerializeField] private float bearCuffAlongArm = 0.3f;
     [Tooltip("Fine shift of the bear cuff (m): x = toward the arm's side, y = up, z = toward the nurse. Can be changed while playing.")]
     [SerializeField] private Vector3 bearCuffNudge = Vector3.zero;
     [Tooltip("Extra turn of the bear cuff around the line toward the nurse (degrees). Can be changed while playing.")]
     [SerializeField] private float bearCuffTurn = 0f;
+    [Tooltip("Use the bear's own arm bones (armL / armR) to put the cuff exactly around its arm. This is the reliable way; the mesh / box ways are only used when no arm bones are found.")]
+    [SerializeField] private bool bearCuffOnArmBone = true;
+    [Tooltip("Thickness of the cuff compared with the bear's arm length (0.6 = fairly chubby arm).")]
+    [SerializeField] private float bearCuffArmThickness = 0.7f;
+    [Tooltip("Length of the cuff along the arm, compared with the arm length.")]
+    [SerializeField] private float bearCuffArmLength = 0.42f;
     [SerializeField] private Color cuffColor = new Color(0.16f, 0.32f, 0.63f);
 
     [Header("Blood pressure machine (on its own stand) beside Yaya")]
@@ -122,12 +130,26 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
     [SerializeField] private string machineSpotName = "BP_Machine_Spot";
     [Tooltip("Turn of the machine model itself (degrees): its screen is on the side opposite to its forward axis, so 180 makes the screen face the nurse. Try 90 / -90 if it faces sideways.")]
     [SerializeField] private float machineModelYaw = 180f;
+    [Tooltip("Turn the machine's screen toward the room door (the nurse's side).")]
+    [SerializeField] private bool machineFacesDoor = true;
+    [Tooltip("Screen fixed toward where the nurse stands in front of Yaya (not toward the door). Fine-tune with Trolley Yaw Offset.")]
+    [SerializeField] private bool machineFacesNurseSpot = true;
+    [Tooltip("How far in front of Yaya the nurse usually stands (m) - the point the screen faces.")]
+    [SerializeField] private float nurseSpotDistance = 1.3f;
+    [Tooltip("Keep turning the machine toward the nurse wherever she walks (swivel). Off = fixed.")]
+    [SerializeField] private bool machineKeepsTurningToNurse = false;
+    private bool machineFollowsNurse => machineKeepsTurningToNurse;
+    [Tooltip("How fast it turns toward the nurse.")]
+    [SerializeField] private float machineTurnSpeed = 3f;
     [Tooltip("Without that object: how far beside Yaya, on the side away from Mom (m).")]
     [SerializeField] private float machineBesideYaya = 0.75f;
     [Tooltip("...and how far toward the room from Yaya's hips (m; negative = toward the wall).")]
     [SerializeField] private float machineTowardRoom = 0.25f;
     [Tooltip("Extra turn of the trolley + monitor (degrees) if the monitor's screen does not face the nurse.")]
     [SerializeField] private float trolleyYawOffset = 0f;
+    [Tooltip("Turn that brings the machine's screen (on the model's side) to the front. 90 = its screen was facing Yaya instead of the nurse. Can be changed while playing.")]
+    [SerializeField] private float machineScreenSideFix = 90f;
+    private float TotalMachineYaw => trolleyYawOffset + machineModelYaw + machineScreenSideFix;
     [Tooltip("Size of the simple box machine, only used when the prefab is missing (m).")]
     [SerializeField] private float monitorWidth = 0.32f;
     [SerializeField] private Color tubeColor = new Color(0.12f, 0.12f, 0.14f);
@@ -176,6 +198,8 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
     private TMP_Text readingStatusText;
     private Transform bearCuff;
     private Transform bearCuffBear;
+    private Transform bearArmBone, bearArmEnd;
+    private Vector3 bearArmSide, bearArmToward;
     private Vector3 bearCuffBaseLocal, bearCuffArmLocal, bearCuffSideLocal, bearCuffTowardLocal;
     private Transform yayaCuff;
     private Transform cuffArm, cuffForeArm;
@@ -184,6 +208,14 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
     private Transform machineTubeStart;
     private LineRenderer machineTube;
     private TMP_Text machineValueText;
+    private RectTransform machineNibpPatch;
+    [Header("Reading on the machine's own screen (its NIBP field)")]
+    [Tooltip("Where the machine's blood-pressure numbers (the pink '121/79 (76)' field) are, on the reading layer in front of the screen (units: about 240 across). Can be changed while playing.")]
+    [SerializeField] private Vector2 machineNibpOffset = new Vector2(-40f, -100f);
+    [Tooltip("Size of the dark patch that covers the printed numbers while the real reading is shown.")]
+    [SerializeField] private Vector2 machineNibpSize = new Vector2(160f, 34f);
+    [SerializeField] private float machineNibpFontSize = 30f;
+    [SerializeField] private Color machineNibpColor = new Color(0.95f, 0.35f, 0.88f);
     private Transform machineScreen;
     private float machineTopLocal;
     private Vector3 machineToward;
@@ -278,6 +310,7 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         HidePicture();
         HideReadingCard();
         EnsureMachine();   // it already stands in its place since the start; only the cuff is new
+        TurnMachineToward(Camera.main != null ? Camera.main.transform.position : (Vector3?)null);
 
         // 1) On the bear: what the cuff feels like, squeezing Yaya's arm gently, reassuring
         //    (one step: any of those sentences passes, or Skip).
@@ -377,6 +410,10 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         }
 
         PlaceBearCuff();
+        TickMachineFacing();
+        // Machine Model Yaw / Trolley Yaw Offset changed while playing: turn it right away.
+        if (machine != null && Mathf.Abs(TotalMachineYaw - appliedMachineYaw) > 0.01f)
+            ApplyMachineYaw();
         PlaceMachineScreen();
         UpdateMachineTube();
 
@@ -465,6 +502,33 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         Vector3 towardNurse = Vector3.ProjectOnPlane(cam.transform.position - bounds.center, Vector3.up).normalized;
         float size = bounds.size.y;
 
+        // Best: the bear's own arm bone. The cuff then sits exactly around the arm and moves
+        // with it, whatever the bear's size or pose.
+        bearArmBone = null;
+        bearArmEnd = null;
+        if (bearCuffOnArmBone && TryFindBearArmBone(bounds, side, out bearArmBone, out bearArmEnd))
+        {
+            bearArmSide = side;
+            bearArmToward = towardNurse;
+            float armLength = Vector3.Distance(bearArmBone.position, bearArmEnd.position);
+            bearCuff = NewCuff("Part9_BearCuff");
+            bearCuff.localScale = new Vector3(armLength * bearCuffArmThickness, armLength * bearCuffArmLength * 0.5f, armLength * bearCuffArmThickness);
+            Renderer boneCuffRenderer = bearCuff.GetComponent<Renderer>();
+            if (boneCuffRenderer != null)
+            {
+                boneCuffRenderer.material.color = bearCuffColor;
+                if (boneCuffRenderer.material.HasProperty("_EmissionColor"))
+                {
+                    boneCuffRenderer.material.EnableKeyword("_EMISSION");
+                    boneCuffRenderer.material.SetColor("_EmissionColor", bearCuffColor * 0.45f);
+                }
+            }
+            bearCuffBear = null;
+            PlaceBearCuff();
+            Debug.Log($"[Part9] Bear cuff on the arm bone '{bearArmBone.name}' (arm length {armLength:0.000} m).", bearCuff);
+            return;
+        }
+
         Vector3 basePoint;
         Vector3 armDir;
         if (!(bearCuffFindArm && TryFindBearArm(body, bounds, side, out basePoint, out armDir)))
@@ -488,21 +552,53 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
                 cuffRenderer.material.SetColor("_EmissionColor", bearCuffColor * 0.45f);
             }
         }
-        bearCuff.SetParent(bear, true);
+        // Follow what really moves: the bear's own bone nearest to the arm when it is a
+        // skinned (animated) model, otherwise its mesh. Following only the bear's top object
+        // let the cuff slide off when the mesh itself moved (it ended up beside / behind it).
+        Transform anchor = body.transform;
+        if (body is SkinnedMeshRenderer skinnedBear && skinnedBear.bones != null)
+        {
+            float nearest = float.MaxValue;
+            foreach (Transform bone in skinnedBear.bones)
+            {
+                if (bone == null)
+                    continue;
+                float d = (bone.position - basePoint).sqrMagnitude;
+                if (d < nearest)
+                {
+                    nearest = d;
+                    anchor = bone;
+                }
+            }
+        }
+        bearCuff.SetParent(anchor, true);
 
-        // Remember the spot in the bear's own space, so it moves with the bear and the
+        // Remember the spot in that object's own space, so it moves with it and the
         // Nudge / Turn values can be changed while playing.
-        bearCuffBear = bear;
-        bearCuffBaseLocal = bear.InverseTransformPoint(basePoint);
-        bearCuffArmLocal = bear.InverseTransformDirection(armDir);
-        bearCuffSideLocal = bear.InverseTransformDirection(side);
-        bearCuffTowardLocal = bear.InverseTransformDirection(towardNurse);
+        bearCuffBear = anchor;
+        bearCuffBaseLocal = anchor.InverseTransformPoint(basePoint);
+        bearCuffArmLocal = anchor.InverseTransformDirection(armDir);
+        bearCuffSideLocal = anchor.InverseTransformDirection(side);
+        bearCuffTowardLocal = anchor.InverseTransformDirection(towardNurse);
         PlaceBearCuff();
-        Debug.Log($"[Part9] Bear cuff on '{bear.name}' at {basePoint:F3}, arm direction {armDir:F2}.", bearCuff);
+        Debug.Log($"[Part9] Bear cuff on '{bear.name}' (following '{anchor.name}') at {basePoint:F3}, arm direction {armDir:F2}.", bearCuff);
     }
 
     private void PlaceBearCuff()
     {
+        if (bearCuff != null && bearArmBone != null && bearArmEnd != null)
+        {
+            // Around the arm bone, part way from the shoulder to the paw.
+            Vector3 a = bearArmBone.position;
+            Vector3 b = bearArmEnd.position;
+            Vector3 along = b - a;
+            if (along.sqrMagnitude < 1e-10f)
+                return;
+            Vector3 p = Vector3.Lerp(a, b, bearCuffAlongArm) + bearArmSide * bearCuffNudge.x + Vector3.up * bearCuffNudge.y + bearArmToward * bearCuffNudge.z;
+            Vector3 dir = Quaternion.AngleAxis(bearCuffTurn, bearArmToward) * along.normalized;
+            bearCuff.SetPositionAndRotation(p, Quaternion.FromToRotation(Vector3.up, dir));
+            return;
+        }
         if (bearCuff == null || bearCuffBear == null)
             return;
         Transform bear = bearCuffBear;
@@ -553,7 +649,8 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         {
             Vector3 w = toWorld.MultiplyPoint3x4(vertices[i]);
             float h = (w.y - bottom) / height;
-            if (h < 0.3f || h > 0.72f)
+            // Arm height only: above the legs (a sitting teddy's legs stick out low down).
+            if (h < 0.42f || h > 0.8f)
                 continue;
             float o = Vector3.Dot(w - centre, side);
             if (o <= 0f)
@@ -580,6 +677,12 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         root /= rootCount;
         armDir = (paw - root).sqrMagnitude > 1e-8f ? (paw - root).normalized : side;
         point = Vector3.Lerp(root, paw, bearCuffAlongArm);
+        // Sanity check: an arm points sideways / down, and is not down at the feet.
+        if ((point.y - bottom) / height < 0.38f || Vector3.Dot(armDir, side) < 0.2f)
+        {
+            Debug.LogWarning($"[Part9] Bear arm search found something that is not an arm (height {(point.y - bottom) / height:0.00}): using the box placement.", body);
+            return false;
+        }
         return true;
     }
 
@@ -588,6 +691,49 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         if (bearCuff != null)
             Destroy(bearCuff.gameObject);
         bearCuff = null;
+        bearArmBone = null;
+        bearArmEnd = null;
+    }
+
+    // The bear's arm bones (named armL / armR in the bear model) close to the bear, the one on
+    // `side`. `end` = the bone at the paw (armL_end), so the cuff knows the arm's direction.
+    private static bool TryFindBearArmBone(Bounds bear, Vector3 side, out Transform arm, out Transform end)
+    {
+        arm = null;
+        end = null;
+        float reach = Mathf.Max(0.25f, bear.extents.magnitude * 2f);
+        float best = float.MinValue;
+        foreach (Transform t in FindObjectsOfType<Transform>())
+        {
+            string n = t.name.ToLowerInvariant();
+            if (!(n == "arml" || n == "armr" || n.EndsWith(":arml") || n.EndsWith(":armr") || n == "arm.l" || n == "arm.r" || n == "arm_l" || n == "arm_r"))
+                continue;
+            if (Vector3.Distance(t.position, bear.center) > reach)
+                continue;
+            Transform tip = null;
+            foreach (Transform c in t)
+            {
+                if (c.name.ToLowerInvariant().Contains("end"))
+                {
+                    tip = c;
+                    break;
+                }
+            }
+            if (tip == null && t.childCount > 0)
+                tip = t.GetChild(0);
+            if (tip == null)
+                continue;
+            float score = Vector3.Dot(Vector3.Lerp(t.position, tip.position, 0.5f) - bear.center, side);
+            if (score > best)
+            {
+                best = score;
+                arm = t;
+                end = tip;
+            }
+        }
+        if (arm == null)
+            Debug.LogWarning("[Part9] The bear's arm bones (armL / armR) were not found: the cuff uses the old placement.");
+        return arm != null;
     }
 
     private void ShowYayaCuff()
@@ -595,8 +741,8 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         HideYayaCuff();
         if (yayaAnimation == null)
             return;
-        cuffArm = MixamoHumanoidAvatarBuilder.FindBone(yayaAnimation.transform, "LeftArm");
-        cuffForeArm = MixamoHumanoidAvatarBuilder.FindBone(yayaAnimation.transform, "LeftForeArm");
+        cuffArm = MixamoHumanoidAvatarBuilder.FindBone(yayaAnimation.transform, yayaCuffOnRightArm ? "RightArm" : "LeftArm");
+        cuffForeArm = MixamoHumanoidAvatarBuilder.FindBone(yayaAnimation.transform, yayaCuffOnRightArm ? "RightForeArm" : "LeftForeArm");
         if (cuffArm == null || cuffForeArm == null)
             return;
         yayaCuff = NewCuff("Part9_YayaCuff");
@@ -633,10 +779,60 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         new GameObject("Part9_MachinePlacer (auto)").AddComponent<Part9MachinePlacer>().Setup(flow);
     }
 
+    private Vector3 machineLook = Vector3.forward;
+    private float appliedMachineYaw;
+
+    // Turn the machine (and its reading screen) toward the nurse.
+    private void TurnMachineToward(Vector3? point)
+    {
+        if (machine == null || point == null)
+            return;
+        Vector3 look = Vector3.ProjectOnPlane(point.Value - machine.transform.position, Vector3.up);
+        if (look.sqrMagnitude < 1e-4f)
+            return;
+        machineLook = look.normalized;
+        ApplyMachineYaw();
+    }
+
+    // The screen keeps facing the nurse (not Yaya / the door). Called every frame by this
+    // flow and by a small helper on the machine itself (the machine is in the room from the
+    // start, before this part runs).
+    private int lastFacingFrame = -1;
+    public void TickMachineFacing()
+    {
+        if (lastFacingFrame == Time.frameCount)
+            return;
+        lastFacingFrame = Time.frameCount;
+        if (machine == null || !machineFollowsNurse || Camera.main == null)
+            return;
+        Vector3 look = Vector3.ProjectOnPlane(Camera.main.transform.position - machine.transform.position, Vector3.up);
+        if (look.sqrMagnitude < 0.01f)
+            return;
+        float k = 1f - Mathf.Exp(-Mathf.Max(0.1f, machineTurnSpeed) * Time.deltaTime);
+        Vector3 turned = Vector3.Slerp(machineLook, look.normalized, k);
+        if (turned.sqrMagnitude > 1e-6f && Vector3.Angle(machineLook, turned) > 0.01f)
+        {
+            machineLook = turned.normalized;
+            ApplyMachineYaw();
+        }
+    }
+
+    private void ApplyMachineYaw()
+    {
+        if (machine == null)
+            return;
+        appliedMachineYaw = TotalMachineYaw;
+        machine.transform.rotation = Quaternion.LookRotation(machineLook, Vector3.up) * Quaternion.Euler(0f, appliedMachineYaw, 0f);
+        machineToward = machineLook;
+        PlaceMachineScreen();
+    }
+
     private void ResetMachineScreen()
     {
         if (machineValueText != null)
-            machineValueText.text = "--";
+            machineValueText.text = string.Empty;
+        if (machineNibpPatch != null)
+            machineNibpPatch.gameObject.SetActive(false);
     }
 
     private void ShowMachine()
@@ -647,7 +843,7 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
 
         Transform yaya = yayaAnimation.transform;
         Transform hips = MixamoHumanoidAvatarBuilder.FindBone(yaya, "Hips") ?? yaya;
-        Transform arm = MixamoHumanoidAvatarBuilder.FindBone(yaya, "LeftArm");
+        Transform arm = MixamoHumanoidAvatarBuilder.FindBone(yaya, yayaCuffOnRightArm ? "RightArm" : "LeftArm");
         Vector3 centre = hips.position;
         // Toward the room = the way Yaya faces when she sits (not where the nurse happens to stand,
         // so the machine is always in the same place).
@@ -672,7 +868,7 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
             spot = marker.transform.position;
             Vector3 markerForward = Vector3.ProjectOnPlane(marker.transform.forward, Vector3.up);
             towardNurse = markerForward.sqrMagnitude > 1e-4f ? markerForward.normalized : towardNurse;
-            facing = Quaternion.LookRotation(towardNurse, Vector3.up) * Quaternion.Euler(0f, trolleyYawOffset + machineModelYaw, 0f);
+            facing = Quaternion.LookRotation(towardNurse, Vector3.up) * Quaternion.Euler(0f, TotalMachineYaw, 0f);
         }
         else
         {
@@ -690,17 +886,24 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
                 away = -across;
             }
             spot = centre + away * machineBesideYaya + towardNurse * machineTowardRoom;
-            // Screen toward where the nurse stands in front of Yaya.
-            Vector3 nurseSpot = centre + towardNurse * 1.4f;
+            // Screen toward the door, where the nurse comes in and stands (like at a real
+            // bedside); without a door, toward where the nurse stands in front of Yaya.
+            Vector3 nurseSpot = centre + towardNurse * Mathf.Max(0.3f, nurseSpotDistance);
+            DoorSlideOpener door = FindObjectOfType<DoorSlideOpener>(true);
+            if (!machineFacesNurseSpot && machineFacesDoor && door != null)
+                nurseSpot = door.transform.position;
             Vector3 look = Vector3.ProjectOnPlane(nurseSpot - spot, Vector3.up);
             look = look.sqrMagnitude > 1e-4f ? look.normalized : towardNurse;
-            facing = Quaternion.LookRotation(look, Vector3.up) * Quaternion.Euler(0f, trolleyYawOffset + machineModelYaw, 0f);
+            facing = Quaternion.LookRotation(look, Vector3.up) * Quaternion.Euler(0f, TotalMachineYaw, 0f);
             towardNurse = look;
         }
         spot.y = FindFloorY(spot, centre);
 
         machine = new GameObject("Part9_BloodPressureMachine");
         machine.transform.SetPositionAndRotation(spot, facing);
+        machine.AddComponent<Part9MachineFacer>().flow = this;
+        machineLook = Quaternion.Euler(0f, -(TotalMachineYaw), 0f) * (facing * Vector3.forward);
+        appliedMachineYaw = TotalMachineYaw;
 
         // Optional trolley.
         GameObject trolley = useTrolley ? SpawnResource(trolleyResource, machine.transform) : null;
@@ -734,9 +937,16 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         machineScreen = screen.transform;
         PlaceMachineScreen();
         TMP_FontAsset font = nursePromptText != null ? nursePromptText.font : null;
-        NewImage(screenRect, "Back", new Color(0.08f, 0.16f, 0.15f, 0.95f), Vector2.zero, new Vector2(240f, 110f)).raycastTarget = false;
-        NewText(screenRect, "Title", font, "血壓計 mmHg", 18f, new Color(0.75f, 0.85f, 0.82f), new Vector2(0f, 36f), new Vector2(230f, 26f));
-        machineValueText = NewText(screenRect, "Value", font, "--", 46f, Color.white, new Vector2(0f, -10f), new Vector2(230f, 64f));
+        // No panel of our own over the screen: only the machine's NIBP field shows the reading,
+        // in its own pink digits, on a small dark patch over the printed numbers. Hidden until
+        // the blood pressure is measured (then the machine's own picture shows).
+        Image nibpPatch = NewImage(screenRect, "NIBP_Patch", new Color(0.02f, 0.03f, 0.05f, 1f), machineNibpOffset, machineNibpSize);
+        nibpPatch.raycastTarget = false;
+        machineNibpPatch = nibpPatch.rectTransform;
+        machineValueText = NewText(machineNibpPatch, "NIBP_Value", font, string.Empty, machineNibpFontSize, machineNibpColor, Vector2.zero, machineNibpSize);
+        machineValueText.alignment = TextAlignmentOptions.MidlineLeft;
+        machineValueText.fontStyle = FontStyles.Bold;
+        machineNibpPatch.gameObject.SetActive(false);
 
         // Tube from the monitor's side to the cuff.
         machineTubeStart = new GameObject("TubeStart").transform;
@@ -860,6 +1070,17 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         machineScreen.position = top - Vector3.up * machineScreenOffset.y + machineToward * machineScreenOffset.z - right * machineScreenOffset.x;
         machineScreen.rotation = Quaternion.LookRotation(-machineToward, Vector3.up);
         machineScreen.localScale = Vector3.one * (Mathf.Max(0.05f, machineScreenWidth) / 240f);
+        if (machineNibpPatch != null)
+        {
+            machineNibpPatch.anchoredPosition = machineNibpOffset;
+            machineNibpPatch.sizeDelta = machineNibpSize;
+            if (machineValueText != null)
+            {
+                machineValueText.rectTransform.sizeDelta = machineNibpSize;
+                machineValueText.fontSize = machineNibpFontSize;
+                machineValueText.color = machineNibpColor;
+            }
+        }
     }
 
     private void HideMachine()
@@ -870,6 +1091,7 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         machineTube = null;
         machineTubeStart = null;
         machineValueText = null;
+        machineNibpPatch = null;
         machineScreen = null;
     }
 
@@ -911,6 +1133,28 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         foreach (Collider c in go.GetComponentsInChildren<Collider>())
             c.enabled = false;
         return go;
+    }
+
+    private static Sprite roundSprite;
+    private static Sprite RoundSprite()
+    {
+        if (roundSprite != null)
+            return roundSprite;
+        const int n = 64;
+        Texture2D tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        Color32[] px = new Color32[n * n];
+        float c = (n - 1) * 0.5f;
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
+                px[y * n + x] = new Color32(255, 255, 255, (byte)(Mathf.Clamp01(c + 0.5f - d) * 255f));
+            }
+        tex.SetPixels32(px);
+        tex.Apply();
+        roundSprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f);
+        return roundSprite;
     }
 
     private static Bounds RendererBounds(GameObject go)
@@ -965,12 +1209,25 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         HideReadingCard();
     }
 
+    private string MachineNibpText(string value)
+    {
+        string[] parts = value.Split('/');
+        if (parts.Length == 2 && int.TryParse(parts[0].Trim(), out int s) && int.TryParse(parts[1].Trim(), out int d))
+            return s + "/" + d + "  (" + Mathf.RoundToInt((s + 2f * d) / 3f) + ")";
+        return value;   // while it inflates / deflates: the cuff pressure
+    }
+
     private void SetReading(string value, string status, Color statusColor)
     {
         if (readingValueText != null)
             readingValueText.text = value;
         if (machineValueText != null)
-            machineValueText.text = value;
+        {
+            if (machineNibpPatch != null && !machineNibpPatch.gameObject.activeSelf)
+                machineNibpPatch.gameObject.SetActive(true);
+            // Same look as the machine's NIBP field: "121/79 (76)" = systolic / diastolic (mean).
+            machineValueText.text = MachineNibpText(value);
+        }
         if (readingStatusText != null)
         {
             readingStatusText.text = status;
@@ -1037,7 +1294,7 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
             choiceRing = (RectTransform)ring.transform;
             Image ringImage = ring.AddComponent<Image>();
             ringImage.color = new Color(1f, 1f, 1f, 0.45f);
-            ringImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");   // round
+            ringImage.sprite = RoundSprite();   // round (the built-in Knob.psd is not found in this Unity version)
             ringImage.raycastTarget = false;
         }
 
@@ -1375,8 +1632,8 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
         string keywords;
         switch (waitingForNurseAction)
         {
-            case WaitingForNurseAction.BearDemo: keywords = bearDemoKeywords; break;
-            case WaitingForNurseAction.PraiseSticker: keywords = praiseStickerKeywords; break;
+            case WaitingForNurseAction.BearDemo: keywords = bearDemoKeywords + "|綁|充氣|身上|手上|小熊|熊熊"; break;
+            case WaitingForNurseAction.PraiseSticker: keywords = praiseStickerKeywords + "|試試看|好厲害"; break;
             default: keywords = string.Empty; break;
         }
 
@@ -1523,6 +1780,7 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
 
     private static bool ContainsAnyKeyword(string text, string keywords)
     {
+        text = SpeechGateMatcher.FixMishearings(text);
         if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keywords))
             return false;
         foreach (string part in keywords.Split('|'))
@@ -1609,6 +1867,18 @@ public class PediatricVitalSignsPart9Flow : MonoBehaviour
 
 // Puts the blood pressure machine in its fixed place a moment after the scene starts
 // (once Yaya sits on the bed), then removes itself.
+// Keeps the machine's screen turned toward the nurse, also before Part 9 has started.
+public class Part9MachineFacer : MonoBehaviour
+{
+    public PediatricVitalSignsPart9Flow flow;
+
+    private void LateUpdate()
+    {
+        if (flow != null)
+            flow.TickMachineFacing();
+    }
+}
+
 public class Part9MachinePlacer : MonoBehaviour
 {
     private PediatricVitalSignsPart9Flow flow;

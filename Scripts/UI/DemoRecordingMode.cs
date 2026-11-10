@@ -22,10 +22,19 @@ public class DemoRecordingMode : MonoBehaviour
     [Tooltip("While the buttons are hidden, this key presses the Skip button that would be showing.")]
     public KeyCode skipKey = KeyCode.F8;
 
+    public enum ControllerButton { None, RightB, RightA, LeftY, LeftX, BOrY }
+    [Tooltip("This Quest controller button presses the Skip button that is showing (hidden or not). None = off.")]
+    public ControllerButton skipControllerButton = ControllerButton.BOrY;
+    [Tooltip("Seconds after a controller skip before the next one counts (so one press never skips two steps).")]
+    public float skipControllerCooldown = 0.6f;
+
     static DemoRecordingMode instance;
     readonly List<Button> buttons = new List<Button>();
     float nextScan;
     bool lastSaved;
+    bool controllerWasDown;
+    float nextControllerSkip;
+    readonly List<UnityEngine.XR.InputDevice> xrDevices = new List<UnityEngine.XR.InputDevice>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -84,7 +93,8 @@ public class DemoRecordingMode : MonoBehaviour
             group.interactable = !hideSkipButtons;
         }
 
-        if (hideSkipButtons && SkipKeyPressed())
+        bool controllerSkip = ControllerSkipPressed();
+        if ((hideSkipButtons && SkipKeyPressed()) || controllerSkip)
         {
             foreach (Button button in buttons)
             {
@@ -95,6 +105,36 @@ public class DemoRecordingMode : MonoBehaviour
                 }
             }
         }
+    }
+
+    // The chosen controller button, only the moment it goes down.
+    bool ControllerSkipPressed()
+    {
+        if (skipControllerButton == ControllerButton.None)
+            return false;
+        // BOrY: the upper button on whichever controller is in use (B on the right, Y on the left),
+        // so it also works with only one controller.
+        bool both = skipControllerButton == ControllerButton.BOrY;
+        bool right = skipControllerButton == ControllerButton.RightA || skipControllerButton == ControllerButton.RightB;
+        bool upper = both || skipControllerButton == ControllerButton.RightB || skipControllerButton == ControllerButton.LeftY;
+        UnityEngine.XR.InputDeviceCharacteristics hand = UnityEngine.XR.InputDeviceCharacteristics.Controller |
+            (both ? UnityEngine.XR.InputDeviceCharacteristics.HeldInHand
+                : right ? UnityEngine.XR.InputDeviceCharacteristics.Right : UnityEngine.XR.InputDeviceCharacteristics.Left);
+        UnityEngine.XR.InputDevices.GetDevicesWithCharacteristics(hand, xrDevices);
+        bool down = false;
+        foreach (UnityEngine.XR.InputDevice device in xrDevices)
+        {
+            if (device.TryGetFeatureValue(upper ? UnityEngine.XR.CommonUsages.secondaryButton : UnityEngine.XR.CommonUsages.primaryButton, out bool pressed) && pressed)
+                down = true;
+        }
+        bool clicked = down && !controllerWasDown && Time.unscaledTime >= nextControllerSkip;
+        controllerWasDown = down;
+        if (clicked)
+        {
+            nextControllerSkip = Time.unscaledTime + Mathf.Max(0f, skipControllerCooldown);
+            Debug.Log($"[DemoRecording] Skip pressed on the controller ({skipControllerButton})");
+        }
+        return clicked;
     }
 
     bool SkipKeyPressed()

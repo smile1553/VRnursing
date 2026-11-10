@@ -58,6 +58,10 @@ public class PediatricVitalSignsPart8Flow : MonoBehaviour
     [Header("Quiz size")]
     [Tooltip("Size of Quiz 8 compared with how it was laid out (1 = unchanged, smaller = smaller).")]
     [SerializeField] private float quizPanelSize = 0.9f;
+    [Tooltip("Move Quiz 8 down by this much (m, in front of the eyes). Negative = up.")]
+    [SerializeField] private float quizPanelLower = 0.03f;
+    private Vector3 quizPanelOriginalLocalPosition;
+    private RectTransform loweredQuizPanel;
 
     [Header("Next part")]
     [SerializeField] private bool startPart9AfterQuiz = true;
@@ -208,6 +212,7 @@ public class PediatricVitalSignsPart8Flow : MonoBehaviour
         ApplyQuizScale();
 
         QuizPanelRuntimeHelper.BeginQuiz(quizPanel, quizPanelChildName);
+        LowerQuizPanel();
         if (quizCompletionRoutine != null)
             StopCoroutine(quizCompletionRoutine);
         quizCompletionRoutine = StartCoroutine(WaitForQuizPanelClosed());
@@ -231,6 +236,23 @@ public class PediatricVitalSignsPart8Flow : MonoBehaviour
             quizPanelOriginalScale = panel.localScale;
         }
         panel.localScale = quizPanelOriginalScale * Mathf.Clamp(quizPanelSize, 0.2f, 2f);
+    }
+
+    // Quiz 8 sat a little high: move it down (from its laid-out place, so it never adds up).
+    private void LowerQuizPanel()
+    {
+        if (quizPanel == null || Camera.main == null)
+            return;
+        RectTransform panel = FindDeepChild(quizPanel.transform, quizPanelChildName) as RectTransform;
+        if (panel == null)
+            return;
+        if (loweredQuizPanel != panel)
+        {
+            loweredQuizPanel = panel;
+            quizPanelOriginalLocalPosition = panel.localPosition;
+        }
+        panel.localPosition = quizPanelOriginalLocalPosition;
+        panel.position -= Camera.main.transform.up * quizPanelLower;
     }
 
     private IEnumerator WaitForQuizPanelClosed()
@@ -405,6 +427,7 @@ public class PediatricVitalSignsPart8Flow : MonoBehaviour
 
     private static bool ContainsAnyKeyword(string text, string keywords)
     {
+        text = SpeechGateMatcher.FixMishearings(text);
         if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keywords))
             return false;
         foreach (string part in keywords.Split('|'))

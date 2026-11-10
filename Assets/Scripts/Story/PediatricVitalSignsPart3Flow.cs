@@ -69,6 +69,8 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
     [SerializeField] private string askMomPreferenceKeywords = "喜歡|想要|選;貼紙|玩具|故事|卡通";
     [SerializeField] private string reassureWithStickerKeywords = "貼紙|獎勵;不打針|不會痛|一下子|別怕";
+    [Tooltip("Showing the sticker (new script): groups separated by ; and the nurse must hit two of them, e.g. \"\u8CBC\u7D19\" and \"\u559C\u6B61\".")]
+    [SerializeField] private string showStickerKeywords = "貼紙;喜歡|喜不喜歡|你看|要不要|好不好|可愛|漂亮";
     [SerializeField] private string letYayaListenMomKeywords = "芽芽|妳|你;媽媽;心跳|聽診器|聽聽";
     [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
     [SerializeField] private bool ignoreFirstBackendJson = true;
@@ -114,6 +116,9 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
     private Coroutine wrongRoutine;
     private const string AskPreferencePrompt =
         "護生如何知道芽芽喜歡什麼東西呢？";
+
+    private const string ShowStickerPrompt =
+        "請從口袋拿出貼紙，問芽芽喜不喜歡這張貼紙。";
 
     private const string ReassureWithStickerPrompt =
         "以貼紙鼓勵芽芽，並告訴芽芽下一個要觀察的生命徵象。";
@@ -244,19 +249,20 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         yayaAnimation?.PlaySittingDisbelief();
         yield return WaitForDialogue(momStickerClip);
 
+        // New script: here the nurse only takes a sticker out of her pocket and asks Yaya if she
+        // likes it. The first sticker is really given after the heartbeat (Part 4).
         visualDemo?.ResetHudStickerSelection();
-        visualDemo?.ShowSticker();
-        visualDemo?.BeginStickerGive();
+        visualDemo?.ShowStickerOffer();
         promptSkipRequested = false;
-        ShowNursePrompt(ReassureWithStickerPrompt, WaitingForNurseAction.ReassureWithSticker);
+        ShowNursePrompt(ShowStickerPrompt, WaitingForNurseAction.ReassureWithSticker);
         momAnimation?.PlayStandingIdle();
         yayaAnimation?.PlaySittingDisbelief();
         PlayAudio(nursePromiseStickerClip);
         yield return WaitForNurseActionToComplete(
             () => momAnimation?.PlayStandingIdle(),
             () => yayaAnimation?.PlaySittingDisbelief());
-        yield return WaitForStickerSelectionOrSkip();
-        visualDemo?.HighlightSticker();
+        // Put away before Mom says "有貼紙耶".
+        visualDemo?.HideStickerOffer();
 
         ShowDialogueLine(momEncourageLineIndex, momEncourageClip);
         yield return HoldMomClapping(GetDialogueDelay(momEncourageClip));
@@ -340,16 +346,22 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         Debug.Log($"[Part3] Waiting for {waitingForNurseAction}, speech did not match ({reason}). text={speechText}", this);
     }
 
+    // The scene still holds older keyword lists. "||" lets a sentence pass with either the
+    // scene's list or this newer one (see SpeechGateMatcher.CountMatchedKeywordGroups).
+    private const string NewerAskMomPreferenceKeywords = "喜歡|想要|愛玩|愛;什麼|東西|貼紙|玩具|故事|卡通;媽媽|請問";
+    private const string NewerShowStickerKeywords = "貼紙;喜歡|喜不喜歡|你看|要不要|好不好|可愛|漂亮|送你|給你";
+    private const string NewerLetYayaListenMomKeywords = "芽芽|妳|你;媽媽;心跳|聽診器|聽聽|示範|撲通";
+
     private string GetKeywords(WaitingForNurseAction action)
     {
         switch (action)
         {
             case WaitingForNurseAction.AskMomPreference:
-                return askMomPreferenceKeywords;
+                return askMomPreferenceKeywords + "||" + NewerAskMomPreferenceKeywords;
             case WaitingForNurseAction.ReassureWithSticker:
-                return reassureWithStickerKeywords;
+                return showStickerKeywords + "||" + NewerShowStickerKeywords;
             case WaitingForNurseAction.LetYayaListenMom:
-                return letYayaListenMomKeywords;
+                return letYayaListenMomKeywords + "||" + NewerLetYayaListenMomKeywords;
             default:
                 return string.Empty;
         }
@@ -362,7 +374,7 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
             case WaitingForNurseAction.AskMomPreference:
                 return "ask_preference";
             case WaitingForNurseAction.ReassureWithSticker:
-                return "reduce_fear|reassure_child";
+                return "distract|encourage|reduce_fear|reassure_child";
             case WaitingForNurseAction.LetYayaListenMom:
                 return "role_play_demo|practice_before_exam";
             default:
@@ -382,8 +394,6 @@ public class PediatricVitalSignsPart3Flow : MonoBehaviour
         SetPanelVisible(nursePromptPanel, true, "TopHint_Panel");
         SetPromptSkipButtonsVisible(waitingAction != WaitingForNurseAction.None);
 
-        if (waitingAction == WaitingForNurseAction.ReassureWithSticker && visualDemo != null && !visualDemo.HudStickerWasSelected)
-            visualDemo.ShowSticker();
 
         if (nursePromptText != null)
         {

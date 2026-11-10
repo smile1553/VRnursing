@@ -144,7 +144,24 @@ public static class HandGrip
         float[] bend = { 40f, 55f, 35f };
         foreach (List<Transform> chain in rig.fingers)
         {
-            if (chain.Count == 0 || chain[0] == rig.index)
+            if (chain.Count > 0 && chain[0] == rig.index)
+            {
+                // Index finger: straightened (the sitting pose has it bent, which looked like a
+                // claw / pinch), each joint in line with the one before it.
+                Vector3 straight = (rig.index.position - hand.position).normalized;
+                for (int i = 0; i < chain.Count; i++)
+                {
+                    Transform joint = chain[i];
+                    if (joint.childCount == 0)
+                        break;
+                    Vector3 along = joint.GetChild(0).position - joint.position;
+                    if (along.sqrMagnitude > 1e-10f && straight.sqrMagnitude > 1e-10f)
+                        joint.rotation = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(along, straight), amount) * joint.rotation;
+                    straight = (joint.GetChild(0).position - joint.position).normalized;
+                }
+                continue;
+            }
+            if (chain.Count == 0)
                 continue;
             for (int i = 0; i < chain.Count; i++)
             {

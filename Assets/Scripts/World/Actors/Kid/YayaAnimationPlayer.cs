@@ -639,6 +639,8 @@ public class YayaAnimationPlayer : MonoBehaviour
     [SerializeField] private float bearEarHeight = 0.36f;
     [Tooltip("While measuring the bear: how far in front of her hips it sits on her lap (part of her torso length).")]
     [SerializeField] private float bearOnLapForward = 0.32f;
+    [Tooltip("While measuring the bear: where her left hand holds it, sideways from its middle (1 = its edge).")]
+    [SerializeField] private float bearHoldSide = 0.95f;
     [Tooltip("The thermometer appears in front of the nurse with a sparkle, then floats into Yaya's hand (game style hand-over).")]
     [SerializeField] private bool presentThermometer = true;
     private Transform heldThermometer;
@@ -804,7 +806,7 @@ public class YayaAnimationPlayer : MonoBehaviour
                 // Measuring the bear: it sits on her lap in front of her (not squeezed against
                 // her chin), so its ear is at a height her other hand reaches easily.
                 Vector3 lap = (hips != null ? hips.position : chestPoint - Vector3.up * torso * 0.5f)
-                    + forward * (torso * bearOnLapForward + bearDepth * 0.6f) - right * (hugBearHalfWidth * 0.2f);
+                    + forward * (torso * bearOnLapForward + bearDepth * 0.6f + 0.05f) - right * (hugBearHalfWidth * 0.2f);
                 lap.y = lapY + hugBearSize.y * 0.5f;
                 held = lap;
             }
@@ -841,11 +843,17 @@ public class YayaAnimationPlayer : MonoBehaviour
         // With the thermometer: the left arm alone holds the bear, the right hand takes the
         // thermometer from the nurse and brings it to the bear's ear.
         bool thermometerInHand = false;
-        Vector3 bearEar = bearCenter + right * (hugBearHalfWidth * bearEarSide) + Vector3.up * (hugBearSize.y * bearEarHeight);
+        Vector3 bearEar = bearCenter + right * (hugBearHalfWidth * bearEarSide) + Vector3.up * (hugBearSize.y * (bearEarHeight + bearEarExtraUp))
+            + forward * (Mathf.Min(hugBearSize.x, hugBearSize.z) * 0.5f * bearEarForward);
+        // Better: from the bear's own head bone (its ear really is on the side of its head;
+        // the box above put the thermometer at the bear's neck / bow).
+        if (TryGetBearEar(hugBear, right, out Vector3 boneEar))
+            bearEar = boneEar;
         if (heldThermometer != null && hugActive)
         {
-            // Left hand on the bear's tummy, holding it against her.
-            leftHandTarget = bearCenter + right * (hugBearHalfWidth * 0.15f) + wrap - Vector3.up * (hugBearSize.y * 0.08f);
+            // Left hand steadies the bear from its own side (her left), at its middle: her arm
+            // no longer reaches across her body to the far side of the bear.
+            leftHandTarget = bearCenter - right * (hugBearHalfWidth * bearHoldSide) + Vector3.up * (hugBearSize.y * 0.05f);
 
             float p = Time.time - thermometerStartTime;
             float pick = Mathf.Max(0.05f, thermometerPickTime);
@@ -906,7 +914,10 @@ public class YayaAnimationPlayer : MonoBehaviour
         }
 
         // Elbows down and out to her sides (not crossed in front of the bear).
-        ArmReachIK.SolveWithElbow(hugLeftArm, leftHandTarget, (Vector3.down - right * 0.7f - forward * 0.1f).normalized, hugWeight);
+        Vector3 leftElbow = heldThermometer != null && hugActive
+            ? (Vector3.down - right * 0.9f - forward * 0.2f).normalized
+            : (Vector3.down - right * 0.7f - forward * 0.1f).normalized;
+        ArmReachIK.SolveWithElbow(hugLeftArm, leftHandTarget, leftElbow, hugWeight);
         Vector3 rightElbow = heldThermometer != null && hugActive
             ? (Vector3.down + right * 0.8f - forward * 0.15f).normalized   // elbow down at her side, no chicken wing
             : (Vector3.down * 0.7f + right - forward * 0.1f).normalized;
@@ -923,6 +934,61 @@ public class YayaAnimationPlayer : MonoBehaviour
             if (thermometerHoldRotation != Vector3.zero)
                 heldThermometer.rotation *= Quaternion.Euler(thermometerHoldRotation);
         }
+    }
+
+    [Tooltip("Find the bear's ear from its head bone (head / head_end in the bear model). Off = use Bear Ear Side / Height.")]
+    private bool bearEarFromHeadBone => useBearHeadBoneForEar;
+    [Tooltip("Experimental: aim at the ear from the bear's head bone (made her hand go behind the bear). Off = from the bear's size (recommended).")]
+    [SerializeField] private bool useBearHeadBoneForEar = false;
+    [Tooltip("Ear target from the bear's size: extra height (part of the bear's height) and how far toward the FRONT of the bear (part of its half depth), so her hand stays in front of the bear, not behind it. Can be changed while playing.")]
+    [SerializeField] private float bearEarExtraUp = 0.08f;
+    [SerializeField] private float bearEarForward = 0.35f;
+    [Tooltip("Where the ear is on the bear's head, from its head bone: x = to the side (Yaya's right), y = up the head, both as parts of the head size.")]
+    [SerializeField] private Vector2 bearEarOnHead = new Vector2(0.45f, 0.85f);
+    private Transform bearHeadBone, bearHeadEnd, bearHeadFor;
+
+    private bool TryGetBearEar(Transform bear, Vector3 right, out Vector3 ear)
+    {
+        ear = Vector3.zero;
+        if (!bearEarFromHeadBone || bear == null)
+            return false;
+        if (bearHeadFor != bear)
+        {
+            bearHeadFor = bear;
+            bearHeadBone = null;
+            bearHeadEnd = null;
+            Bounds b = GetBounds(bear);
+            float reach = Mathf.Max(0.25f, b.extents.magnitude * 2f);
+            float best = float.MaxValue;
+            foreach (Transform t in FindObjectsOfType<Transform>())
+            {
+                if (t.name.ToLowerInvariant() != "head" || t.IsChildOf(transform))
+                    continue;
+                Transform end = null;
+                foreach (Transform c in t)
+                    if (c.name.ToLowerInvariant().Contains("end")) { end = c; break; }
+                if (end == null)
+                    continue;
+                float d = Vector3.Distance(t.position, b.center);
+                if (d < reach && d < best)
+                {
+                    best = d;
+                    bearHeadBone = t;
+                    bearHeadEnd = end;
+                }
+            }
+            Debug.Log(bearHeadBone != null
+                ? $"[YayaAnimationPlayer] Bear head bone found: {GetPath(bearHeadBone)}"
+                : "[YayaAnimationPlayer] Bear head bone not found: the ear is guessed from the bear's size.", this);
+        }
+        if (bearHeadBone == null || bearHeadEnd == null)
+            return false;
+        Vector3 up = bearHeadEnd.position - bearHeadBone.position;
+        float headSize = up.magnitude;
+        if (headSize < 1e-4f)
+            return false;
+        ear = bearHeadBone.position + up * bearEarOnHead.y + right * (headSize * bearEarOnHead.x);
+        return true;
     }
 
     private static Bounds GetBounds(Transform root)

@@ -53,10 +53,22 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     [SerializeField] private bool advanceFromBackendJson = true;
     [SerializeField] private bool ignoreFirstBackendJson = true;
     [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
-    [SerializeField] private string startToyRolePlayKeywords = "小熊|熊熊|佩佩豬|玩偶;量體溫|耳溫|測量";
-    [SerializeField] private string askYayaComfortToyKeywords = "小熊|熊熊|佩佩豬|玩偶;很怕|好怕|害怕|會不會痛;怎麼辦|安慰|跟她說";
-    [SerializeField] private string encourageYayaTemperatureKeywords = "芽芽|妳|你;勇敢|不會痛|嗶一聲;量體溫|耳溫|幫你量";
-    [SerializeField] private string askWhichEarKeywords = "量|測量;哪一隻耳朵|哪隻耳朵|右耳|左耳";
+    [SerializeField] private string startToyRolePlayKeywords = DefaultStartToyRolePlayKeywords;
+    [SerializeField] private string askYayaComfortToyKeywords = DefaultAskYayaComfortToyKeywords;
+    [SerializeField] private string encourageYayaTemperatureKeywords = DefaultEncourageYayaTemperatureKeywords;
+    [SerializeField] private string askWhichEarKeywords = DefaultAskWhichEarKeywords;
+    // The scene still holds the old single-word lists (no ';'), e.g. "小熊|玩偶|量體溫", which
+    // reject "幫熊熊量耳溫". Such old lists are replaced by these at run time.
+    private const string DefaultStartToyRolePlayKeywords = "小熊|熊熊|佩佩豬|玩偶|娃娃;量體溫|耳溫|測量|量一量|量量看";
+    private const string DefaultAskYayaComfortToyKeywords = "小熊|熊熊|佩佩豬|玩偶|娃娃;很怕|好怕|害怕|會不會痛;怎麼辦|安慰|安撫|跟她說|跟他說";
+    private const string DefaultEncourageYayaTemperatureKeywords = "芽芽|妳|你|熊熊|小熊;勇敢|不會痛|嗶一聲|好棒|一下下|一下就好;量體溫|耳溫|幫你量";
+    private const string DefaultAskWhichEarKeywords = "量|測量;哪一隻耳朵|哪隻耳朵|右耳|左耳";
+
+    private static string Grouped(string fromScene, string fallback)
+    {
+        // Either list may match (see SpeechGateMatcher: "||" = the best of both).
+        return string.IsNullOrWhiteSpace(fromScene) ? fallback : fromScene + "||" + fallback;
+    }
     [Range(0f, 1f)] [SerializeField] private float minSemanticConfidence = 0.65f;
 
     [Header("Audio")]
@@ -91,6 +103,8 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
 
     [Header("Events")]
     [SerializeField] private UnityEvent onToyTemperatureMeasure;
+    [Tooltip("While Yaya measures the bear she keeps the ear thermometer in her hand at the bear's ear (the old 'kid combine' pose had no thermometer).")]
+    [SerializeField] private bool keepThermometerForBear = true;
     [SerializeField] private UnityEvent onYayaTemperatureMeasure;
     [SerializeField] private UnityEvent onCorrectAnswer;
     [SerializeField] private UnityEvent onWrongAnswer;
@@ -253,7 +267,10 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         momAnimation?.PlayStandingIdle();
         yield return WaitForDialogue(yayaComfortToyFeelingClip);
 
-        yayaAnimation?.PlayKidCombine();
+        if (keepThermometerForBear)
+            yayaAnimation?.PlayHugBearWithThermometer();
+        else
+            yayaAnimation?.PlayKidCombine();
         onToyTemperatureMeasure?.Invoke();
         // Short beat after the comfort-toy line so the next prompt follows quickly.
         yield return new WaitForSeconds(Mathf.Clamp(actionDelay, 0.1f, 0.6f));
@@ -333,13 +350,13 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
         switch (action)
         {
             case WaitingForNurseAction.StartToyRolePlay:
-                return startToyRolePlayKeywords;
+                return Grouped(startToyRolePlayKeywords, DefaultStartToyRolePlayKeywords);
             case WaitingForNurseAction.AskYayaComfortToy:
-                return askYayaComfortToyKeywords;
+                return Grouped(askYayaComfortToyKeywords, DefaultAskYayaComfortToyKeywords);
             case WaitingForNurseAction.EncourageYayaTemperature:
-                return encourageYayaTemperatureKeywords;
+                return Grouped(encourageYayaTemperatureKeywords, DefaultEncourageYayaTemperatureKeywords);
             case WaitingForNurseAction.AskWhichEar:
-                return askWhichEarKeywords;
+                return Grouped(askWhichEarKeywords, DefaultAskWhichEarKeywords);
             default:
                 return string.Empty;
         }
@@ -781,6 +798,7 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
 
     private static bool ContainsAnyKeyword(string text, string keywords)
     {
+        text = SpeechGateMatcher.FixMishearings(text);
         if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keywords))
             return false;
 
