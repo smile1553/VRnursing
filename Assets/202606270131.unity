@@ -1378,11 +1378,15 @@ MonoBehaviour:
   yayaRefuseLineIndex: 5
   momAnimation: {fileID: 1961724399}
   yayaAnimation: {fileID: 484741672}
+  momWatchesBreathing: 1
   nursePromptText: {fileID: 537486446}
   network: {fileID: 1646768347}
   advanceFromBackendJson: 1
   respirationKeywords: "\u89C0\u5BDF\u8D77\u4F0F|\u8A08\u7B97\u547C\u5438\u6B21\u6578|\u89C0\u5BDF|\u8D77\u4F0F|\u547C\u5438\u6B21\u6578"
   heartbeatKeywords: "\u5FC3\u8DF3|\u807D\u8A3A\u5668|\u4E0D\u6703\u75DB|\u6478\u6478|\u807D\u807D"
+  respirationActionTags: explain_resp_first
+  heartbeatActionTags: reassure_child|practice_before_exam
+  minSemanticConfidence: 0.65
   ignoreFirstBackendJson: 1
   dialogueAudioSource: {fileID: 55554371}
   momApologyClip: {fileID: 8300000, guid: 368d6891357d40e42b7b7ff3df073cce, type: 3}
@@ -9069,7 +9073,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 455401706}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 
@@ -9093,7 +9097,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 455401706}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
   m_Name: 
@@ -9713,8 +9717,18 @@ MonoBehaviour:
   earPainRubAmplitude: 0.012
   loopFinishedStates: 1
   doNotLoopStates: lying_down|kicking_out|kid_combine|Scene|KidPointEar
+  sitForwardNudge: 0.04
+  cryingLoopFrom: 0.35
+  cryingLoopAt: 0.7
+  sobAngle: 2.5
+  holdLoopAt: 0.92
+  holdLoopFrom: 0.15
+  holdLoopBlendSeconds: 0.45
   pointEarOnIdle: 1
   pointLeftEar: 1
+  pointEarFingerReach: 1.9
+  pointEarFingerFold: 0.75
+  pointEarFlipCurl: 0
   hugReachTime: 0.6
   hugLiftTime: 0.8
   hugRockAngle: 6
@@ -9727,6 +9741,13 @@ MonoBehaviour:
   thermometerHoldRotation: {x: 0, y: 0, z: 0}
   bearEarSide: 0.7
   bearEarHeight: 0.36
+  bearOnLapForward: 0.32
+  bearHoldSide: 0.95
+  presentThermometer: 1
+  useBearHeadBoneForEar: 0
+  bearEarExtraUp: 0.08
+  bearEarForward: 0.35
+  bearEarOnHead: {x: 0.55, y: 0.55}
   smoothBedTransitions: 1
   lieDownDuration: 1.6
   sitUpDuration: 1.3
@@ -9734,6 +9755,11 @@ MonoBehaviour:
   bedLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+  naturalBedMoves: 1
+  lieDownSeconds: 2.4
+  sitUpSeconds: 2.2
+  bedMoveHipArc: 0.05
+  bedMoveTipShare: 0.55
   emotionDrivenIdle: 1
   meltdownRockAngle: 5
   meltdownKickAngle: 22
@@ -9990,6 +10016,7 @@ MonoBehaviour:
   giveStickerBeforeEarTempKeywords: "\u597D\u68D2|\u8CBC\u7D19|\u8033\u6EAB|\u91CF\u8033\u6EAB"
   explainEarTemperatureKeywords: "\u91CF\u9AD4\u6EAB|\u5E7E\u5EA6|\u54EA\u4E00\u96BB\u8033\u6735|\u8033\u6735"
   explainFearToMomKeywords: "\u6C92\u95DC\u4FC2|\u751F\u75C5|\u4E0D\u8212\u670D|\u5FC3\u60C5|\u6E96\u78BA"
+  minSemanticConfidence: 0.65
   ignoreFirstBackendJson: 1
   dialogueAudioSource: {fileID: 488106325}
   momEncourageClip: {fileID: 8300000, guid: 8985fdc2cc7bf4a90a75602979e6829f, type: 3}
@@ -10015,6 +10042,9 @@ MonoBehaviour:
   heartbeatEffectExtraHeight: 0.12
   heartbeatEffectDuration: 30
   heartbeatEffectClip: {fileID: 8300000, guid: 9e78729105eb89c4e9e03994ff47a4a6, type: 3}
+  realisticApexPulse: 1
+  apexChestSpot: {x: 0.045, y: -0.04, z: 0.075}
+  apexChestPieceSize: 0.038
   heartbeatEffectVolume: 1.5
   heartbeatLoudness: 3
   yayaHugToyDelay: 2
@@ -10032,6 +10062,7 @@ MonoBehaviour:
       m_Calls: []
   nextPartFlow: {fileID: 596528269}
   startNextPartAfterCorrect: 1
+  apexPulseSeconds: 60
 --- !u!1001 &489059590
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -10294,7 +10325,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1131801421310295620, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Enabled
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3054136310133895775, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Name
@@ -10447,7 +10478,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 496215956}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 
@@ -11790,6 +11821,7 @@ MonoBehaviour:
   askYayaComfortToyKeywords: "\u5F88\u6015|\u600E\u9EBC\u8FA6|\u6703\u4E0D\u6703\u75DB|\u597D\u6015|\u5C0F\u718A"
   encourageYayaTemperatureKeywords: "\u52C7\u6562|\u4E00\u6A23\u52C7\u6562|\u55F6|\u4E0D\u6703\u75DB|\u5E6B\u4F60\u91CF"
   askWhichEarKeywords: "\u54EA\u4E00\u96BB\u8033\u6735|\u54EA\u96BB\u8033\u6735|\u53F3\u8033|\u5DE6\u8033|\u9019\u500B"
+  minSemanticConfidence: 0.65
   dialogueAudioSource: {fileID: 596528270}
   yayaRefuseToyClip: {fileID: 8300000, guid: 2f246b212e3494032b72c683f5a158b1, type: 3}
   yayaRefuseAgainClip: {fileID: 8300000, guid: 48f64eea6e93748c5bbe77612486d4ff, type: 3}
@@ -11815,6 +11847,7 @@ MonoBehaviour:
   onToyTemperatureMeasure:
     m_PersistentCalls:
       m_Calls: []
+  keepThermometerForBear: 1
   onYayaTemperatureMeasure:
     m_PersistentCalls:
       m_Calls: []
@@ -15362,6 +15395,7 @@ MonoBehaviour:
   emotionState: {fileID: 703200001}
   requirePlayerAction: 1
   requireAllKeywords: 0
+  minKeywordMatches: 2
   minIntervalSeconds: 1
   enableLlmAssist: 1
   defaultLlmConfidence: 0.7
@@ -15992,7 +16026,6 @@ Transform:
   - {fileID: 434947073833359696}
   - {fileID: 543450653714354257}
   - {fileID: 543450651802429284}
-  - {fileID: 8372278164420132128}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &767432093
@@ -16152,7 +16185,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 778826574}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 
@@ -16216,7 +16249,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 778826574}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
   m_Name: 
@@ -16981,7 +17014,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1131801421310295620, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Enabled
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3054136310133895775, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Name
@@ -17139,7 +17172,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 807867369}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 
@@ -18983,7 +19016,7 @@ Mesh:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: pb_Mesh-3200
+  m_Name: pb_Mesh626314
   serializedVersion: 11
   m_SubMeshes:
   - serializedVersion: 2
@@ -26451,7 +26484,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1131801421310295620, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Enabled
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3054136310133895775, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Name
@@ -26601,7 +26634,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1306349473}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 
@@ -27706,7 +27739,9 @@ MonoBehaviour:
   advanceFromBackendJson: 1
   askMomPreferenceKeywords: "\u559C\u6B61|\u8CBC\u7D19|\u6CE8\u610F|\u914D\u5408|\u5FC3\u8DF3"
   reassureWithStickerKeywords: "\u8CBC\u7D19|\u6C92\u6709\u6253\u91DD|\u6C92\u6709\u5E36\u91DD|\u4E0D\u6703\u75DB|\u91CF\u5B8C"
+  showStickerKeywords: "\u8CBC\u7D19;\u559C\u6B61|\u559C\u4E0D\u559C\u6B61|\u4F60\u770B|\u8981\u4E0D\u8981|\u597D\u4E0D\u597D|\u53EF\u611B|\u6F02\u4EAE"
   letYayaListenMomKeywords: "\u5ABD\u5ABD|\u5FC3\u8DF3|\u64B2\u901A|\u807D\u8A3A\u5668"
+  minSemanticConfidence: 0.65
   ignoreFirstBackendJson: 1
   dialogueAudioSource: {fileID: 1375575954}
   momStickerClip: {fileID: 8300000, guid: 02d404c569406cf458093358258830da, type: 3}
@@ -27888,6 +27923,8 @@ MonoBehaviour:
   startDialogueFromBackendJson: 1
   greetingKeywords: "\u5ABD\u5ABD|\u82BD\u82BD|\u9AD4\u6EAB|\u547C\u5438|\u5FC3\u8DF3|\u8840\u58D3|\u751F\u547D\u5FB5\u8C61"
   measurementKeywords: 
+  introductionActionTags: introduce_bp_exam
+  minSemanticConfidence: 0.65
   staleBackendIgnoreSeconds: 1.5
   ignoreFirstBackendJson: 1
   waitUntilPanelHidden: {fileID: 0}
@@ -28565,7 +28602,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1131801421310295620, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Enabled
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3054136310133895775, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Name
@@ -28715,7 +28752,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1395086432}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 
@@ -29506,9 +29543,14 @@ MonoBehaviour:
   keyboardTurnSpeed: 80
   enableSnapTurn: 1
   snapTurnController: 5
+  smoothTurn: 1
+  smoothTurnSpeed: 60
   snapTurnAngle: 30
   snapTurnThreshold: 0.75
   snapTurnCooldown: 0.35
+  enableHeightReset: 1
+  supportOneController: 1
+  controllerLostSeconds: 1
   enableKeyboardFallback: 1
 --- !u!1001 &1441775564
 PrefabInstance:
@@ -31415,6 +31457,8 @@ MonoBehaviour:
   doorSkipCameraOffset: {x: 0, y: -0.22, z: 0.9}
   advanceFromBackendJson: 1
   greetingKeywords: "\u4F60\u597D|\u60A8\u597D|\u54C8\u56C9|\u8B77\u7406\u5E2B|\u8B77\u751F|\u6253\u62DB\u547C|\u5ABD\u5ABD|\u82BD\u82BD|\u751F\u547D\u5FB5\u8C61|\u6E2C\u91CF|\u91CF\u9AD4\u6EAB"
+  greetingActionTags: introduce_bp_exam
+  minSemanticConfidence: 0.65
   ignoreFirstBackendJson: 1
   onGreetingVoiceGateStarted:
     m_PersistentCalls:
@@ -39685,7 +39729,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1131801421310295620, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Enabled
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3054136310133895775, guid: 4eed779d13663488ebf8d7b9107e3a12, type: 3}
       propertyPath: m_Name
@@ -39835,7 +39879,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1862372249}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 
@@ -39920,6 +39964,18 @@ MonoBehaviour:
   stickerOnBearOut: 0.5
   stickerGlowColor: {r: 1, g: 0.85, b: 0.35, a: 1}
   stickerGlowPulseSpeed: 1.6
+  rewardStyle: 1
+  rewardRevealOffset: {x: 0, y: -0.1, z: 0.85}
+  rewardRevealHeight: 0.13
+  showRewardHint: 0
+  rewardHintForYaya: "\u9EDE\u4E00\u4E0B\uFF0C\u628A\u8CBC\u7D19\u9001\u7D66\u82BD\u82BD"
+  rewardHintForBear: "\u9EDE\u4E00\u4E0B\uFF0C\u628A\u8CBC\u7D19\u9001\u7D66\u5C0F\u718A"
+  useStickerAttachAnimationPrefab: 0
+  yayaStickerForward: 0.075
+  yayaStickerUpOnShirt: -0.06
+  yayaStickerSide: 0.045
+  yayaStickerSize: 0.055
+  bearStickerSize: 0.05
 --- !u!4 &1869494761
 Transform:
   m_ObjectHideFlags: 0
@@ -41810,7 +41866,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1142579809577998828, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_SizeDelta.y
-      value: 20
+      value: 25
+      objectReference: {fileID: 0}
+    - target: {fileID: 1142579809577998828, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 1155209138530890833, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_PixelsPerUnitMultiplier
@@ -41842,7 +41902,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1200878421142080356, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_SizeDelta.y
-      value: 58
+      value: 62
       objectReference: {fileID: 0}
     - target: {fileID: 1200878421142080356, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_LocalScale.x
@@ -41862,7 +41922,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1267055109978141778, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 18.9
+      value: 20.499998
       objectReference: {fileID: 0}
     - target: {fileID: 1269146361879883817, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_Name
@@ -41882,7 +41942,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1289921494272317500, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 25.9
+      value: 27
       objectReference: {fileID: 0}
     - target: {fileID: 1371948916855208430, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_text
@@ -42262,11 +42322,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3843876978811279334, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_SizeDelta.y
-      value: 20
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 3843876978811279334, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 4.5
+      value: 3.2
       objectReference: {fileID: 0}
     - target: {fileID: 3903111169250187922, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_PixelsPerUnitMultiplier
@@ -42454,7 +42514,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4364805913959310543, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -22.399998
+      value: -24.3
       objectReference: {fileID: 0}
     - target: {fileID: 4431357744957927223, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_fontSize
@@ -42978,7 +43038,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7542427675965752489, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -22.4
+      value: -24.3
       objectReference: {fileID: 0}
     - target: {fileID: 7581041326549668738, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_Enabled
@@ -43062,7 +43122,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7778895609104516599, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -11.9000025
+      value: -14.600006
       objectReference: {fileID: 0}
     - target: {fileID: 7812114572308540844, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_SizeDelta.x
@@ -43114,7 +43174,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7905414082024053199, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -11.9000025
+      value: -14.6
       objectReference: {fileID: 0}
     - target: {fileID: 7918886505843093478, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_fontSize
@@ -43534,7 +43594,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9196994058327500621, guid: 0780048f92fb7472d94d0813d6eebc36, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 18.9
+      value: 20.5
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -43761,6 +43821,7 @@ MonoBehaviour:
   bendState: Listen_Mom
   comfortState: Petting Animal
   comfortApproachDistance: 0.38
+  avoidBlockingNurseView: 1
   comfortMoveDuration: 0.6
   comfortPatAmplitude: 0.025
   comfortPatSpeed: 1.6
@@ -43772,6 +43833,7 @@ MonoBehaviour:
   humanoidAvatar: {fileID: 0}
   bodyRadius: 0.2
   minDistanceFromYaya: 0.3
+  comfortMaxTurnAround: 50
   obstacleLayers:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -44094,12 +44156,45 @@ MonoBehaviour:
   - {x: 0.7714, y: 0.5248}
   correctChoice: 1
   choiceRadius: 0.06
+  yayaCuffOnRightArm: 1
   bearCuffAcross: -0.74
   bearCuffUp: 0.08
   bearCuffFront: 0.3
   bearCuffSize: {x: 0.34, y: 0.2}
   bearCuffColor: {r: 0.18, g: 0.45, b: 0.98, a: 1}
+  bearCuffFindArm: 1
+  bearCuffAlongArm: 0.45
+  bearCuffNudge: {x: 0, y: 0, z: 0}
+  bearCuffTurn: 0
+  bearCuffOnArmBone: 1
+  bearCuffArmThickness: 0.62
+  bearCuffArmLength: 0.42
   cuffColor: {r: 0.16, g: 0.32, b: 0.63, a: 1}
+  showMachineTrolley: 1
+  machineResource: BP_Monitor
+  useTrolley: 0
+  trolleyResource: BP_Trolley
+  machineScreenOffset: {x: 0, y: 0.13, z: 0.1}
+  machineScreenWidth: 0.2
+  trolleySideways: 0.6
+  trolleyTowardNurse: 0.3
+  machineFromStart: 1
+  machineSpotName: BP_Machine_Spot
+  machineModelYaw: 180
+  machineFacesDoor: 1
+  machineFacesNurseSpot: 1
+  nurseSpotDistance: 1.3
+  machineKeepsTurningToNurse: 0
+  machineTurnSpeed: 3
+  machineBesideYaya: 0.75
+  machineTowardRoom: 0.25
+  trolleyYawOffset: 0
+  machineScreenSideFix: 90
+  monitorWidth: 0.32
+  tubeColor: {r: 0.12, g: 0.12, b: 0.14, a: 1}
+  randomReading: 1
+  systolicRange: {x: 88, y: 104}
+  diastolicRange: {x: 50, y: 64}
   systolic: 96
   diastolic: 58
   inflateSeconds: 2.5
@@ -44110,6 +44205,10 @@ MonoBehaviour:
   onQuizClosed:
     m_PersistentCalls:
       m_Calls: []
+  machineNibpOffset: {x: -68, y: -63}
+  machineNibpSize: {x: 104, y: 20}
+  machineNibpFontSize: 15
+  machineNibpColor: {r: 0.95, g: 0.35, b: 0.88, a: 1}
 --- !u!4 &1973046326
 Transform:
   m_ObjectHideFlags: 0
@@ -63166,7 +63265,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3652678153342918547}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
   m_Name: 
@@ -63206,7 +63305,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3652678153342918547}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 
@@ -63344,72 +63443,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 572c7833442b9c644beed257b2ac83b7, type: 3}
---- !u!1001 &8372278164420132127
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 761875099}
-    m_Modifications:
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_RootOrder
-      value: 54
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -2.495295
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: -0.0010005245
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: -3.219195
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: -0.000000059604645
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 3162216043477441228, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-      propertyPath: m_Name
-      value: Plant_06
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
---- !u!4 &8372278164420132128 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 2353590471427866742, guid: fd8786eaf190b6b40873a03d8b86334a, type: 3}
-  m_PrefabInstance: {fileID: 8372278164420132127}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &8479182618253608252
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -64142,7 +64175,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8780281152352791284}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
   m_Name: 
@@ -64182,7 +64215,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8780281152352791284}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 
@@ -64225,6 +64258,7 @@ MonoBehaviour:
   clickScreenToOpenLogin: 1
   startCloseToScreen: 1
   screenStandDistance: 0.95
+  startEyeHeightOffset: -0.03
   screenLoginLabel: "\u9EDE\u9078\u87A2\u5E55\u767B\u5165"
   eyePanelDistance: 0.95
   eyePanelWidth: 0.9
@@ -64246,6 +64280,9 @@ MonoBehaviour:
   receptionHintText: "\u8ACB\u6CBF\u8457\u5730\u4E0A\u7684\u5149\u9EDE\u8D70\u5230\u63A5\u5F85\u8655\uFF0C\u9EDE\u9078\u684C\u4E0A\u767C\u5149\u7684\u75C5\u6B77"
   walkHintHeight: 0.09
   deskHintText: "\u8ACB\u9EDE\u9078\u684C\u4E0A\u767C\u5149\u7684\u75C5\u6B77"
+  walkHintOnScreen: 1
+  walkHintScreenGap: 0.01
+  walkHintScreenTextSize: 44
   recordPointName: Record_Point
   deskHeight: 1.12
   deskRecordSize: {x: 0.3, y: 0.2}
@@ -64375,6 +64412,7 @@ MonoBehaviour:
   placeOnEnable: 1
   keepInFrontWhileOpen: 1
   overrideDistance: 0.95
+  useSharedHudDistance: 1
   followLerp: 10
   sizeMultiplier: 1
   hideOverlaysWhileOpen: 1
@@ -64386,7 +64424,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8592483528996758667}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
   m_Name: 
@@ -64426,7 +64464,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8592483528996758667}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
   m_Name: 

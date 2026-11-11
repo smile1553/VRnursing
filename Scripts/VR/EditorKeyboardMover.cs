@@ -1,34 +1,44 @@
 using UnityEngine;
 
-// Walk and look around with the keyboard and mouse in the Game view (Unity editor only), for
-// testing without a headset.
+// Keyboard and mouse controls when there is no headset: in the Unity editor and in the PC
+// (Windows) build. With a headset (Quest) it switches itself off and the controllers are used.
 //
-//   W / S            forward / back
-//   A / D            step left / right
-//   Q / E  or  ← / → turn left / right
+//   W / S  or  ↑ / ↓      forward / back
+//   A / D                 step left / right
+//   ← / →  or  J / L      turn left / right
+//   Q / E                 down / up
 //   hold right mouse button and move the mouse: look around (left/right and up/down)
-//   hold Shift       faster
+//   hold Shift            faster
 //
 // It moves the whole player rig (the root of the main camera), the same thing the headset's
-// joystick moves, so the story's "walk to the door" checks see it. Created automatically when
-// the game starts in the editor; it does nothing in a built app.
+// joystick moves, so the story's "walk to the door" checks see it.
 public class EditorKeyboardMover : MonoBehaviour
 {
     [SerializeField] float walkSpeed = 1.4f;
     [SerializeField] float turnDegreesPerSecond = 90f;
     [SerializeField] float mouseDegreesPerPixel = 0.15f;
     [SerializeField] float fastMultiplier = 2.5f;
+    [Tooltip("Speed of Q / E (down / up), metres per second.")]
+    [SerializeField] float verticalSpeed = 1.0f;
 
     float pitch;
+
+    // True while this is running, so VRJoystickMover leaves the keyboard alone (no double moves).
+    public static bool Active { get; private set; }
+    void OnEnable() { Active = true; }
+    void OnDisable() { Active = false; }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
     {
-        if (!Application.isEditor || FindObjectOfType<EditorKeyboardMover>() != null)
+        // Editor: always. Built app: only without a headset (the PC version).
+        if (FindObjectOfType<EditorKeyboardMover>() != null)
+            return;
+        if (!Application.isEditor && UnityEngine.XR.XRSettings.isDeviceActive)
             return;
         GameObject go = new GameObject("EditorKeyboardMover (auto)");
         go.AddComponent<EditorKeyboardMover>();
-        Debug.Log("[EditorKeyboardMover] Game view controls: W/S move, A/D step, Q/E or arrow keys turn, right mouse drag to look, Shift = faster.");
+        Debug.Log("[EditorKeyboardMover] Keyboard/mouse: W/S or Up/Down move, A/D step, Left/Right or J/L turn, Q/E down/up, right mouse drag to look, Shift = faster.");
     }
 
     void Update()
@@ -41,7 +51,7 @@ public class EditorKeyboardMover : MonoBehaviour
         if (rig == head)
             return;
 
-        float forward = 0f, side = 0f, turn = 0f;
+        float forward = 0f, side = 0f, turn = 0f, vertical = 0f;
         bool fast = false, looking = false;
         Vector2 mouseDelta = Vector2.zero;
 #if ENABLE_INPUT_SYSTEM
@@ -55,8 +65,10 @@ public class EditorKeyboardMover : MonoBehaviour
             if (k.sKey.isPressed || k.downArrowKey.isPressed) forward -= 1f;
             if (k.dKey.isPressed) side += 1f;
             if (k.aKey.isPressed) side -= 1f;
-            if (k.eKey.isPressed || k.rightArrowKey.isPressed) turn += 1f;
-            if (k.qKey.isPressed || k.leftArrowKey.isPressed) turn -= 1f;
+            if (k.rightArrowKey.isPressed || k.lKey.isPressed) turn += 1f;
+            if (k.leftArrowKey.isPressed || k.jKey.isPressed) turn -= 1f;
+            if (k.eKey.isPressed) vertical += 1f;
+            if (k.qKey.isPressed) vertical -= 1f;
             fast = k.leftShiftKey.isPressed || k.rightShiftKey.isPressed;
         }
         UnityEngine.InputSystem.Mouse m = UnityEngine.InputSystem.Mouse.current;
@@ -72,8 +84,10 @@ public class EditorKeyboardMover : MonoBehaviour
         if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) forward -= 1f;
         if (Input.GetKey(KeyCode.D)) side += 1f;
         if (Input.GetKey(KeyCode.A)) side -= 1f;
-        if (Input.GetKey(KeyCode.E) || Input.GetKey(KeyCode.RightArrow)) turn += 1f;
-        if (Input.GetKey(KeyCode.Q) || Input.GetKey(KeyCode.LeftArrow)) turn -= 1f;
+        if (Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.L)) turn += 1f;
+        if (Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.J)) turn -= 1f;
+        if (Input.GetKey(KeyCode.E)) vertical += 1f;
+        if (Input.GetKey(KeyCode.Q)) vertical -= 1f;
         fast = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
         if (Input.GetMouseButton(1))
         {
@@ -100,7 +114,9 @@ public class EditorKeyboardMover : MonoBehaviour
         Vector3 move = flatForward * forward + flatRight * side;
         if (move.sqrMagnitude > 1f)
             move.Normalize();
-        rig.position += move * walkSpeed * (fast ? fastMultiplier : 1f) * dt;
+        float speedScale = fast ? fastMultiplier : 1f;
+        rig.position += move * walkSpeed * speedScale * dt;
+        rig.position += Vector3.up * vertical * verticalSpeed * speedScale * dt;
     }
 
     static bool TypingInTextField()

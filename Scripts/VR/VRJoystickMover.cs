@@ -112,7 +112,8 @@ public class VRJoystickMover : MonoBehaviour
             move = DeadZone(ReadAxis(moveDevice));
         }
 
-        if (enableKeyboardFallback)
+        // The keyboard/mouse script (EditorKeyboardMover) handles the keyboard when it runs.
+        if (enableKeyboardFallback && !EditorKeyboardMover.Active)
         {
             if (move == Vector2.zero)
                 move = ReadKeyboardMove();
@@ -254,7 +255,7 @@ public class VRJoystickMover : MonoBehaviour
 
     float ReadKeyboardTurn()
     {
-        if (!enableKeyboardFallback || !enableKeyboardTurn)
+        if (!enableKeyboardFallback || !enableKeyboardTurn || EditorKeyboardMover.Active)
             return 0f;
 
         float turn = 0f;
