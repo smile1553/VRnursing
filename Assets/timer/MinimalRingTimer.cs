@@ -25,6 +25,14 @@ public class MinimalRingTimer : MonoBehaviour
     [Tooltip("Round dots at both ends of the ring.")]
     public bool showRingCaps = false;
 
+    [Header("Stopwatch look")]
+    [Tooltip("Looks like a stopwatch: watch face with tick marks, a second hand, counts UP (00:20 / 01:00) so the student sees how long they have watched.")]
+    public bool stopwatchStyle = false;
+    public Color faceColor = new Color32(0xF4, 0xF1, 0xEA, 0xFF);
+    public Color tickColor = new Color32(0x4A, 0x4F, 0x57, 0xFF);
+    public Color handColor = new Color32(0xD9, 0x4A, 0x3D, 0xFF);
+    public Color stopwatchDigitColor = new Color32(0x22, 0x26, 0x2C, 0xFF);
+
     [Header("Timer")]
     public float duration = 60f;
     public bool startOnAwake = false;
@@ -74,6 +82,9 @@ public class MinimalRingTimer : MonoBehaviour
     private Image capEnd;
     private RectTransform capEndPivot;
     private Text digits;
+    private Text subDigits;
+    private RectTransform secondHand;
+    private bool builtStopwatch;
     private AudioSource audioSource;
     private AudioClip finishClip;
     private AudioClip tickClip;
@@ -141,8 +152,22 @@ public class MinimalRingTimer : MonoBehaviour
             Destroy(canvasGO);
     }
 
+    // Rebuilds the display if the look was changed after it was made (e.g. stopwatchStyle set by a story script).
+    public void EnsureStyle()
+    {
+        if (canvasGO != null && builtStopwatch == stopwatchStyle)
+            return;
+        bool wasActive = canvasGO != null && canvasGO.activeSelf;
+        if (canvasGO != null)
+            Destroy(canvasGO);
+        BuildUI();
+        Refresh();
+        canvasGO.SetActive(wasActive);
+    }
+
     public void StartTimer()
     {
+        EnsureStyle();
         if (duration <= 0f)
             duration = 60f;
 
@@ -205,6 +230,9 @@ public class MinimalRingTimer : MonoBehaviour
     private void BuildUI()
     {
         builtSize = size;
+        builtStopwatch = stopwatchStyle;
+        secondHand = null;
+        subDigits = null;
         canvasGO = new GameObject("RingTimerCanvas", typeof(RectTransform));
         canvasGO.transform.SetParent(transform, false);
 
@@ -243,6 +271,12 @@ public class MinimalRingTimer : MonoBehaviour
                 a.y == 1f ? -margin.y : (a.y == 0f ? margin.y : 0f));
         }
 
+        if (stopwatchStyle)
+        {
+            BuildStopwatch(root);
+            return;
+        }
+
         float radius = size * 0.5f;
         float ringMid = radius * 0.81f;
         float thick = radius * 0.167f;
@@ -278,6 +312,62 @@ public class MinimalRingTimer : MonoBehaviour
             Text label = NewText("Label", root, font, Mathf.RoundToInt(size * 0.075f), FontStyle.Normal, labelColor, new Vector2(0f, -size * 0.18f));
             label.text = labelText;
         }
+    }
+
+    // Stopwatch: crown on top, light face, 60 tick marks (every 5 s longer), progress ring,
+    // a red second hand, and the time counting up in the middle.
+    private void BuildStopwatch(RectTransform root)
+    {
+        float radius = size * 0.5f;
+        Sprite circle = MakeCircleSprite(256, 0f);
+        float ringOuter = radius * 0.98f;
+        float ringThick = radius * 0.10f;
+        Sprite ringSprite = MakeCircleSprite(256, (ringOuter - ringThick) / ringOuter);
+
+        // Crown and button on top, like a real stopwatch.
+        NewImage("CrownStem", root, null, backgroundColor, new Vector2(size * 0.08f, size * 0.10f), new Vector2(0f, radius + size * 0.04f));
+        NewImage("Crown", root, circle, backgroundColor, new Vector2(size * 0.16f, size * 0.16f), new Vector2(0f, radius + size * 0.11f));
+
+        NewImage("Case", root, circle, backgroundColor, new Vector2(size, size), Vector2.zero);
+        NewImage("Face", root, circle, faceColor, new Vector2(size * 0.90f, size * 0.90f), Vector2.zero);
+
+        Image track = NewImage("Track", root, ringSprite, trackColor, new Vector2(ringOuter * 1.80f, ringOuter * 1.80f), Vector2.zero);
+        track.color = new Color(trackColor.r, trackColor.g, trackColor.b, 0.25f);
+        ring = NewImage("Ring", root, ringSprite, ringColor, new Vector2(ringOuter * 1.80f, ringOuter * 1.80f), Vector2.zero);
+        ring.type = Image.Type.Filled;
+        ring.fillMethod = Image.FillMethod.Radial360;
+        ring.fillOrigin = (int)Image.Origin360.Top;
+        ring.fillClockwise = true;
+
+        // Tick marks: one per second, longer every 5 seconds.
+        float tickRadius = radius * 0.72f;
+        for (int i = 0; i < 60; i++)
+        {
+            bool major = i % 5 == 0;
+            float len = major ? size * 0.075f : size * 0.035f;
+            float wid = major ? size * 0.018f : size * 0.008f;
+            GameObject pivotGO = new GameObject("TickPivot", typeof(RectTransform));
+            pivotGO.transform.SetParent(root, false);
+            RectTransform pivot = (RectTransform)pivotGO.transform;
+            pivot.anchorMin = pivot.anchorMax = new Vector2(0.5f, 0.5f);
+            pivot.sizeDelta = Vector2.zero;
+            pivot.localEulerAngles = new Vector3(0f, 0f, -6f * i);
+            NewImage("Tick", pivot, null, tickColor, new Vector2(wid, len), new Vector2(0f, tickRadius - len * 0.5f));
+        }
+
+        Font font = customFont != null ? customFont : LoadBuiltinFont();
+        digits = NewText("Digits", root, font, Mathf.RoundToInt(size * 0.17f), FontStyle.Bold, stopwatchDigitColor, new Vector2(0f, -size * 0.17f));
+        subDigits = NewText("Total", root, font, Mathf.RoundToInt(size * 0.08f), FontStyle.Normal, tickColor, new Vector2(0f, -size * 0.29f));
+
+        // Second hand turning around the centre.
+        GameObject handPivotGO = new GameObject("SecondHand", typeof(RectTransform));
+        handPivotGO.transform.SetParent(root, false);
+        secondHand = (RectTransform)handPivotGO.transform;
+        secondHand.anchorMin = secondHand.anchorMax = new Vector2(0.5f, 0.5f);
+        secondHand.sizeDelta = Vector2.zero;
+        float handLen = radius * 0.70f;
+        NewImage("Hand", secondHand, null, handColor, new Vector2(size * 0.014f, handLen), new Vector2(0f, handLen * 0.5f - size * 0.06f));
+        NewImage("Hub", root, circle, handColor, new Vector2(size * 0.06f, size * 0.06f), Vector2.zero);
     }
 
     private void UpdateWorldPlacement()
@@ -328,6 +418,30 @@ public class MinimalRingTimer : MonoBehaviour
     {
         float normalized = duration > 0f ? Mathf.Clamp01(remaining / duration) : 0f;
         bool warning = remaining <= warningTime;
+
+        if (builtStopwatch)
+        {
+            float elapsed = Mathf.Clamp(duration - remaining, 0f, duration);
+            if (ring != null)
+            {
+                ring.fillAmount = duration > 0f ? elapsed / duration : 0f;
+                ring.color = ringColor;
+            }
+            if (secondHand != null)
+                secondHand.localEulerAngles = new Vector3(0f, 0f, -6f * (elapsed % 60f));
+            if (digits != null)
+            {
+                int e = Mathf.FloorToInt(elapsed);
+                digits.text = $"{e / 60:00}:{e % 60:00}";
+                digits.color = stopwatchDigitColor;
+            }
+            if (subDigits != null)
+            {
+                int d = Mathf.RoundToInt(duration);
+                subDigits.text = $"/ {d / 60:00}:{d % 60:00}";
+            }
+            return;
+        }
 
         if (ring != null)
         {

@@ -11,8 +11,13 @@ public static class TmpGlyphFallback
     private static readonly string[] Preferred =
     {
         "msjh", "microsoftjhenghei", "notosanscjk", "notosanstc", "notosanshant", "pingfang",
-        "mingliu", "simhei", "msyh", "droidsansfallback", "sourcehansans"
+        "mingliu", "simhei", "msyh", "droidsansfallback", "sourcehansans",
+        // macOS (PingFang is often hidden from the font list there):
+        "stheiti", "heititc", "lihei", "applelig", "hiraginosansgb", "hiraginosans", "songti", "arialunicode"
     };
+
+    // Font files in Assets/Resources (name without extension) tried first on Windows / Mac.
+    private static readonly string[] BundledFontNames = { "NotoSansTC-Regular", "NotoSansTC", "NotoSansTC-VariableFont_wght" };
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Install()
@@ -36,13 +41,27 @@ public static class TmpGlyphFallback
                 }
             }
 
-            if (best == null)
+            // A complete Chinese font shipped with the game (Assets/Resources/NotoSansTC-Regular.ttf
+            // or .otf) is used first on computers, so it does not depend on what the computer has.
+            // Quest keeps using its own system font.
+            Font bundled = null;
+#if !UNITY_ANDROID
+            foreach (string name in BundledFontNames)
+            {
+                bundled = Resources.Load<Font>(name);
+                if (bundled != null)
+                    break;
+            }
+#endif
+            if (bundled == null && best == null)
             {
                 Debug.Log("[TmpGlyphFallback] No Chinese system font found: missing characters stay as squares.");
                 return;
             }
+            if (bundled != null)
+                best = "Resources/" + bundled.name;
 
-            Font font = new Font(best);
+            Font font = bundled != null ? bundled : new Font(best);
             TMP_FontAsset asset = TMP_FontAsset.CreateFontAsset(font, 64, 6, UnityEngine.TextCore.LowLevel.GlyphRenderMode.SDFAA, 2048, 2048);
             if (asset == null)
             {

@@ -100,7 +100,10 @@ public class DemoRecordingMode : MonoBehaviour
             {
                 if (button != null && button.isActiveAndEnabled)
                 {
-                    button.onClick.Invoke();
+                    // Written down, and not allowed before the student has tried (unless the
+                    // network is stuck): see SkipAudit.
+                    if (SkipAudit.TryKeySkip(button, controllerSkip ? "控制器" : "F8"))
+                        button.onClick.Invoke();
                     break;
                 }
             }

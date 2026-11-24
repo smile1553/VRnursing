@@ -105,7 +105,27 @@ public class MomSkinSwap : MonoBehaviour
         reachHandTarget = handTarget;
         reachProp = prop;
         reachAim = aimAt;
+        reachPropFixed = false;
     }
+
+    // Call every frame: her hand goes onto `prop` and grips its handle, but the prop itself is
+    // NOT moved (the story keeps it where it is, e.g. at Yaya's ear). `nudge` moves her hand a little.
+    public void HoldInPlace(Transform prop, Vector3 aimAt, Vector3 nudge)
+    {
+        if (prop == null)
+            return;
+        reachFrame = Time.frameCount;
+        reachProp = prop;
+        reachAim = aimAt;
+        reachPropFixed = true;
+        reachHandTarget = prop.position + nudge;
+        reachFixedNudge = nudge;
+    }
+    [Tooltip("Holding the ear thermometer still: how far (m) it may move to sit in her palm. 0 = never moves (hand may miss it); bigger = always in her hand but may leave the ear a little. Can be changed while playing.")]
+    [SerializeField] private float holdSnapDistance = 0.05f;
+    private bool reachPropFixed;
+    private Vector3 reachFixedNudge;
+    private Vector3 reachPalmOffset;
 
     // Call every frame (together with ReachTo) to rest her OTHER hand gently at `target`,
     // e.g. on top of Yaya's head to keep it still while measuring her ear.
@@ -694,11 +714,28 @@ public class MomSkinSwap : MonoBehaviour
 
                 // Elbow down and a little out to her side (not sticking up or into her body).
                 Vector3 outward = Vector3.Cross(Vector3.up, Quaternion.Euler(0f, facingYaw, 0f) * Vector3.forward) * (reachUsesRight ? 1f : -1f);
-                SolveArm(arm, reachHandTarget, (Vector3.down + outward * 0.45f).normalized, w);
+                // Holding a prop that stays in place: put the wrist so that her PALM is on the
+                // handle (palm position from last frame).
+                Vector3 handGoal = reachPropFixed && reachProp != null
+                    ? reachProp.position + reachFixedNudge - reachPalmOffset
+                    : reachHandTarget;
+                SolveArm(arm, handGoal, (Vector3.down + outward * 0.45f).normalized, w);
             }
             // Her fingers close softly around it; it points at the target.
             if (reaching && reachProp != null && arm.IsValid)
-                HandGrip.Apply(arm.hand, reachUsesRight, reachProp, reachAim, 1f, holdFingerCurl, holdMaxWristBend);
+            {
+                if (reachPropFixed)
+                {
+                    HandGrip.Apply(arm.hand, reachUsesRight, reachProp, reachAim, 1f, Mathf.Max(holdFingerCurl, 0.7f), holdMaxWristBend, false, 180f);
+                    reachPalmOffset = Vector3.Lerp(reachPalmOffset, HandGrip.LastPalm - arm.hand.position, 0.5f);
+                    // Whatever her arm could not reach: the thermometer moves the last bit into
+                    // her palm (at most Hold Snap Distance), so hand and handle are always together.
+                    Vector3 intended = reachProp.position;
+                    reachProp.position = intended + Vector3.ClampMagnitude(HandGrip.LastPalm - intended, Mathf.Max(0f, holdSnapDistance));
+                }
+                else
+                    HandGrip.Apply(arm.hand, reachUsesRight, reachProp, reachAim, 1f, holdFingerCurl, holdMaxWristBend);
+            }
         }
 
         // Her other hand resting on something (Yaya's head) while she holds the prop.

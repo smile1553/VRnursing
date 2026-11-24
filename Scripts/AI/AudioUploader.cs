@@ -355,6 +355,24 @@ public class AudioUploader : MonoBehaviour
 
         if (microphoneDeviceIndex < 0)
         {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+            // On a Windows PC without a headset, "default" (null) can end up on the
+            // "Oculus Virtual Audio Device" that the Meta/Oculus app installs. It is silent
+            // unless Quest Link is running, so nothing is ever heard or sent. Use the first
+            // real microphone instead (the headset's own one is kept when a headset is on).
+            if (skipVirtualMicsOnPc && !UnityEngine.XR.XRSettings.isDeviceActive && IsVirtualMic(devices[0]))
+            {
+                foreach (string device in devices)
+                {
+                    if (!IsVirtualMic(device))
+                    {
+                        micDevice = device;
+                        Debug.Log($"[AudioUploader] No headset: skipped the virtual mic '{devices[0]}', using '{micDevice}'.");
+                        return;
+                    }
+                }
+            }
+#endif
             // Unity uses null for the operating system's current default input.
             // Do not force devices[0]: its order is not stable between Editor,
             // Quest Link, and standalone Android builds.
@@ -366,6 +384,17 @@ public class AudioUploader : MonoBehaviour
         int idx = Mathf.Clamp(microphoneDeviceIndex, 0, devices.Length - 1);
         micDevice = devices[idx];
         Debug.Log($"[AudioUploader] Using microphone[{idx}]={micDevice}");
+    }
+
+    [Tooltip("PC without a headset: do not record from virtual microphones (Oculus / Meta / Virtual Audio), which are silent without Quest Link.")]
+    public bool skipVirtualMicsOnPc = true;
+
+    static bool IsVirtualMic(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return false;
+        string n = name.ToLowerInvariant();
+        return n.Contains("oculus") || n.Contains("meta quest") || n.Contains("virtual");
     }
 
     void ResolveRecordingSampleRate()
@@ -465,6 +494,8 @@ public class AudioUploader : MonoBehaviour
         var utterance = new List<float>(Mathf.Min(maximumUtteranceSamples, activeSampleRate * 8));
         bool speechStarted = false;
         float silenceSeconds = 0f;
+        int utteranceFrames = 0;
+        int characterFrames = 0;
 
         while (captureEnabled)
         {
@@ -497,6 +528,8 @@ public class AudioUploader : MonoBehaviour
                     if (started)
                     {
                         speechStarted = true;
+                        utteranceFrames = 0;
+                        characterFrames = 0;
                         silenceSeconds = 0f;
                         utterance.Clear();
                         if (preBuffer.Count > 0)
@@ -509,6 +542,9 @@ public class AudioUploader : MonoBehaviour
                 }
 
                 utterance.AddRange(frame);
+                utteranceFrames++;
+                if (CharacterVoicePlaying())
+                    characterFrames++;
                 bool stillSpeaking = useDbVad ? db >= runtimeEndDb : frameRms >= vadThreshold;
                 if (stillSpeaking)
                 {
@@ -544,7 +580,12 @@ public class AudioUploader : MonoBehaviour
                 preBuffer.Clear();
                 currentVadState = "Idle";
 
-                if (completeUtterance.Length >= minimumSpeechSamples)
+                float characterShare = utteranceFrames > 0 ? characterFrames / (float)utteranceFrames : 0f;
+                if (dropWhileCharacterSpeaks && characterShare >= characterOverlapToDrop)
+                {
+                    Debug.Log($"[AudioUploader] skip: a game character was talking during {characterShare:P0} of this sound (their voice from the speakers, not the student).");
+                }
+                else if (completeUtterance.Length >= minimumSpeechSamples)
                     yield return ProcessAndUploadChunk(completeUtterance, true);
                 if (loopInterval > 0f)
                     yield return new WaitForSeconds(loopInterval);
@@ -563,6 +604,48 @@ public class AudioUploader : MonoBehaviour
             if (utterance.Count >= minimumSpeechSamples)
                 yield return ProcessAndUploadChunk(utterance.ToArray(), true);
         }
+    }
+
+    // ---- Game characters' voices (Yaya, mom) coming out of the speakers ----
+    [Header("Ignore game character voices")]
+    [Tooltip("Do not send sound recorded while Yaya or mom is talking: the microphone hears the speakers, and their lines (e.g. 討厭你) were analysed as if the student said them.")]
+    public bool dropWhileCharacterSpeaks = true;
+    [Tooltip("Drop the recording when a character was talking for at least this part of it (0.5 = half).")]
+    [Range(0.1f, 1f)] public float characterOverlapToDrop = 0.5f;
+    [Tooltip("Keep treating it as the character for this long after their line ends (echo in the room).")]
+    public float characterVoiceTail = 0.4f;
+    [Tooltip("Sounds shorter than this (beeps, clicks) are not voices.")]
+    public float minVoiceClipSeconds = 0.6f;
+
+    float characterVoiceUntil = -1f;
+    float nextVoiceScan;
+    AudioSource[] voiceSources = new AudioSource[0];
+    float nextVoiceSourceRefresh;
+
+    bool CharacterVoicePlaying()
+    {
+        float now = Time.unscaledTime;
+        if (now >= nextVoiceScan)
+        {
+            nextVoiceScan = now + 0.05f;
+            if (now >= nextVoiceSourceRefresh)
+            {
+                nextVoiceSourceRefresh = now + 2f;
+                voiceSources = FindObjectsOfType<AudioSource>();
+            }
+            foreach (AudioSource source in voiceSources)
+            {
+                if (source == null || !source.isPlaying || source.loop || source.mute || source.volume <= 0.01f)
+                    continue;
+                if (source.gameObject == gameObject || source.clip == null || source.clip.length < minVoiceClipSeconds)
+                    continue;
+                if (source.GetComponentInParent<MinimalRingTimer>() != null)
+                    continue;
+                characterVoiceUntil = now + Mathf.Max(0f, characterVoiceTail);
+                break;
+            }
+        }
+        return now <= characterVoiceUntil;
     }
 
     static void AppendRing(Queue<float> target, float[] samples, int capacity)

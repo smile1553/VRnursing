@@ -15,6 +15,10 @@ public class MedicalRecordHudButton : MonoBehaviour
     [SerializeField] Vector3 extraLocalOffset = new Vector3(-0.06f, 0f, 0f);
     [Tooltip("When the button is fixed to the camera (Follow Head off): metres to move it up (+) / down (-).")]
     [SerializeField] float fixedRaise = 0.055f;
+    [Tooltip("Fixed to the camera: put it at the same distance as the rest of the display (prompt, emotion bar), so walls and people do not cover it. Looks the same size and place.")]
+    [SerializeField] bool sameDepthAsHud = true;
+    [Tooltip("Drawn above other world-space UI at the same distance (the emotion bar uses 40).")]
+    [SerializeField] int sortingOrder = 45;
 
     [Header("Panel")]
     [SerializeField] bool hidePanelOnStart = true;
@@ -33,7 +37,23 @@ public class MedicalRecordHudButton : MonoBehaviour
 
         // Fixed to the camera: nudge it up a little so the bear sticker fits right below it.
         if (!followHead && head != null && transform.IsChildOf(head))
+        {
             transform.position += head.up * fixedRaise;
+            if (sameDepthAsHud)
+            {
+                Vector3 local = head.InverseTransformPoint(transform.position);
+                Vector3 flat = HudDepth.Flatten(local, out float depthFactor);
+                if (Mathf.Abs(depthFactor - 1f) > 0.001f)
+                {
+                    transform.position = head.TransformPoint(flat);
+                    transform.localScale *= depthFactor;
+                }
+            }
+        }
+
+        Canvas canvas = GetComponent<Canvas>();
+        if (canvas != null && canvas.renderMode == RenderMode.WorldSpace && canvas.sortingOrder < sortingOrder)
+            canvas.sortingOrder = sortingOrder;
 
         if (hidePanelOnStart && medicalRecordPanel != null)
             medicalRecordPanel.SetActive(false);

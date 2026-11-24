@@ -190,15 +190,23 @@ public static class HandGrip
     private static void CurlFingers(Rig rig, Vector3 fingers, Vector3 palmNormal, float amount, float thumbAmount)
     {
         float[] bend = { 50f, 75f, 50f, 30f };
+        // One hinge axis for every finger joint (across the hand). Before, each joint took its
+        // axis from its own direction: once the first joint was bent past 90 degrees that axis
+        // flipped and the outer joints bent the wrong way (only the knuckles closed).
+        Vector3 hinge = Vector3.Cross(fingers, palmNormal);
         foreach (List<Transform> chain in rig.fingers)
         {
             for (int i = 0; i < chain.Count; i++)
             {
                 Transform joint = chain[i];
-                Vector3 along = joint.childCount > 0 ? joint.GetChild(0).position - joint.position : fingers;
-                Vector3 axis = Vector3.Cross(along.normalized, palmNormal);
+                Vector3 axis = hinge;
                 if (axis.sqrMagnitude < 1e-6f)
-                    continue;
+                {
+                    Vector3 along = joint.childCount > 0 ? joint.GetChild(0).position - joint.position : fingers;
+                    axis = Vector3.Cross(along.normalized, palmNormal);
+                    if (axis.sqrMagnitude < 1e-6f)
+                        continue;
+                }
                 joint.rotation = Quaternion.AngleAxis(bend[Mathf.Min(i, bend.Length - 1)] * amount, axis.normalized) * joint.rotation;
             }
         }
@@ -215,8 +223,29 @@ public static class HandGrip
         }
     }
 
+    // Where the middle of the palm was after the last Apply (world).
+    public static Vector3 LastPalm { get; private set; }
+    // Which way the palm faced (out of the palm) after the last Apply.
+    public static Vector3 LastPalmNormal { get; private set; }
+
     // Returns false (and only places the object at the hand) if the finger bones were not found.
     public static bool Apply(Transform hand, bool rightHand, Transform prop, Vector3 aimAt, float weight, float curl = 1f, float maxWristBend = 50f)
+    {
+        return Apply(hand, rightHand, prop, aimAt, weight, curl, maxWristBend, true, 180f);
+    }
+
+    // moveProp = false: the object stays where it is (e.g. held still at an ear); only the hand
+    //   turns and the fingers close. Use LastPalm to bring the hand onto the object.
+    // maxRoll: how far (degrees) the hand may roll around the forearm to get "index finger on
+    //   top". Small = no twisted wrist; the object's handle then tilts with the hand.
+    public static bool Apply(Transform hand, bool rightHand, Transform prop, Vector3 aimAt, float weight, float curl, float maxWristBend, bool moveProp, float maxRoll)
+    {
+        return Apply(hand, rightHand, prop, aimAt, weight, curl, maxWristBend, moveProp, maxRoll, false);
+    }
+
+    // inFist = true: the handle goes through the middle of the closed fist (between the palm and
+    // the curled fingers), not in front of the open palm.
+    public static bool Apply(Transform hand, bool rightHand, Transform prop, Vector3 aimAt, float weight, float curl, float maxWristBend, bool moveProp, float maxRoll, bool inFist)
     {
         if (hand == null)
             return false;
@@ -254,6 +283,14 @@ public static class HandGrip
         // 1) Turn the hand: fingers toward the target, index finger on top (thumb up).
         Vector3 fingers = (rig.middle.position - hand.position).normalized;
         Vector3 indexSide = (rig.index.position - rig.pinky.position).normalized;
+        bool limitRoll = maxRoll < 179f;
+        if (limitRoll)
+        {
+            Vector3 now = Vector3.ProjectOnPlane(indexSide, aim);
+            Vector3 wanted = Vector3.ProjectOnPlane(up, aim);
+            if (now.sqrMagnitude > 1e-6f && wanted.sqrMagnitude > 1e-6f)
+                up = Vector3.RotateTowards(now.normalized, wanted.normalized, Mathf.Max(0f, maxRoll) * Mathf.Deg2Rad, 0f);
+        }
         Quaternion turn = Quaternion.LookRotation(aim, up) * Quaternion.Inverse(Quaternion.LookRotation(fingers, indexSide));
         hand.rotation = Quaternion.Slerp(hand.rotation, turn * hand.rotation, weight);
 
@@ -268,9 +305,36 @@ public static class HandGrip
         CurlFingers(rig, fingers, palmNormal, curl * weight, 1f);
 
         // 4) The object lies in the palm, its tip pointing at the target.
-        if (prop != null)
+        Vector3 palm = hand.position + fingers * (size * 0.62f) + palmNormal * (size * 0.30f);
+        if (inFist)
         {
-            Vector3 palm = hand.position + fingers * (size * 0.62f) + palmNormal * (size * 0.30f);
+            Vector3 curled = Vector3.zero;
+            int count = 0;
+            foreach (List<Transform> chain in rig.fingers)
+            {
+                if (chain.Count >= 3)
+                {
+                    curled += (chain[1].position + chain[2].position) * 0.5f;
+                    count++;
+                }
+            }
+            if (count > 0)
+            {
+                Vector3 palmSurface = hand.position + fingers * (size * 0.75f) + palmNormal * (size * 0.08f);
+                palm = Vector3.Lerp(palmSurface, curled / count, 0.5f);
+            }
+        }
+        LastPalm = palm;
+        LastPalmNormal = palmNormal;
+        if (limitRoll)
+        {
+            // The handle follows the hand (no twisting the wrist to keep it upright).
+            Vector3 handleUp = Vector3.ProjectOnPlane(indexSide, aimAt - palm);
+            if (handleUp.sqrMagnitude > 1e-6f)
+                up = handleUp.normalized;
+        }
+        if (prop != null && moveProp)
+        {
             // The object itself always points exactly at the target, even when the wrist cannot.
             // (its probe sits a little above the grip, so the handle is held that much lower)
             Vector3 exact = aimAt - up * EarThermometerProp.TipRise - palm;

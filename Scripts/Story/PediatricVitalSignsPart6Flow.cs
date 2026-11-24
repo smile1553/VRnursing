@@ -95,6 +95,14 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
     [SerializeField] private Vector2 momFixedSpot = new Vector2(0.58f, 0.10f);
     [Tooltip("How far her hand (the thermometer grip) is out from the ear (m).")]
     [SerializeField] private float momFixedGripOut = 0.02f;
+    [Tooltip("On: Mom first puts her hand out at Yaya's ear (her own side) and the thermometer flies from the nurse straight into that hand, so her arm never reaches across Yaya or through her body. Off: she reaches toward the nurse to take it (older way).")]
+    [SerializeField] private bool momReceiveAtEar = true;
+    [Tooltip("With Mom Receive At Ear: where Mom's hand is, from the thermometer's grip (m): x = out to her side, y = up, z = toward Yaya's face. Can be changed while playing.")]
+    [SerializeField] private Vector3 momHandFromGrip = new Vector3(0.03f, 0f, 0f);
+    [Tooltip("With Mom Receive At Ear: once it is at the ear, her fingers close around the handle (the thermometer stays still). Off = open hand next to it (older way).")]
+    [SerializeField] private bool momGripsHandle = true;
+    [Tooltip("With Mom Grips Handle: extra shift of her hand on the handle (m, world x/y/z). Can be changed while playing.")]
+    [SerializeField] private Vector3 momGripNudge = Vector3.zero;
     private Vector3 momFixedHome;
     private Vector3 momFixedHomeForward;
     private bool momFixedWalked;
@@ -437,6 +445,23 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
             Vector3 towardNurse = Vector3.ProjectOnPlane(from - mom.ChestPosition, Vector3.up);
             towardNurse = towardNurse.sqrMagnitude > 1e-4f ? towardNurse.normalized : forward;
             Vector3 meet = mom.ChestPosition + towardNurse * 0.32f - Vector3.up * 0.12f;
+            // Where her hand will hold it at the ear (same as step 3 below).
+            System.Func<Vector3> earPoint = () => head.position + right * 0.085f + Vector3.up * 0.05f;
+            System.Func<Vector3> earGrip = () =>
+            {
+                Vector3 e = earPoint();
+                Vector3 m = Vector3.ProjectOnPlane(mom.ChestPosition - e, Vector3.up).normalized;
+                Vector3 a = momFixedEarHold ? right
+                    : momSimpleEarHold ? (right + m * 0.35f).normalized
+                    : (right + forward * momHandInFront + m * momHandTowardMom).normalized;
+                return e + a * (tipDistance + (momFixedEarHold ? momFixedGripOut : momGripGap)) - Vector3.up * EarThermometerProp.TipRise;
+            };
+            if (momReceiveAtEar)
+                earGrip = () => EarGrip(head, right, tipDistance);
+            if (momReceiveAtEar)
+                meet = earGrip();
+            Vector3 restHand = mom.ChestPosition - Vector3.up * 0.25f;
+            System.Func<Vector3, Vector3> handAt = g => g + right * momHandFromGrip.x + Vector3.up * momHandFromGrip.y + forward * momHandFromGrip.z;
             Quaternion lying = thermometer.rotation;
             ItemPresentFx fx = ItemPresentFx.Attach(thermometer, 0.07f * momThermometerSize + 0.03f, ItemPresentFx.Gold);
 
@@ -452,7 +477,9 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
                 // The very first frame decides which arm she uses: the one nearest Yaya's ear, so
                 // the same arm takes it and brings it to the ear (no arm crossing over / twisting).
                 Vector3 aim = (t <= 0f && momFixedEarHold) ? head.position + right * 0.085f : thermometer.position;
-                mom.ReachTo(Vector3.Lerp(mom.ChestPosition - Vector3.up * 0.25f, meet, u), null, aim);
+                // New way: she does not move yet; her hand goes up while it flies to her.
+                if (!momReceiveAtEar)
+                    mom.ReachTo(Vector3.Lerp(mom.ChestPosition - Vector3.up * 0.25f, meet, u), null, aim);
                 yield return null;
             }
             if (thermometer == null)
@@ -464,8 +491,22 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
             for (float t = 0f; t < handOverFlySeconds && thermometer == movedThermometer; t += Time.deltaTime)
             {
                 float k = Mathf.SmoothStep(0f, 1f, t / Mathf.Max(0.05f, handOverFlySeconds));
-                thermometer.SetPositionAndRotation(Vector3.Lerp(flyFrom, meet, k) + Vector3.up * (Mathf.Sin(k * Mathf.PI) * 0.08f), lying);
-                mom.ReachTo(meet, null, meet + towardNurse * 0.4f + Vector3.up * 0.05f);
+                if (momReceiveAtEar)
+                {
+                    // It flies into her waiting hand at the ear, already pointing into the ear.
+                    // Her hand rises to the ear while the thermometer flies there, so they arrive together.
+                    meet = earGrip();
+                    Vector3 e = earPoint();
+                    Quaternion atEar = Quaternion.LookRotation(-right, Vector3.up);
+                    thermometer.SetPositionAndRotation(Vector3.Lerp(flyFrom, meet, k) + Vector3.up * (Mathf.Sin(k * Mathf.PI) * 0.08f),
+                        Quaternion.Slerp(lying, atEar, k));
+                    mom.ReachTo(Vector3.Lerp(restHand, handAt(meet), k), null, e);
+                }
+                else
+                {
+                    thermometer.SetPositionAndRotation(Vector3.Lerp(flyFrom, meet, k) + Vector3.up * (Mathf.Sin(k * Mathf.PI) * 0.08f), lying);
+                    mom.ReachTo(meet, null, meet + towardNurse * 0.4f + Vector3.up * 0.05f);
+                }
                 yield return null;
             }
             if (fx != null)
@@ -495,6 +536,18 @@ public class PediatricVitalSignsPart6Flow : MonoBehaviour
                     ? (right + toMom * 0.35f).normalized
                     : (right + forward * momHandInFront + toMom * momHandTowardMom).normalized;
                 Vector3 grip = ear + away * (tipDistance + (momFixedEarHold ? momFixedGripOut : momGripGap)) - Vector3.up * EarThermometerProp.TipRise;
+                if (momReceiveAtEar)
+                {
+                    // The thermometer stays exactly at the ear pointing straight in; her hand holds it.
+                    Vector3 at = earGrip();
+                    thermometer.SetPositionAndRotation(at, Quaternion.LookRotation(-right, Vector3.up));
+                    if (momGripsHandle)
+                        mom.HoldInPlace(thermometer, ear, momGripNudge);
+                    else
+                        mom.ReachTo(handAt(at), null, ear);
+                    yield return null;
+                    continue;
+                }
                 Vector3 hand = Vector3.Lerp(meet, grip, k) + Vector3.up * (Mathf.Sin(k * Mathf.PI) * 0.05f);
                 mom.ReachTo(hand, thermometer, ear);
                 if (momSupportsHead && !momSimpleEarHold && k > 0.3f)

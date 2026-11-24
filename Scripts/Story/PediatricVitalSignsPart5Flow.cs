@@ -60,7 +60,7 @@ public class PediatricVitalSignsPart5Flow : MonoBehaviour
     // The scene still holds the old single-word lists (no ';'), e.g. "小熊|玩偶|量體溫", which
     // reject "幫熊熊量耳溫". Such old lists are replaced by these at run time.
     private const string DefaultStartToyRolePlayKeywords = "小熊|熊熊|佩佩豬|玩偶|娃娃;量體溫|耳溫|測量|量一量|量量看";
-    private const string DefaultAskYayaComfortToyKeywords = "小熊|熊熊|佩佩豬|玩偶|娃娃;很怕|好怕|害怕|會不會痛;怎麼辦|安慰|安撫|跟她說|跟他說";
+    private const string DefaultAskYayaComfortToyKeywords = "小熊|熊熊|佩佩豬|玩偶|娃娃|熊;很怕|好怕|害怕|會不會痛|不會痛|不痛|感覺|涼涼|嗶|很快|一下下|勇敢;怎麼辦|安慰|安撫|跟她說|跟他說|告訴|跟牠說|說說看|講講看|說給|講給";
     private const string DefaultEncourageYayaTemperatureKeywords = "芽芽|妳|你|熊熊|小熊;勇敢|不會痛|嗶一聲|好棒|一下下|一下就好;量體溫|耳溫|幫你量";
     private const string DefaultAskWhichEarKeywords = "量|測量;哪一隻耳朵|哪隻耳朵|右耳|左耳";
 

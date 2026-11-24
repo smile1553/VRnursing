@@ -42,6 +42,14 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
     [Header("Backend")]
     [SerializeField] private RunAI_Network network;
     [SerializeField] private bool advanceFromBackendJson = true;
+    [Tooltip("Size of the one-minute breathing timer (metres across, 0.95 m in front of the eyes). 0.22 = original size.")]
+    [SerializeField] private float breathingTimerDiameter = 0.22f;
+    [Tooltip("Where the breathing timer floats (x right, y up, z forward, metres). On a computer it is moved to the left edge anyway.")]
+    [SerializeField] private Vector3 breathingTimerOffset = new Vector3(0f, -0.085f, 0.95f);
+    [Tooltip("Breathing timer looks like a stopwatch (face, ticks, second hand) and counts up: 00:20 / 01:00.")]
+    [SerializeField] private bool breathingTimerStopwatch = true;
+    [Tooltip("Stop the nursery rhyme when the one-minute breathing timer ends (off: it plays until the Part 2 quiz is answered).")]
+    [SerializeField] private bool stopRhymeWhenTimerEnds = true;
     [Tooltip("Concept groups use ';'. Variants inside one group use '|'.")]
     [SerializeField] private string respirationKeywords = "觀察|計算|數;呼吸|胸腹|起伏";
     [SerializeField] private string heartbeatKeywords = "聽|摸|檢查;心跳|心尖脈|聽診器;不會痛|一下子|放心";
@@ -222,7 +230,7 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
 
     // The scene still holds older keyword lists. "||" lets a sentence pass with either the
     // scene's list or this newer one (see SpeechGateMatcher.CountMatchedKeywordGroups).
-    private const string NewerRespirationKeywords = "觀察|計算|數|看;呼吸|胸腹|起伏|肚子";
+    private const string NewerRespirationKeywords = "觀察|計算|數|看|注意|量;呼吸|胸腹|起伏|肚子|肚肚|胸口|胸部|吸氣|吐氣;一分鐘|幾下|幾次|次數|一上一下|上下|鼓起來|動";
     private const string NewerHeartbeatKeywords = "聽|摸|檢查;心跳|心尖脈|聽診器;不會痛|一下子|一下下|放心|不用怕|示範";
 
     public void SelectA()
@@ -283,6 +291,9 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         StartRespirationTimer();
         yield return WaitForSecondsOrSkip(Mathf.Max(60f, observationDelay));
         HideRespirationTimer();
+        // The nursery rhyme is for the one minute of counting breaths only.
+        if (stopRhymeWhenTimerEnds)
+            NurseryRhymeMusicController.Stop();
 
         ShowNursePrompt(HeartbeatPrompt, WaitingForNurseAction.HeartbeatExplanation);
         momAnimation?.PlayStandingIdle();
@@ -340,8 +351,9 @@ public class PediatricVitalSignsPart2Flow : MonoBehaviour
         // Same presentation as the heartbeat effect: world-space, centered under the prompt panel.
         respirationTimer.displayMode = MinimalRingTimer.DisplayMode.WorldSpace;
         respirationTimer.useHeartbeatLayout = true;
-        respirationTimer.heartbeatLayoutDiameter = 0.22f;
-        respirationTimer.heartbeatLayoutOffset = new Vector3(0f, -0.085f, 0.95f);
+        respirationTimer.heartbeatLayoutDiameter = Mathf.Max(0.03f, breathingTimerDiameter);
+        respirationTimer.heartbeatLayoutOffset = breathingTimerOffset;
+        respirationTimer.stopwatchStyle = breathingTimerStopwatch;
         respirationTimer.showRingCaps = false;
         respirationTimer.corner = MinimalRingTimer.Corner.TopLeft;
         respirationTimer.worldDiameter = 0.10f;
