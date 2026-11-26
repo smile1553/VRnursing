@@ -19,6 +19,8 @@ public class ExperimentSessionClient : MonoBehaviour
     public bool StartupBlocked { get; private set; }
     [Tooltip("Seconds to keep retrying an earlier unsent result at start before setting it aside.")]
     [SerializeField] float pendingUploadWaitSeconds = 15f;
+    [Tooltip("Seconds to wait for the Backend address at start before the login says it cannot connect (it keeps looking after that).")]
+    [SerializeField] float waitForBackendSeconds = 30f;
 
     public event Action<string> StatusChanged;
     public event Action<string> SessionChanged;
@@ -31,10 +33,24 @@ public class ExperimentSessionClient : MonoBehaviour
 
     IEnumerator Start()
     {
-        // RunAI_Network resolves its URL asynchronously in Start().
-        float deadline = Time.realtimeSinceStartup + 5f;
-        while (string.IsNullOrWhiteSpace(ResolveBaseUrl()) && Time.realtimeSinceStartup < deadline)
+        // RunAI_Network resolves its URL asynchronously in Start(). Checking an old cached
+        // address and then searching the network can take longer than a few seconds (for
+        // example after the computer's IP changed), so keep waiting. After the wait time the
+        // login says it cannot reach the Backend, but if the Backend is found later the
+        // startup still goes on by itself.
+        float deadline = Time.realtimeSinceStartup + Mathf.Max(5f, waitForBackendSeconds);
+        bool waitedTooLong = false;
+        while (string.IsNullOrWhiteSpace(ResolveBaseUrl()))
+        {
+            if (!waitedTooLong && Time.realtimeSinceStartup >= deadline)
+            {
+                waitedTooLong = true;
+                StartupBlocked = true;
+                SetStatus("Backend not found yet; still looking.");
+            }
             yield return null;
+        }
+        StartupBlocked = false;
 
         string resolvedUrl = ResolveBaseUrl();
         if (!ValidateBaseUrl(resolvedUrl, null))

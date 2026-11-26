@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 // Computer version only (Windows / Mac, no headset). Quest and headset play are NOT touched.
 //
@@ -33,6 +34,10 @@ public class PcHudLayout : MonoBehaviour
         public float widen = 1f;
         [Tooltip("On: moved to Screen Point. Off: stays where the story puts it, only made bigger (quiz, cards, end screen).")]
         public bool moveToScreenPoint = true;
+        [Tooltip("Centre left-right by the biggest panel only (not by text or tags sticking out), so the box itself sits in the middle.")]
+        public bool alignByMainPanel = true;
+        [Tooltip("Extra shift after placing (screen fraction, + = right / up).")]
+        public Vector2 nudge;
         public bool enabled = true;
     }
 
@@ -48,10 +53,14 @@ public class PcHudLayout : MonoBehaviour
     [Range(0.2f, 0.9f)] public float timerBarWidth = 0.42f;
     [Tooltip("Space kept free at the screen edges (screen fraction).")]
     public float edgeMargin = 0.02f;
+    [Tooltip("A moved box is never wider than this part of the screen; if it would be, it is made narrower (then smaller) so nothing is cut off.")]
+    [Range(0.5f, 1f)] public float maxBoxWidth = 0.94f;
+    [Tooltip("Text in moved boxes wraps onto more lines and shrinks a little if needed, so it stays inside its box.")]
+    public bool keepTextInsideBox = true;
 
     public List<Item> items = new List<Item>
     {
-        new Item { label = "提示框", nameContains = "Instruction_Canvas", screenPoint = new Vector2(0.5f, 0.97f), itemPivot = new Vector2(0.5f, 1f), scale = 1f, widen = 1.6f },
+        new Item { label = "提示框", nameContains = "Instruction_Canvas", screenPoint = new Vector2(0.5f, 0.92f), itemPivot = new Vector2(0.5f, 1f), scale = 1f, widen = 1.6f },
         new Item { label = "對話框", nameContains = "Dialogue_Canva", screenPoint = new Vector2(0.5f, 0.03f), itemPivot = new Vector2(0.5f, 0f), scale = 1f, widen = 1.5f },
         new Item { label = "病歷表按鈕", nameContains = "MedicalRecord_HUD_Canvas", screenPoint = new Vector2(0.02f, 0.70f), itemPivot = new Vector2(0f, 1f), scale = 1.1f },
         new Item { label = "情緒條", nameContains = "EmotionMeter_Canvas", screenPoint = new Vector2(0.98f, 0.70f), itemPivot = new Vector2(1f, 1f), scale = 0.85f },
@@ -111,6 +120,13 @@ public class PcHudLayout : MonoBehaviour
 
         float tanV = Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
         float tanH = tanV * cam.aspect;
+        if (Screen.width != lastScreenW || Screen.height != lastScreenH)
+        {
+            lastScreenW = Screen.width;
+            lastScreenH = Screen.height;
+            fitWiden.Clear();   // window size changed: fit again from the set values
+            fitScale.Clear();
+        }
         Transform taskBox = null;
         foreach (Item item in items)
         {
@@ -124,8 +140,13 @@ public class PcHudLayout : MonoBehaviour
                         Resize(t, item.scale);   // no hudScale: these are already big
                         continue;
                     }
-                    Resize(t, item.scale * hudScale);
-                    Widen(t, item.widen);
+                    float widenNow = fitWiden.TryGetValue(t, out float fw) ? fw : item.widen;
+                    float scaleFit = fitScale.TryGetValue(t, out float fs) ? fs : 1f;
+                    Resize(t, item.scale * hudScale * scaleFit);
+                    Widen(t, widenNow);
+                    FitToScreenWidth(cam.transform, t, widenNow, scaleFit, tanH);
+                    if (keepTextInsideBox)
+                        KeepTextInside(t);
                     Place(cam.transform, t, item, tanH, tanV);
                     if (taskBox == null && item.nameContains == "Instruction_Canvas")
                         taskBox = t;
@@ -363,6 +384,63 @@ public class PcHudLayout : MonoBehaviour
         return local.z > 0.3f && local.z < 2f && Mathf.Abs(local.x) < local.z && Mathf.Abs(local.y) < local.z;
     }
 
+    // Too wide for the screen (long task text, small window): first take back some of the
+    // extra width, and only if that is not enough make the whole box smaller. Next frame uses
+    // the new values, so it settles at once and does not keep shrinking.
+    readonly Dictionary<Transform, float> fitWiden = new Dictionary<Transform, float>();
+    readonly Dictionary<Transform, float> fitScale = new Dictionary<Transform, float>();
+    int lastScreenW, lastScreenH;
+
+    void FitToScreenWidth(Transform cam, Transform t, float widenNow, float scaleFit, float tanH)
+    {
+        if (!TryGetMainPanelViewRect(cam, t, out Rect panel) || tanH <= 0f)
+            return;
+        float part = panel.width / (2f * tanH);
+        float limit = Mathf.Clamp(maxBoxWidth, 0.5f, 1f);
+        if (part <= limit + 0.002f)
+            return;
+        float need = limit / part;
+        if (widenNow * need >= 1f)
+        {
+            fitWiden[t] = widenNow * need;
+        }
+        else
+        {
+            float rest = need * Mathf.Max(1f, widenNow);
+            fitWiden[t] = 1f;
+            fitScale[t] = Mathf.Max(0.3f, scaleFit * rest);
+        }
+    }
+
+    // Text wraps instead of running past the edge, and shrinks (to 60% at most) if the lines
+    // do not fit in the box height.
+    readonly Dictionary<TMP_Text, float> baseFontSize = new Dictionary<TMP_Text, float>();
+
+    void KeepTextInside(Transform t)
+    {
+        foreach (TMP_Text text in t.GetComponentsInChildren<TMP_Text>(false))
+        {
+            if (text == null)
+                continue;
+            if (!baseFontSize.TryGetValue(text, out float size))
+            {
+                size = text.enableAutoSizing ? text.fontSizeMax : text.fontSize;
+                baseFontSize[text] = size;
+            }
+            if (!text.enableWordWrapping)
+                text.enableWordWrapping = true;
+            if (text.overflowMode != TextOverflowModes.Overflow && text.overflowMode != TextOverflowModes.Truncate
+                && text.overflowMode != TextOverflowModes.Ellipsis)
+                continue;
+            if (!text.enableAutoSizing || Mathf.Abs(text.fontSizeMax - size) > 0.01f)
+            {
+                text.enableAutoSizing = true;
+                text.fontSizeMax = size;
+                text.fontSizeMin = size * 0.6f;
+            }
+        }
+    }
+
     // Wider box: the canvas and every wide piece inside it (panel, text) get wider, the scale
     // stays the same, so the letters keep their size and the text uses longer lines.
     readonly Dictionary<RectTransform, float> baseWidth = new Dictionary<RectTransform, float>();
@@ -428,6 +506,10 @@ public class PcHudLayout : MonoBehaviour
         float targetX = (u * 2f - 1f) * tanH;
         float targetY = (v * 2f - 1f) * tanV;
         float nowX = Mathf.Lerp(r.xMin, r.xMax, item.itemPivot.x);
+        if (item.alignByMainPanel && TryGetMainPanelViewRect(cam, t, out Rect panel))
+            nowX = Mathf.Lerp(panel.xMin, panel.xMax, item.itemPivot.x);
+        targetX += item.nudge.x * 2f * tanH;
+        targetY += item.nudge.y * 2f * tanV;
         float nowY = Mathf.Lerp(r.yMin, r.yMax, item.itemPivot.y);
 
         float depth = cam.InverseTransformPoint(t.position).z;
@@ -436,6 +518,37 @@ public class PcHudLayout : MonoBehaviour
         Vector3 shift = cam.right * ((targetX - nowX) * depth) + cam.up * ((targetY - nowY) * depth);
         if (shift.sqrMagnitude > 1e-8f)
             t.position += shift;
+    }
+
+    // The biggest visible image (the box background), in view units.
+    bool TryGetMainPanelViewRect(Transform cam, Transform root, out Rect rect)
+    {
+        rect = default;
+        float best = 0f;
+        foreach (Image img in root.GetComponentsInChildren<Image>(false))
+        {
+            if (img == null || !img.enabled || img.color.a < 0.02f)
+                continue;
+            img.rectTransform.GetWorldCorners(corners);
+            float xMin = float.MaxValue, xMax = float.MinValue, yMin = float.MaxValue, yMax = float.MinValue;
+            bool ok = true;
+            foreach (Vector3 c in corners)
+            {
+                Vector3 p = cam.InverseTransformPoint(c);
+                if (p.z < 0.05f) { ok = false; break; }
+                xMin = Mathf.Min(xMin, p.x / p.z);
+                xMax = Mathf.Max(xMax, p.x / p.z);
+                yMin = Mathf.Min(yMin, p.y / p.z);
+                yMax = Mathf.Max(yMax, p.y / p.z);
+            }
+            float area = (xMax - xMin) * (yMax - yMin);
+            if (ok && area > best)
+            {
+                best = area;
+                rect = Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+            }
+        }
+        return best > 1e-6f;
     }
 
     // The box around everything that is drawn (images and text), in view units (x / z, y / z).
