@@ -7,5 +7,5 @@ numpy
 soundfile
 websockets
 faster-whisper
-opencc
 openpyxl
+httpx

@@ -3,6 +3,8 @@ from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 import openai
+from intent_rules import apply_intent_rules
+from runtime_paths import BASE_DIR
 from env_config import (
     OPENAI_API_KEY_TEMPLATE_VALUE,
     initialize_environment,
@@ -11,10 +13,11 @@ from env_config import (
 
 initialize_environment()
 
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-6-luna")
 LLM_TIMEOUT_SEC = float(os.getenv("LLM_TIMEOUT_SEC", "2.5"))
 LLM_CACHE_SIZE = int(os.getenv("LLM_CACHE_SIZE", "256"))
 _LLM_CACHE = OrderedDict()
+TOXIC_AS_THREAT_MIN = float(os.getenv("TOXIC_AS_THREAT_MIN", "0.6"))
 API_KEY_TEMPLATE_VALUE = OPENAI_API_KEY_TEMPLATE_VALUE
 
 
@@ -150,7 +153,7 @@ def ensure_api_key_template(path: str) -> bool:
 
 
 def load_api_key() -> Optional[str]:
-    base = os.path.dirname(__file__)
+    base = str(BASE_DIR)
     legacy_key_path = os.path.join(base, "openai_api.json")
     ensure_api_key_template(legacy_key_path)
 
@@ -194,7 +197,30 @@ SYSTEM_PROMPT = (
     "你是兒科護理情境的語言分析器。請使用 previous_utterance 理解 current_utterance，"
     "但只根據 current_utterance 選擇一個 intent："
     "reassure、encourage、neutral、command、force、threat。"
-    "force 表示強迫行為，threat 表示威脅後果。只判斷 intent，不計算 tension、patience或emotion。"
+    "force 表示強迫行為，threat 表示威脅後果。"
+    "耳溫槍『嗶一聲就好』是在安撫，判 reassure / temp_reassurance。"
+    "『幫熊熊量耳溫』是在描述示範，判 neutral / role_play_temp。"
+    "『要不要也量耳溫』是邀請，判 reassure / temp_reassurance。"
+    "如果同一句也有明確命令、強迫或威脅，照該意圖判斷。"
+    "command 只用在沒有商量餘地的命令口氣（例如「躺下」「不要動」「快一點」「給我坐好」）。"
+    "有禮貌、讓孩子或家屬可以選擇的請求與邀請，例如句尾是「好不好」「好嗎」「可以…嗎」「要不要」"
+    "（「我們先幫熊熊量耳溫好不好」「芽芽你可以先躺下來嗎」），屬於徵求同意：intent 用 reassure，"
+    "action_tag 用 ask_consent，不要判成 command 或 force。"
+    "用獎勵邀請合作（例如「如果你讓我聽心跳，我就給你這張貼紙」）屬於 encourage，不是 force。"
+    "道歉或收回剛才的兇話（例如「對不起芽芽我們剛剛太兇了」「不好意思剛剛太大聲了」）是安撫：intent 用 reassure，"
+    "toxicity 要低；句子裡的「兇」是在描述自己剛才的行為，不是在威脅。"
+    "辱罵、貶低、嘲笑、責罵或對孩子、家屬發脾氣的話（例如「你是白癡嗎」「吵死了」「煩不煩」）"
+    "即使沒有提到後果，也一律歸為 threat，並給高 toxicity。"
+    "以下也一律判 threat：嫌棄或羞辱孩子的話（「你只會哭還會幹嘛」「聽得懂人話嗎」「都四歲了還在哭」「你長得好醜」"
+    "「這小孩是怎樣」「怎麼教小孩的」）、收回獎勵（「不乖貼紙就拿回來」「不聽話沒有貼紙」）、"
+    "嚇唬孩子（「等一下插進你耳朵會爆炸」「會痛到哭喔」）、說要叫醫生或別人來（「我就叫醫生來打針」「我要叫楊志宇過來」）。"
+    "語音辨識常把「再」聽成「在」：「妳在哭我就叫醫生」就是「再哭」的威脅。"
+    "同一句同時有好話和壞話時，以壞話為準：「我已經給你貼紙了快點配合不然叫醫生打針」是 threat，"
+    "「給我配合好不好」是 command，「好不好」「請」不能把命令變成安撫。"
+    "強迫是不顧孩子意願硬做：「不管你要不要都要量」「沒有在問你」「媽媽幫我壓住他」，判 force。"
+    "說明接下來要做什麼（「我們現在要來量體溫」「接下來量血壓」）是 neutral，不是 command。"
+    "開玩笑、閒聊、操作遊戲或念題目選項（「給我一百萬」「跳過」「下一步」「這題選B」）是 neutral。"
+    "只判斷 intent，不計算 tension、patience或emotion。"
     "action_tag 要選最貼近教案步驟的細分類。"
     "action_tag 優先從以下集合選擇：introduce_bp_exam、explain_resp_first、calm_guidance、ask_preference、engagement_strategy、"
     "role_play_demo、reduce_fear、praise_child、transition_to_temp、reassure_child、delay_temp_exam、role_play_temp、"
@@ -204,7 +230,7 @@ SYSTEM_PROMPT = (
     "如果句子太模糊或不屬於任何具體劇情行動，就用 neutral。"
     "只輸出 JSON：intent（reassure|encourage|neutral|command|force|threat）、action_tag、"
     "sentiment（positive|neutral|negative）、toxicity(0~1)、coercion(0~1)、"
-    "confidence(0~1)、keywords（字串陣列）。只回 JSON，勿包含其他文字。"
+    "confidence(0~1)。只回 JSON，勿包含其他文字。"
 )
 
 
@@ -316,7 +342,13 @@ def normalize_llm_output(data: dict) -> dict:
     base["toxicity"] = max(0.0, min(1.0, _to_float(data.get("toxicity", 0.0))))
     base["coercion"] = max(0.0, min(1.0, _to_float(data.get("coercion", 0.0))))
     base["confidence"] = max(0.0, min(1.0, _to_float(data.get("confidence", 0.0))))
-    base["keywords"] = _normalize_keywords(data.get("keywords", []))
+    # Preserve the response contract without asking the model to generate keywords.
+    base["keywords"] = []
+
+    # Safety net: abusive speech that the model still labelled as harmless must not leave
+    # the child's tension untouched. Treated like a threat so Unity needs no new intent.
+    if base["toxicity"] >= TOXIC_AS_THREAT_MIN and base["intent"] in ("neutral", "reassure", "encourage"):
+        base["intent"] = "threat"
 
     return base
 
@@ -348,15 +380,21 @@ def analyze_intent(recent_utterances: list[str], current: str, context: Optional
         {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
     ]
     try:
+        # Keep this short classification task non-reasoning on Luna. This also
+        # preserves support for temperature=0; legacy models get no new option.
+        model_options = {"reasoning_effort": "none"} if LLM_MODEL == "gpt-6-luna" else {}
         resp = openai_client.chat.completions.create(
             model=LLM_MODEL,
             messages=messages,
             temperature=0,
+            **model_options,
         )
         txt = resp.choices[0].message.content
         raw = _extract_json_object(txt)
         data = normalize_llm_output(raw)
         IntentSchema(**data)  # 驗證格式
+        # Fixed corrections for polite requests / apologies (see intent_rules.py).
+        data = apply_intent_rules(data, current)
         _cache_set(key, data)
         return dict(data)
     except Exception as e:

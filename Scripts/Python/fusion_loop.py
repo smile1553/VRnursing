@@ -3,11 +3,6 @@ import os
 import re
 from difflib import SequenceMatcher
 
-try:
-    from opencc import OpenCC
-    _OPENCC = OpenCC("s2t")
-except Exception:
-    _OPENCC = None
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
@@ -74,7 +69,141 @@ DOMAIN_CANONICAL_PHRASES = [
 ]
 
 # Common ASR mistakes in this scenario (can keep expanding from transcripts).
+# Order matters: longer / more specific entries first (e.g. "鴨脈帶" before "鴨").
 ASR_REPLACEMENTS = {
+    # --- 壓脈帶 / 血壓 -------------------------------------------------------------
+    "鴨脈帶": "壓脈帶",
+    "壓麥帶": "壓脈帶",
+    "壓賣帶": "壓脈帶",
+    "壓脈代": "壓脈帶",
+    "壓脈袋": "壓脈帶",
+    "壓脈戴": "壓脈帶",
+    "壓脈待": "壓脈帶",
+    "鴨賣帶": "壓脈帶",
+    "血鴨": "血壓",
+    "血押": "血壓",
+    "雪壓": "血壓",
+    "學壓": "血壓",
+    "血壓雞": "血壓計",
+    "血壓機": "血壓計",
+    "血壓記": "血壓計",
+    # --- 芽芽 -----------------------------------------------------------------------
+    "養養": "芽芽",
+    "亞亞": "芽芽",
+    "呀呀": "芽芽",
+    "涯涯": "芽芽",
+    "啞啞": "芽芽",
+    "椏椏": "芽芽",
+    "芽牙": "芽芽",
+    "牙芽": "芽芽",
+    "雅亞": "芽芽",
+    "亞雅": "芽芽",
+    # --- 媽媽 / 小熊 ----------------------------------------------------------------
+    "麻麻": "媽媽",
+    "嗎嗎": "媽媽",
+    "馬麻": "媽媽",
+    "媽麻": "媽媽",
+    "馬媽": "媽媽",
+    "小雄": "小熊",
+    "小兄": "小熊",
+    "曉熊": "小熊",
+    "雄雄": "熊熊",
+    # --- 護理師 / 護生 --------------------------------------------------------------
+    "我喫她的": "我是她的",
+    "我喫他的": "我是他的",
+    "我喫": "我是",
+    "護理施": "護理師",
+    "護理獅": "護理師",
+    "護理詩": "護理師",
+    "護裡師": "護理師",
+    "戶理師": "護理師",
+    "互理師": "護理師",
+    "戶生": "護生",
+    "互生": "護生",
+    "護聲": "護生",
+    "護升": "護生",
+    # --- 生命徵象 --------------------------------------------------------------------
+    "生命跡象": "生命徵象",
+    "生命徵相": "生命徵象",
+    "生命正向": "生命徵象",
+    "生命真相": "生命徵象",
+    "生命症象": "生命徵象",
+    "生命徵像": "生命徵象",
+    # --- 聽診器 / 心跳 / 呼吸 -------------------------------------------------------
+    "聽枕器": "聽診器",
+    "聽診氣": "聽診器",
+    "聽診汽": "聽診器",
+    "聽症器": "聽診器",
+    "聽真器": "聽診器",
+    "廳診器": "聽診器",
+    "聽診棄": "聽診器",
+    "新跳": "心跳",
+    "心挑": "心跳",
+    "星跳": "心跳",
+    "噗通": "撲通",
+    "撲咚": "撲通",
+    "噗咚": "撲通",
+    "呼西": "呼吸",
+    "呼希": "呼吸",
+    "忽吸": "呼吸",
+    "乎吸": "呼吸",
+    "起服": "起伏",
+    "起福": "起伏",
+    "起府": "起伏",
+    "氣伏": "起伏",
+    "關查": "觀察",
+    "觀查": "觀察",
+    "官察": "觀察",
+    # --- 體溫 / 耳溫 ----------------------------------------------------------------
+    "耳聞槍": "耳溫槍",
+    "耳文槍": "耳溫槍",
+    "二溫槍": "耳溫槍",
+    "爾溫槍": "耳溫槍",
+    "耳溫搶": "耳溫槍",
+    "耳溫腔": "耳溫槍",
+    "二溫": "耳溫",
+    "爾溫": "耳溫",
+    "體文": "體溫",
+    "體聞": "體溫",
+    "題溫": "體溫",
+    "提溫": "體溫",
+    "替溫": "體溫",
+    "耳多": "耳朵",
+    "耳躲": "耳朵",
+    "發騷": "發燒",
+    "發稍": "發燒",
+    # --- 安撫與鼓勵常用語 -----------------------------------------------------------
+    "會不會通": "會不會痛",
+    "不會通": "不會痛",
+    "不會同": "不會痛",
+    "不會統": "不會痛",
+    "不回痛": "不會痛",
+    "打真": "打針",
+    "打珍": "打針",
+    "打蒸": "打針",
+    "永敢": "勇敢",
+    "擁敢": "勇敢",
+    "勇趕": "勇敢",
+    "用敢": "勇敢",
+    "好磅": "好棒",
+    "好傍": "好棒",
+    "很磅": "很棒",
+    "鐵紙": "貼紙",
+    "貼指": "貼紙",
+    "帖紙": "貼紙",
+    "貼只": "貼紙",
+    "哈摟": "哈囉",
+    "哈嘍": "哈囉",
+    "哈羅": "哈囉",
+    # --- 向媽媽說明 -------------------------------------------------------------------
+    "脫稅": "脫水",
+    "托水": "脫水",
+    "食玉": "食慾",
+    "食遇": "食慾",
+    "食育": "食慾",
+    "衛口": "胃口",
+    "味口": "胃口",
+    # --- earlier entries -----------------------------------------------------------
     "雅瑤": "芽芽",
     "馬小也": "芽芽",
     "馬小芽": "芽芽",
@@ -104,6 +233,20 @@ ASR_REPLACEMENTS = {
     "心條": "心跳",
 }
 
+# "量" (to measure) is often heard as a same-sounding word. Only corrected right before
+# something that is measured, so ordinary uses of those words are left alone.
+MEASURE_FIX_RE = re.compile(
+    r"[養亮良兩倆諒輛](?=(?:一下|完)?(?:體溫|耳溫|血壓|呼吸|心跳|脈搏|心尖脈|生命徵象))"
+)
+
+EAR_TEMPERATURE_STEPS = {"part4", "part5", "part6"}
+THERMOMETER_BEEP_MISHEARD = re.compile(
+    r"((?:芽芽)?(?:耳溫槍|(?:幫(?:你|妳|芽芽|熊熊|小熊))?量(?:一下)?耳溫)?)"
+    r"(?:逼(?:逼)?一下(?:下)?|逼一聲|必一聲|嗶一身)"
+    r"((?:就好(?:了)?)?[喔哦囉]?)"
+)
+EAR_TEMP_INVITATION_MISHEARD = re.compile(r"(要不要也)[兩量]耳光([呢呀喔]?)")
+
 SPACE_NORMALIZE_RE = re.compile(r"\s+")
 PUNCT_NORMALIZE_RE = re.compile(r"[、,.!?！？；;]+")
 
@@ -124,7 +267,7 @@ def contains_domain_tokens(text: str) -> bool:
     return any(tok in text for tok in DOMAIN_HINT_TOKENS)
 
 
-def sanitize_transcript(text: str) -> str:
+def sanitize_transcript(text: str, *, scenario_step_id: str = "", previous_text: str = "") -> str:
     raw = (text or "").strip()
     if not raw:
         return ""
@@ -133,11 +276,21 @@ def sanitize_transcript(text: str) -> str:
     cleaned = PUNCT_NORMALIZE_RE.sub(" ", cleaned)
     cleaned = SPACE_NORMALIZE_RE.sub(" ", cleaned).strip()
 
-    if _OPENCC is not None:
-        cleaned = _OPENCC.convert(cleaned)
-
     for wrong, right in ASR_REPLACEMENTS.items():
         cleaned = cleaned.replace(wrong, right)
+    cleaned = MEASURE_FIX_RE.sub("量", cleaned)
+
+    if scenario_step_id in EAR_TEMPERATURE_STEPS:
+        phrase = re.sub(r"[\s，。！？、]+", "", cleaned)
+        beep = THERMOMETER_BEEP_MISHEARD.fullmatch(phrase)
+        if beep:
+            cleaned = f"{beep[1]}嗶一聲{beep[2]}"
+        elif "耳溫" in previous_text:
+            # This ambiguous phrase can also be a threat. Require the exact
+            # invitation and preceding ear-temperature context before editing it.
+            invitation = EAR_TEMP_INVITATION_MISHEARD.fullmatch(phrase)
+            if invitation:
+                cleaned = f"{invitation[1]}量耳溫{invitation[2]}"
 
     cleaned = maybe_snap_to_canonical_phrase(cleaned)
 
@@ -162,6 +315,8 @@ def maybe_snap_to_canonical_phrase(text: str) -> str:
     best_score = 0.0
     for phrase in DOMAIN_CANONICAL_PHRASES:
         phrase_compact = phrase.replace(" ", "")
+        if "耳溫" in compact and "耳溫" not in phrase_compact:
+            continue
         if abs(len(phrase_compact) - len(compact)) > 4:
             continue
         score = SequenceMatcher(None, compact, phrase_compact).ratio()

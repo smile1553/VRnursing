@@ -1,5 +1,6 @@
 # server_fusion.py
-import asyncio, json, time, io, os, tempfile, subprocess
+import asyncio, json, re, time, io, os, tempfile, subprocess
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 import numpy as np
@@ -7,12 +8,13 @@ import soundfile as sf
 import httpx
 from typing import Dict, Any, List, Tuple, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
-from fastapi.responses import JSONResponse, Response, FileResponse
+from fastapi.responses import JSONResponse, Response, FileResponse, RedirectResponse
 from discovery import DiscoveryService
 import uvicorn
 from collections import OrderedDict, deque
 from deepgram_streaming import DeepgramStreamingError, DeepgramStreamingSession, DeepgramTranscriptResult
 from env_config import (
+    DEFAULT_DEEPGRAM_LANGUAGE,
     DEEPGRAM_API_KEY_TEMPLATE_VALUE,
     read_api_key,
 )
@@ -40,9 +42,20 @@ from excel_result_service import (
     SessionNotFoundError,
     StorageBusyError,
 )
-from result_models import StudentResultSubmission, StudentRunStart, isoformat_seconds
+from result_models import StudentResultSubmission, StudentRunStart, clean_result_items, clean_result_steps, isoformat_seconds
+from result_uploader import ResultUploader
+from runtime_paths import BASE_DIR
 
-OUT_DIR = Path(__file__).resolve().parent / "out"
+def local_timestamp() -> str:
+    """Now, in this computer's own time zone, e.g. 2026-10-05T00:12:03+08:00.
+
+    Sentence times used to be written in UTC (ending in Z), 8 hours behind the login time
+    shown next to them in Taiwan.
+    """
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+OUT_DIR = BASE_DIR / "out"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 TRANSCRIPT_PATH = OUT_DIR / "transcripts.jsonl"
 SESSION_AUDIO_DIR = OUT_DIR / "session_audio"
@@ -51,6 +64,7 @@ SESSION_REPORT_DIR = OUT_DIR / "session_reports"
 SESSION_REPORT_DIR.mkdir(parents=True, exist_ok=True)
 STUDENT_RESULT_DIR = OUT_DIR / "student_results"
 student_result_service = ExcelResultService(STUDENT_RESULT_DIR)
+result_uploader = ResultUploader(STUDENT_RESULT_DIR)
 ENERGY_GATE_RMS = float(os.getenv("ENERGY_GATE_RMS", "0.003"))
 ASR_WARMUP_ON_START = os.getenv("ASR_WARMUP_ON_START", "0").strip() in {"1", "true", "True", "yes", "on"}
 TTS_RATE = int(os.getenv("TTS_RATE", "185"))
@@ -273,7 +287,11 @@ def _run_text_pipeline(
     context: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, Any], float]:
     raw_text = (input_text or "").strip()
-    text = sanitize_transcript(raw_text)
+    text = sanitize_transcript(
+        raw_text,
+        scenario_step_id=(context or {}).get("current_step_id", ""),
+        previous_text=history[-1] if history else "",
+    )
 
     if text:
         llm, llm_window_text = analyze_semantics(text, history, context=context)
@@ -380,7 +398,7 @@ async def analyze_transcript_for_unity(
             fusion_session._history.append(text)
 
     fusion_res = dict(fusion_res)
-    fusion_res["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    fusion_res["ts"] = local_timestamp()
     fusion_res["source"] = "student_speech"
     fusion_res["previousKidEmotionState"] = previous_kid_emotion_state
     fusion_res["stage"] = _tension_to_stage(fusion_res.get("tension", 0.0))
@@ -432,7 +450,7 @@ def reset_transcripts_file() -> None:
 
 def append_transcript_entry(data: Dict[str, Any]) -> None:
     entry = {
-        "ts": data.get("ts") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "ts": data.get("ts") or local_timestamp(),
         "text": data.get("text", ""),
         "raw_text": data.get("raw_text", ""),
         "emotion": data.get("emotion", ""),
@@ -467,15 +485,24 @@ def append_current_student_transcript(data: Dict[str, Any]) -> None:
     text = str(data.get("text") or "").strip()
     if not context or not text:
         return
+    semantic = data.get("semantic_analysis") or data.get("llm") or {}
     try:
         student_result_service.append_student_transcript(
             context["sessionId"],
             student_run_id,
             context["studentId"],
-            str(data.get("ts") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+            str(data.get("ts") or local_timestamp()),
             str(data.get("scenarioStepId") or ""),
             str(data.get("utteranceId") or ""),
             text,
+            {
+                "intent": semantic.get("intent"),
+                "toxicity": semantic.get("toxicity"),
+                "coercion": semantic.get("coercion"),
+                "tension": data.get("tension"),
+                "kidEmotionState": data.get("kidEmotionState"),
+                "previousKidEmotionState": data.get("previousKidEmotionState"),
+            },
         )
     except ResultServiceError as error:
         # Emotion was already calculated; do not turn a transcript I/O problem into
@@ -532,6 +559,11 @@ async def create_experiment_session():
         }
     except ResultServiceError as error:
         return result_service_error_response(error)
+
+
+@app.get("/api/uploads/status")
+async def get_upload_status():
+    return await asyncio.to_thread(result_uploader.status)
 
 
 @app.get("/api/sessions/current")
@@ -602,11 +634,17 @@ async def submit_student_result(
             isoformat_seconds(payload.loginTime),
             payload.correctCount,
             payload.toneScore,
+            payload.questionScore,
+            clean_result_items(payload.items) or None,
+            clean_result_steps(payload.steps) or None,
+            on_json_saved=result_uploader.enqueue_file,
         )
         print(
             "[student_results] "
             f"session={session_id} result={result_id} duplicate={result['duplicate']} "
-            f"total={result['totalScore']}"
+            f"student={payload.studentId} received: correctCount={payload.correctCount} "
+            f"toneScore={payload.toneScore} questionScore={payload.questionScore} "
+            f"-> question={result['questionScore']} total={result['totalScore']}"
         )
         return result
     except ResultServiceError as error:
@@ -666,6 +704,27 @@ def synthesize_tts_wav(text: str, speaker: str = "") -> bytes:
         raise ValueError("text is required")
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        if os.name == "nt":
+            wav_path = Path(tmpdir) / "tts.wav"
+            child_env = os.environ.copy()
+            child_env.update(NURSE_TTS_TEXT=content, NURSE_TTS_PATH=str(wav_path),
+                             NURSE_TTS_VOICE=resolve_tts_voice(speaker),
+                             NURSE_TTS_RATE=str(max(-10, min(10, round((TTS_RATE - 185) / 20)))))
+            script = (
+                "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Speech; "
+                "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+                "try { if ($env:NURSE_TTS_VOICE) { $s.SelectVoice($env:NURSE_TTS_VOICE) }; "
+                "$s.Rate=[int]$env:NURSE_TTS_RATE; "
+                "$s.SetOutputToWaveFile($env:NURSE_TTS_PATH); "
+                "$s.Speak($env:NURSE_TTS_TEXT) } finally { $s.Dispose() }"
+            )
+            try:
+                subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                               env=child_env, check=True, capture_output=True, timeout=60,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            except (OSError, subprocess.SubprocessError) as error:
+                raise RuntimeError("Windows speech synthesis failed; check installed speech voices") from error
+            return wav_path.read_bytes()
         aiff_path = Path(tmpdir) / "tts.aiff"
         cmd = ["say", "-r", str(TTS_RATE), "-o", str(aiff_path)]
         voice = resolve_tts_voice(speaker)
@@ -715,9 +774,10 @@ async def transcribe_with_deepgram(wav: np.ndarray, sample_rate: int) -> Deepgra
     if not deepgram_api_key:
         raise DeepgramStreamingError("DEEPGRAM_API_KEY is missing")
 
+    language = os.getenv("DEEPGRAM_LANGUAGE", DEFAULT_DEEPGRAM_LANGUAGE).strip()
     params: List[Tuple[str, str]] = [
         ("model", os.getenv("DEEPGRAM_MODEL", "nova-3").strip()),
-        ("language", os.getenv("DEEPGRAM_LANGUAGE", "zh").strip()),
+        ("language", language),
         ("punctuate", "true"),
         ("smart_format", "false"),
     ]
@@ -745,7 +805,7 @@ async def transcribe_with_deepgram(wav: np.ndarray, sample_rate: int) -> Deepgra
         metadata = payload.get("metadata") or {}
         detected_language = best.get("detected_language") or best.get("language") or ""
         if not detected_language:
-            detected_language = os.getenv("DEEPGRAM_LANGUAGE", "zh").strip()
+            detected_language = language
 
         return DeepgramTranscriptResult(
             text=(best.get("transcript") or "").strip(),
@@ -781,12 +841,16 @@ async def upload_audio(request: Request):
         if missing:
             raise HTTPException(status_code=400, detail=f"missing required header(s): {', '.join(missing)}")
 
+        body_started = time.perf_counter()
         raw = await request.body()
+        body_read_ms = round((time.perf_counter() - body_started) * 1000.0, 1)
         if not raw:
             raise HTTPException(status_code=400, detail="empty request body")
 
         cache_key = (student_run_id, request_id)
         timings = {
+            # Time spent receiving the WAV from the headset (slow Wi-Fi shows up here).
+            "bodyReadMs": body_read_ms,
             "queueWaitMs": 0.0,
             "decodeMs": 0.0,
             "recordingWriteMs": 0.0,
@@ -932,7 +996,10 @@ async def upload_audio(request: Request):
                 "utteranceId": request_id,
                 "scenarioStepId": scenario_step_id,
                 "studentRunId": student_run_id,
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "ts": local_timestamp(),
+                # Kept with each sentence for the feedback report's emotion curve.
+                "tension": tension,
+                "kidEmotionState": kid_state,
             })
             if not analysis_published:
                 latest.update(fusion_res)
@@ -950,6 +1017,8 @@ async def upload_audio(request: Request):
                 1,
             )
             cache_audio_result(cache_key, response)
+            # Whatever the phases above do not explain (so a slow step can never hide).
+            timings["otherMs"] = round(response["processingMs"] - sum(timings.values()), 1)
             print("[fusion]", json.dumps({
                 "requestId": request_id,
                 "text": response["text"],
@@ -994,7 +1063,7 @@ async def upload_text(request: Request):
                 fusion_session._history.append(text)
 
         fusion_res = dict(fusion_res)
-        fusion_res["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        fusion_res["ts"] = local_timestamp()
         latest.update(fusion_res)
         append_transcript_entry(fusion_res)
 
@@ -1111,6 +1180,45 @@ def get_session_report(session_id: str):
     return FileResponse(str(path), media_type="application/json", filename=path.name)
 
 
+# Feedback reports (written by ExcelResultService when a result is submitted).
+#   /reports                 overview of the most recent day that has results
+#   /reports/2026-10-04      overview of that day
+#   /reports/2026-10-04/x    one student's report
+REPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+REPORT_FILE_RE = re.compile(r"^[A-Za-z0-9_-]{1,100}\.html$")
+
+
+def _report_file(date_text: str, file_name: str):
+    if not REPORT_DATE_RE.fullmatch(date_text) or not REPORT_FILE_RE.fullmatch(file_name):
+        return JSONResponse(status_code=404, content={"ok": False, "error": "report not found"})
+    path = student_result_service.output_dir / date_text / file_name
+    if not path.is_file():
+        return JSONResponse(status_code=404, content={"ok": False, "error": "report not found"})
+    return FileResponse(str(path), media_type="text/html; charset=utf-8")
+
+
+@app.get("/reports")
+def get_latest_report_overview():
+    root = student_result_service.output_dir
+    days = sorted(
+        folder.name for folder in root.iterdir()
+        if folder.is_dir() and REPORT_DATE_RE.fullmatch(folder.name) and (folder / "index.html").is_file()
+    ) if root.exists() else []
+    if not days:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "no reports yet"})
+    return RedirectResponse(url=f"/reports/{days[-1]}/index.html")
+
+
+@app.get("/reports/{date_text}")
+def get_report_overview(date_text: str):
+    return RedirectResponse(url=f"/reports/{date_text}/index.html")
+
+
+@app.get("/reports/{date_text}/{file_name}")
+def get_report(date_text: str, file_name: str):
+    return _report_file(date_text, file_name)
+
+
 @app.get("/last")
 def get_last():
     return JSONResponse(latest)
@@ -1128,7 +1236,7 @@ def _voice_error(code: str, message: str) -> Dict[str, Any]:
         "type": "error",
         "code": code,
         "message": message,
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "ts": local_timestamp(),
     }
 
 
@@ -1343,6 +1451,7 @@ async def ws_feed(ws: WebSocket):
 
 @app.on_event("startup")
 async def on_start():
+    await result_uploader.start()
     await discovery_service.start()
     reset_transcripts_file()
 
@@ -1362,6 +1471,7 @@ async def on_start():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    await result_uploader.stop()
     await discovery_service.stop()
     global deepgram_http_client
     if deepgram_http_client is not None and not deepgram_http_client.is_closed:

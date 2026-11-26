@@ -1,2 +1,13 @@
 Scripts/Python/openai_api.json
 Scripts/Python/openai_api.json.meta
+/Scripts/Python/.env
+/Scripts/Python/.env.*
+/Scripts/Python/.env.meta
+/Scripts/Python/.env.*.meta
+/Scripts/Python/env.txt
+/Scripts/Python/env.txt.meta
+/Scripts/Python/openai_api*.json
+/Scripts/Python/openai_api*.json.meta
+/Scripts/Python/__pycache__/
+/Scripts/Python/*.py[cod]
+/Scripts/Python/out/
